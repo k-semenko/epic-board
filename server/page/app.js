@@ -422,7 +422,7 @@ function renderDetail(map, open) {
   const links = `<div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>`;
   const steps = lane ? lane.steps : map.merge.map((m) => ({ id: `m${m.n}`, title: `${m.n}. ${m.text}`, state: m.waiting ? 'waiting' : 'todo', note: m.branch, deps: [] }));
   return `<section class="detail${lane ? '' : ' detail-merge'}" id="detail" aria-label="${esc(t('detail.aria'))}">
-    <header class="detail-head">${raw?.role === 'side' ? `<div class="detail-heading"><span class="detail-context">${esc(t('map.side'))}</span>${heading}</div>` : heading}${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
+    <header class="detail-head">${heading}${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
     ${lane ? '' : links}
     ${renderTimeline(detailLayout(map, open))}
     ${lane ? stepSplit(lane, links) : ''}

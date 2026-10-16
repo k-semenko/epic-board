@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Give off-chain tasks the same step-panel header as tasks in the main chain.
 - Move task dependencies and follow-up links into the step preview, and give step cards more room for their titles by removing subtitles.
 - Remove the redundant document count from the step preview.
 - Align the task number, title, status and tracker link on the same text baseline.

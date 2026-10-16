@@ -222,8 +222,6 @@ button.ov-card:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .detail-head { display: flex; align-items: baseline; gap: 10px; }
 .detail-head h3 { margin: 0; flex: 1; display: flex; align-items: baseline; gap: 6px; }
 .detail-head h3 > .mono { flex: none; white-space: nowrap; }
-.detail-heading { flex: 1; min-width: 0; display: grid; gap: 4px; }
-.detail-context { color: var(--muted); font-size: 11.5px; }
 .detail-head .ext { display: block; }
 .detail-merge .detail-head h3 { align-items: center; }
 .detail-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
