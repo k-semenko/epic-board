@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Remove the redundant document count from the step preview.
 - Align the task number, title, status and tracker link on the same text baseline.
 - Show off-chain tasks as separate cards at the end of the overview, without arrows, with access to their steps and documents.
-- Group off-chain tasks into a separate stack with clickable headers and a remembered front card.
+- Group off-chain tasks into an animated card carousel with wheel, keyboard and button navigation, keeping its height fixed and remembering the front card.
 
 ## [0.5.1] - 2026-10-16
 

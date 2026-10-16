@@ -185,7 +185,15 @@ export function buildOverview(epic) {
 
 export function sideStack(side, open, previous) {
   const front = side.find((n) => n.id === open) ?? side.find((n) => n.id === previous) ?? side[0] ?? null;
-  return { front, back: side.filter((n) => n !== front) };
+  const at = side.indexOf(front);
+  return { front, back: at < 0 ? [] : [...side.slice(at + 1), ...side.slice(0, at)] };
+}
+
+export function cycleSide(side, current, direction = 1) {
+  if (!side.length) return null;
+  const at = side.findIndex((n) => n.id === current);
+  if (at < 0) return (direction === -1 ? side.at(-1) : side[0]).id;
+  return side[(at + direction + side.length) % side.length].id;
 }
 
 // The map always shows one task opened: where the work is now, otherwise the first one.

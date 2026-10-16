@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleEpic } from './fixtures/sample-epic.mjs';
-import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep, sideStack } from '../server/page/lanes.mjs';
+import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep, sideStack, cycleSide } from '../server/page/lanes.mjs';
 
 test('main tasks become lanes in order, side tasks separate', () => {
   const map = buildLanes(sampleEpic());
@@ -307,7 +307,7 @@ const stackCards = Object.freeze([
 test('side stack: the open side task wins and repeated selection is stable', () => {
   const stack = sideStack(stackCards, 'DOC-4', 'QA-5');
   assert.equal(stack.front, stackCards[1]);
-  assert.deepEqual(stack.back, [stackCards[0], stackCards[2]]);
+  assert.deepEqual(stack.back, [stackCards[2], stackCards[0]]);
   assert.deepEqual(sideStack(stackCards, 'DOC-4', stack.front.id), stack);
   assert.deepEqual(stackCards.map((c) => c.id), ['OPS-3', 'DOC-4', 'QA-5']);
 });
@@ -320,7 +320,7 @@ test('side stack: opening a main task keeps the previously selected side task', 
 });
 
 test('side stack: stale ids fall back to a surviving previous task or the first card', () => {
-  assert.equal(sideStack(stackCards, 'removed-open', 'DOC-4').front, stackCards[1]);
+  assert.deepEqual(sideStack(stackCards, 'removed-open', 'DOC-4'), { front: stackCards[1], back: [stackCards[2], stackCards[0]] });
   const fallback = { front: stackCards[0], back: [stackCards[1], stackCards[2]] };
   assert.deepEqual(sideStack(stackCards, 'removed-open', 'removed-previous'), fallback);
   assert.deepEqual(sideStack(stackCards, null, 'removed-previous'), fallback);
@@ -334,4 +334,33 @@ test('side stack: zero cards have no front or back even with stale selections', 
 test('side stack: one card stays in front without duplicating it in back', () => {
   assert.deepEqual(sideStack([stackCards[0]], 'WEB-8', 'removed-previous'), { front: stackCards[0], back: [] });
   assert.deepEqual(sideStack([stackCards[0]], 'OPS-3', 'OPS-3'), { front: stackCards[0], back: [] });
+});
+
+test('side carousel: forward navigation moves through every card and wraps to the first', () => {
+  for (const [current, next] of [['OPS-3', 'DOC-4'], ['DOC-4', 'QA-5'], ['QA-5', 'OPS-3']]) {
+    assert.equal(cycleSide(stackCards, current), next);
+    assert.equal(cycleSide(stackCards, current, 1), next);
+  }
+  assert.deepEqual(stackCards.map((c) => c.id), ['OPS-3', 'DOC-4', 'QA-5']);
+});
+
+test('side carousel: backward navigation wraps from the first card to the last', () => {
+  for (const [current, previous] of [['OPS-3', 'QA-5'], ['QA-5', 'DOC-4'], ['DOC-4', 'OPS-3']]) {
+    assert.equal(cycleSide(stackCards, current, -1), previous);
+  }
+});
+
+test('side carousel: stale selection starts at the first or last card for its direction', () => {
+  assert.equal(cycleSide(stackCards, 'removed-current'), 'OPS-3');
+  assert.equal(cycleSide(stackCards, 'removed-current', -1), 'QA-5');
+  assert.equal(cycleSide(stackCards, null), 'OPS-3');
+  assert.equal(cycleSide(stackCards, null, -1), 'QA-5');
+});
+
+test('side carousel: zero cards return null and a single card stays selected', () => {
+  for (const direction of [1, -1]) {
+    assert.equal(cycleSide([], 'removed-current', direction), null);
+    assert.equal(cycleSide([stackCards[0]], 'OPS-3', direction), 'OPS-3');
+    assert.equal(cycleSide([stackCards[0]], 'removed-current', direction), 'OPS-3');
+  }
 });

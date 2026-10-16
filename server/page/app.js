@@ -1,4 +1,4 @@
-import { buildLanes, layoutMap, buildOverview, sideStack, defaultOpen, defaultStep, MERGE_ID, GOAL_ID } from './lanes.mjs';
+import { buildLanes, layoutMap, buildOverview, sideStack, cycleSide, defaultOpen, defaultStep, MERGE_ID, GOAL_ID } from './lanes.mjs';
 import { icon, STATE_ICON, agentBadge, logo } from './icons.mjs';
 import { describeEvent } from './history.mjs';
 import { renderMarkdown } from './markdown.mjs';
@@ -228,14 +228,75 @@ function renderSideStack(side, open) {
   const { front, back } = sideStack(side, open, tlState.side);
   if (!front) return '';
   tlState.side = front.id;
-  const peeks = back.map((n, i) => {
-    const done = n.progress.total && n.progress.done === n.progress.total;
-    return `<button type="button" class="side-peek${done ? ' done' : ''}" style="--stack-index:${i};--stack-inset:${Math.min(back.length - i, 3) * 5}px;z-index:${i + 1}" data-open="${esc(n.id)}" aria-expanded="false" aria-controls="detail" aria-label="${esc(t('task.more', { id: n.id }))}: ${esc(n.fullTitle)}" title="${esc(n.fullTitle)}"><span class="mono">${esc(n.id)}</span><span class="side-peek-title">${esc(n.title)}</span><span class="side-peek-progress${done ? ' ok' : ''}">${done ? icon('check') : ''}${n.progress.done}/${n.progress.total}</span></button>`;
+  const cards = [front, ...back].map((n, i) => {
+    const selected = open === n.id;
+    const body = `${cardBody(n)}<span class="side-action">${icon(selected ? 'check' : 'arrowRight')}${esc(t(selected ? 'map.stepsOpen' : 'map.openSteps'))}</span>`;
+    const card = i === 0
+      ? `<button type="button" class="ov-card k-task ${cardState(n)}${selected ? ' selected' : ''}" data-open="${esc(n.id)}" aria-expanded="${selected}" aria-controls="detail">${body}</button><button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>`
+      : `<div class="ov-card k-task ${cardState(n)}" aria-hidden="true">${body}</div><button type="button" class="side-pick" data-side-pick="${esc(n.id)}" aria-label="${esc(t('map.showTask', { id: n.id }))}: ${esc(n.fullTitle)}" title="${esc(n.fullTitle)}"></button>`;
+    return `<div class="side-layer${i === 0 ? ' side-current' : ''}" data-side-id="${esc(n.id)}" style="--depth:${Math.min(i, 2)}"${i > 2 ? ' hidden' : ''}>${card}</div>`;
   }).join('');
-  const selected = open === front.id;
+  const position = side.findIndex((n) => n.id === front.id) + 1;
+  const controls = side.length > 1 ? `<div class="side-controls"><button type="button" class="icon-btn" data-side-turn="-1" aria-label="${esc(t('map.previousTask'))}" title="${esc(t('map.previousTask'))}">${icon('arrowUp')}</button><span class="mono" role="status" aria-live="polite">${esc(t('map.sidePosition', { n: position, total: side.length }))}</span><button type="button" class="icon-btn" data-side-turn="1" aria-label="${esc(t('map.nextTask'))}" title="${esc(t('map.nextTask'))}">${icon('arrowDown')}</button></div>` : '';
   return `<section class="overview-side" aria-label="${esc(t('map.side'))}"><h3 class="ov-section-title">${icon('layers')}<span>${esc(t('map.side'))}</span><span class="mono">${side.length}</span></h3>
-    <div class="side-stack" style="--stack-count:${back.length}">${back.length ? `<div class="side-peeks">${peeks}</div>` : ''}<div class="side-front" style="z-index:${back.length + 1}"><button type="button" class="ov-card k-task ${cardState(front)}${selected ? ' selected' : ''}" data-open="${esc(front.id)}" aria-expanded="${selected}" aria-controls="detail">${cardBody(front)}<span class="side-action">${icon(selected ? 'check' : 'arrowRight')}${esc(t(selected ? 'map.stepsOpen' : 'map.openSteps'))}</span></button><button type="button" class="icon-btn info-btn ov-info" data-info="${esc(front.id)}" aria-label="${esc(t('task.more', { id: front.id }))}">${icon('info')}</button></div></div>
+    <div class="side-carousel" role="group" aria-roledescription="${esc(t('map.carousel'))}" aria-label="${esc(t('map.side'))}"><div class="side-deck${back.length ? '' : ' side-single'}">${cards}</div>${controls}</div>
   </section>`;
+}
+
+async function rotateSide(direction, target) {
+  if (tlState.sideBusy) return;
+  const side = buildOverview(current).side;
+  const next = target || cycleSide(side, tlState.side, direction);
+  if (!next || next === tlState.side) return;
+  const deck = $('.side-deck');
+  const cards = [...deck.querySelectorAll('[data-side-id]')];
+  const outgoing = cards.find((el) => el.dataset.sideId === tlState.side);
+  const incoming = cards.find((el) => el.dataset.sideId === next);
+  const active = document.activeElement;
+  const focus = active.closest('.side-carousel') ? active.dataset.sideTurn || 'front' : null;
+  tlState.sideBusy = true;
+  deck.setAttribute('aria-busy', 'true');
+  try {
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      incoming.hidden = false;
+      incoming.style.zIndex = direction < 0 ? '5' : '3';
+      outgoing.style.zIndex = direction < 0 ? '4' : '5';
+      const full = { transform: 'translateY(0) scale(1)', opacity: 1 };
+      const behind = { transform: 'translateY(-22px) scale(.96)', opacity: 1 };
+      const below = { transform: 'translateY(190px) scale(.94)', opacity: 0 };
+      const options = { duration: 300, easing: 'cubic-bezier(.22,.68,.3,1)', fill: 'forwards' };
+      await Promise.all([
+        outgoing.animate([full, direction < 0 ? behind : below], options).finished.catch(() => {}),
+        incoming.animate([direction < 0 ? below : { transform: getComputedStyle(incoming).transform, opacity: 1 }, full], options).finished.catch(() => {}),
+      ]);
+    }
+    if (!deck.isConnected) return;
+    toggleDetail(next);
+    if (focus === 'front') $('.side-current [data-open]')?.focus({ preventScroll: true });
+    else if (focus) $(`[data-side-turn="${focus}"]`)?.focus({ preventScroll: true });
+  } finally {
+    tlState.sideBusy = false;
+    deck.removeAttribute('aria-busy');
+  }
+}
+
+function bindSideCarousel() {
+  let lastWheel = 0;
+  let wheelAmount = 0;
+  let wheelUsed = false;
+  document.addEventListener('wheel', (e) => {
+    const carousel = e.target.closest('.side-carousel');
+    if (!carousel?.querySelector('[data-side-turn]') || e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    const now = performance.now();
+    if (now - lastWheel > 180) { wheelAmount = 0; wheelUsed = false; }
+    lastWheel = now;
+    if (wheelUsed) return;
+    wheelAmount += e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 200 : 1);
+    if (Math.abs(wheelAmount) < 40) return;
+    wheelUsed = true;
+    void rotateSide(wheelAmount > 0 ? 1 : -1);
+  }, { passive: false });
 }
 
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
@@ -277,7 +338,7 @@ function narrowFlow(steps) {
 }
 
 const TL = { colW: 200, nodeW: 168, nodeH: 84, rowH: 100, pad: 24 };
-const tlState = { focused: null, open: null, step: null, allDocs: false, side: null };
+const tlState = { focused: null, open: null, step: null, allDocs: false, side: null, sideBusy: false };
 
 function nodeX(col) { return TL.pad + col * TL.colW; }
 function rowY(i) { return i * TL.rowH + (TL.rowH - TL.nodeH) / 2; }
@@ -685,7 +746,7 @@ function toggleDetail(id, focusStack = false) {
   tlState.open = id;
   history.replaceState(null, '', `#t-${enc(id)}`);
   renderMapArea(current);
-  if (focusStack) $('.side-front [data-open]')?.focus({ preventScroll: true });
+  if (focusStack) $('.side-current [data-open]')?.focus({ preventScroll: true });
 }
 
 function selectStep(stepId) {
@@ -1079,6 +1140,7 @@ async function bootEpic() {
     await renderEpic(id);
   });
   bindMapTools();
+  bindSideCarousel();
   bindSearch();
   bindDocs();
   await renderEpic(id);
@@ -1108,8 +1170,12 @@ async function bootEpic() {
       tlState.allDocs = !tlState.allDocs;
       return void renderMapArea(current);
     }
+    const turn = el.closest('[data-side-turn]');
+    if (turn) return void rotateSide(Number(turn.dataset.sideTurn));
+    const pick = el.closest('[data-side-pick]');
+    if (pick) return void rotateSide(1, pick.dataset.sidePick);
     const openCard = el.closest('[data-open]');
-    if (openCard) toggleDetail(openCard.dataset.open, Boolean(openCard.closest('.side-stack')));
+    if (openCard) toggleDetail(openCard.dataset.open, Boolean(openCard.closest('.side-carousel')));
     const done = el.closest('[data-done]');
     if (done) return confirmModal(current, done.dataset.done);
     const confirm = el.closest('[data-confirm]');
@@ -1139,10 +1205,14 @@ async function bootEpic() {
       hidePopover();
       closeModals();
     }
+    if (e.target.closest?.('.side-carousel') && ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].includes(e.key)) {
+      e.preventDefault();
+      return void rotateSide(['ArrowUp', 'ArrowLeft'].includes(e.key) ? -1 : 1);
+    }
     const card = e.target.closest?.('[data-open]');
     if (card && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
-      toggleDetail(card.dataset.open, Boolean(card.closest('.side-stack')));
+      toggleDetail(card.dataset.open, Boolean(card.closest('.side-carousel')));
     }
   });
   if (!EXPORT) setInterval(async () => {
