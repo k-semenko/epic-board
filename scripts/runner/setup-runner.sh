@@ -91,8 +91,19 @@ detect_platform() {
   esac
 }
 
+check_dpkg_state() {
+  # apt-get install first finishes any half-configured package. A failing postinst
+  # (e.g. a kernel whose DKMS module does not build) would abort this script mid-way.
+  local audit
+  audit="$(dpkg --audit 2>&1 || true)"
+  [[ -z "${audit}" ]] && return
+  printf '%s\n' "${audit}" >&2
+  die "dpkg has unfinished packages (see above); fix them, check with 'dpkg --audit', then re-run"
+}
+
 install_packages() {
   log "apt prerequisites"
+  check_dpkg_state
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -q
   apt-get install -y -q --no-install-recommends git curl ca-certificates jq tar xz-utils gnupg
