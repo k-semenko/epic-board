@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dataDir } from './paths.mjs';
 import { BoardError } from './errors.mjs';
+import { migrateWaiting, prepareWaitingPatch, transitionWaiting, validateWaiting } from './waiting.mjs';
 
 // Any tracker key works as an id (42, PROJ-12, gh.341); it also names files, so no slashes or leading dots.
 export const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-export const SCHEMA = 2;
+export const SCHEMA = 3;
 export const WAITING_KINDS = ['decision', 'approval', 'review', 'action', 'other'];
 export const PROVIDERS = ['gitlab', 'github'];
 
@@ -101,12 +102,12 @@ export function migrate(epic) {
   }));
   const taskIds = new Set(out.tasks.map((t) => t.id));
   // Schema 1 never validated these items, so a migrated file must not fail its first write.
-  out.waiting = (epic.waiting || []).map(({ text, kind, task, ...w }) => ({
+  out.waiting = (epic.waiting || []).map(({ text, kind, task, ...w }) => migrateWaiting({
     ...w,
     ...(task !== undefined && taskIds.has(task) ? { task } : {}),
     kind: OLD_KINDS[kind] || (WAITING_KINDS.includes(kind) ? kind : 'other'),
     title: w.title || text || '(untitled)',
-  }));
+  }, epic.id));
   return out;
 }
 
@@ -264,6 +265,7 @@ function refExists(epic, ref) {
   if (kind === 'branch') return tasks.some((t) => (t.branches || []).some((b) => `${b.repo}:${b.name}` === value));
   if (kind === 'doc') return (epic.docs || []).some((d) => d.id === value);
   if (kind === 'decision') return (epic.decisions || []).some((d) => d.id === value);
+  if (kind === 'waiting') return (epic.waiting || []).some((w) => w.id === value);
   return false;
 }
 
@@ -303,6 +305,7 @@ export function validateEpic(epic) {
     }
   }
   for (const w of epic.waiting || []) {
+    validateWaiting(w);
     if (!w.title) throw new BoardError(400, 'no-title', `pending item ${w.id}: needs a title`);
     if (w.kind !== undefined && !WAITING_KINDS.includes(w.kind)) throw new BoardError(400, 'bad-kind', `pending item ${w.id}: kind is ${WAITING_KINDS.join(', ')}`);
     if (w.task !== undefined && !(epic.tasks || []).some((t) => t.id === w.task)) throw new BoardError(400, 'bad-ref', `pending item ${w.id}: no task ${w.task}`);
@@ -334,7 +337,7 @@ export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, chec
     const epic = readEpic(id);
     const at = new Date().toISOString();
     const changes = [];
-    const next = mergeObject(epic, prepareDecisions(epic, patch, at), '', changes);
+    const next = mergeObject(epic, prepareDecisions(epic, prepareWaitingPatch(epic, patch, at), at), '', changes);
     validateEpic(next);
     if (check) check(next);
     if (!changes.length) return { epic, changes };
@@ -350,23 +353,40 @@ function pendingItem(epic, itemId) {
   return item;
 }
 
-// Done items stay on the list with a stamp: what was decided is part of the record.
-export function resolveWaiting(id, itemId, { checked = [], resolution } = {}, { by = 'cli', why = '' } = {}) {
-  pendingItem(readEpic(id), itemId);
-  const ticked = [...new Set(checked.map(String))];
-  const patch = { id: itemId, doneAt: new Date().toISOString(), checked: ticked.length ? ticked : null, resolution: resolution ? String(resolution) : null };
-  // The checklist is judged inside the lock, so an item added meanwhile cannot slip through unticked.
-  const check = (next) => {
-    const item = pendingItem(next, itemId);
-    const left = (item.checklist || []).filter((c) => !ticked.includes(c.id));
-    if (left.length) throw new BoardError(400, 'checklist', `not confirmed yet: ${left.map((c) => c.text).join('; ')}`);
-  };
-  return patchEpic(id, { waiting: [patch] }, { by, why, check }).epic;
+function changeWaiting(id, itemId, action, body, { by = 'cli', why = '' } = {}) {
+  return withLock(id, () => {
+    const epic = readEpic(id);
+    const before = pendingItem(epic, itemId);
+    const at = new Date().toISOString();
+    const after = transitionWaiting(before, action, body, { by, at });
+    if (after === before) return epic;
+    const next = { ...epic, updatedAt: at, waiting: epic.waiting.flatMap((item) => item.id === itemId ? (after ? [after] : []) : [item]) };
+    validateEpic(next);
+    const changes = after ? [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => !same(before[key], after[key])).map((key) => ({ op: 'set', path: `waiting[${itemId}].${key}`, before: before[key] ?? null, after: after[key] ?? null })) : [{ op: 'remove', path: `waiting[${itemId}]`, before, after: null }];
+    saveEpic(next);
+    appendHistory(id, changes.map((change) => ({ at, by, why, ...change })));
+    return next;
+  });
 }
 
-export function reopenWaiting(id, itemId, { by = 'cli', why = '' } = {}) {
-  pendingItem(readEpic(id), itemId);
-  return patchEpic(id, { waiting: [{ id: itemId, doneAt: null, checked: null, resolution: null }] }, { by, why }).epic;
+export function submitWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'submit', body, opts);
+}
+
+export function resolveWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'resolve', body, opts);
+}
+
+export function reviseWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'revise', body, opts);
+}
+
+export function removeWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'remove', body, opts);
+}
+
+export function reopenWaiting() {
+  throw new BoardError(400, 'waiting-action', 'use wait revise with version and a reason');
 }
 
 const WATCHED = ['head', 'behind', 'ahead', 'unpushed', 'remoteBehind', 'dirty', 'mr.state', 'mr.draft', 'mr.pipeline', 'error'];
