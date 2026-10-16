@@ -254,9 +254,8 @@ function renderOverview(ov, open) {
 // ---------- Detail: the steps of one task ----------
 
 function stepChip(step) {
-  const deps = step.deps.map((d) => `<span class="dep">${icon('dep')}${esc(t('step.after', { task: d.task, title: d.title }))}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span>`).join('');
-  const tip = [stateText(step.state), step.note].filter(Boolean).join(' — ');
-  return `<li class="step ${esc(step.state)}" title="${esc(tip)}"><span class="step-title">${stateIcon(step.state)}${esc(step.title)}</span>${deps}</li>`;
+  const tip = [stateText(step.state), step.title, step.note].filter(Boolean).join(' — ');
+  return `<li class="step ${esc(step.state)}" title="${esc(tip)}"><span class="step-title">${stateIcon(step.state)}${esc(step.title)}</span></li>`;
 }
 
 function narrowFlow(steps) {
@@ -280,12 +279,11 @@ function renderTimeline(layout) {
     return `<path class="tl-edge" d="M${x1},${y} L${x2 - 2},${y}" marker-end="url(#tl-arrow)"/>`;
   }).join('');
   const nodes = layout.rows.map((r, i) => r.cells.map((c) => {
-    const tip = [stateText(c.state), c.note, c.branch].filter(Boolean).join(' — ');
+    const tip = [stateText(c.state), c.title, c.note, c.branch].filter(Boolean).join(' — ');
     const n = r.kind === 'merge' ? `<span class="n">${c.n}</span>` : '';
-    const note = c.note ? `<span class="tl-note">${esc(c.note)}</span>` : c.branch ? `<span class="tl-note mono">${esc(c.branch)}</span>` : '';
     const docCount = (current?.docs || []).filter((d) => d.task === r.id && d.step === c.id).length;
     const badge = docCount ? `<span class="tl-docs" title="${esc(t('step.docCount', { n: docCount }))}">${icon('file')}${docCount}</span>` : '';
-    return `<foreignObject x="${nodeX(c.col)}" y="${rowY(i)}" width="${TL.nodeW}" height="${TL.nodeH}"><div xmlns="http://www.w3.org/1999/xhtml" class="tl-node ${esc(c.state)}${docCount ? ' has-docs' : ''}${r.kind === 'lane' && c.id === tlState.step ? ' selected' : ''}"${r.kind === 'lane' ? ` data-step="${esc(c.id)}"` : ''} data-sid="st-${esc(r.id)}-${esc(c.id)}" title="${esc(tip)}"><span class="tl-title">${stateIcon(c.state)}${n}${esc(c.title)}</span>${note}${badge}</div></foreignObject>`;
+    return `<foreignObject x="${nodeX(c.col)}" y="${rowY(i)}" width="${TL.nodeW}" height="${TL.nodeH}"><div xmlns="http://www.w3.org/1999/xhtml" class="tl-node ${esc(c.state)}${docCount ? ' has-docs' : ''}${r.kind === 'lane' && c.id === tlState.step ? ' selected' : ''}"${r.kind === 'lane' ? ` data-step="${esc(c.id)}"` : ''} data-sid="st-${esc(r.id)}-${esc(c.id)}" title="${esc(tip)}"><span class="tl-title">${stateIcon(c.state)}${n}${esc(c.title)}</span>${badge}</div></foreignObject>`;
   }).join('')).join('');
   return `<div class="tl" id="tl"><div class="tl-scroll" id="tl-scroll"><svg class="tl-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
       <defs><marker id="tl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
@@ -324,12 +322,13 @@ function renderDetail(map, open) {
   const title = lane ? `<span class="mono muted">${esc(lane.id)}</span> ${esc(lane.fullTitle)}` : `${icon('merge')} ${esc(t('card.merge'))}`;
   const { incoming, outgoing } = linksOf(map, open);
   const list = (items, empty) => (items.length ? `<ul class="links">${items.join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
+  const links = `<div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>`;
   const steps = lane ? lane.steps : map.merge.map((m) => ({ id: `m${m.n}`, title: `${m.n}. ${m.text}`, state: m.waiting ? 'waiting' : 'todo', note: m.branch, deps: [] }));
-  return `<section class="detail" id="detail" aria-label="${esc(t('detail.aria'))}">
+  return `<section class="detail${lane ? '' : ' detail-merge'}" id="detail" aria-label="${esc(t('detail.aria'))}">
     <header class="detail-head"><h3>${title}</h3>${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
-    <div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>
+    ${lane ? '' : links}
     ${renderTimeline(detailLayout(map, open))}
-    ${lane ? stepSplit(lane) : ''}
+    ${lane ? stepSplit(lane, links) : ''}
     <div class="lanes-narrow">${narrowFlow(steps)}</div>
   </section>`;
 }
@@ -355,11 +354,10 @@ function docsBlock(lane, step, all) {
   return `<div class="docs-block"><div class="docs-head"><h4>${esc(t(all ? 'docs.taskTitle' : 'docs.stepTitle'))} · ${docs.length}</h4><div class="docs-tools">${toggle}<button type="button" class="live-only" data-doc-add="${esc(lane.id)}">${icon('plus')}${esc(t('docs.add'))}</button></div></div><div class="docs-scroll">${rows || `<p class="muted">${esc(t(all ? 'docs.taskNone' : 'docs.stepNone'))}</p>`}</div></div>`;
 }
 
-function stepInfo(lane, stepId) {
+function stepInfo(lane, stepId, links) {
   const step = lane.steps.find((st) => st.id === stepId);
-  if (!step) return `<div class="step-info"><p class="muted">${esc(t('step.none'))}</p></div>`;
+  if (!step) return `<div class="step-info"><p class="muted">${esc(t('step.none'))}</p>${links}</div>`;
   const raw = (current?.tasks || []).find((x) => x.id === lane.id)?.steps?.find((st) => st.id === stepId) || {};
-  const deps = step.deps.map((d) => `<li>${icon('dep')}<span>${esc(d.task)} · ${esc(d.title)}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`).join('');
   const prefix = `tasks[${lane.id}].steps[${stepId}]`;
   const changes = currentHistory.filter((h) => String(h.path).startsWith(prefix)).slice(0, 6).map((h) => {
     const d = describeEvent(h);
@@ -371,8 +369,8 @@ function stepInfo(lane, stepId) {
     <div class="step-info-head">${stateIcon(step.state)}<span class="chip">${esc(cap(stateText(step.state)))}</span><span class="mono muted">${esc(lane.id)}/${esc(step.id)}</span></div>
     <h4 class="step-info-title">${esc(step.title)}</h4>
     ${step.note ? `<p class="step-info-note">${esc(step.note)}</p>` : `<p class="muted">${esc(t('step.noDescription'))}</p>`}
+    ${links}
     <dl class="step-info-meta">
-      <dt>${esc(t('step.dependsOn'))}</dt><dd>${deps ? `<ul class="links">${deps}</ul>` : esc(t('step.prev'))}</dd>
       <dt>${esc(t('step.docs'))}</dt><dd>${docCount}</dd>
       ${raw.label ? `<dt>${esc(t('step.label'))}</dt><dd>${esc(raw.label)}</dd>` : ''}
     </dl>
@@ -380,9 +378,9 @@ function stepInfo(lane, stepId) {
   </div>`;
 }
 
-function stepSplit(lane) {
+function stepSplit(lane, links) {
   if (!tlState.step || !lane.steps.some((st) => st.id === tlState.step)) tlState.step = defaultStep(lane);
-  return `<div class="step-split">${docsBlock(lane, tlState.step, tlState.allDocs)}${stepInfo(lane, tlState.step)}</div>`;
+  return `<div class="step-split">${docsBlock(lane, tlState.step, tlState.allDocs)}${stepInfo(lane, tlState.step, links)}</div>`;
 }
 
 // One renderer for the whole page: vendored marked + DOMPurify when present, the built-in one otherwise.
