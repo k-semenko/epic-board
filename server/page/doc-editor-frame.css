@@ -93,7 +93,6 @@ body {
   caret-color: var(--fg);
 }
 .milkdown .ProseMirror:focus { outline: none; }
-.milkdown .ProseMirror:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 2px; }
 .ProseMirror > :first-child { margin-top: 0; }
 .ProseMirror > :last-child { margin-bottom: 0; }
 .ProseMirror p { margin: 0 0 1em; }
@@ -162,7 +161,6 @@ li.ProseMirror-selectednode::after { position: absolute; inset: -2px -2px -2px -
   .editor-toolbar select { min-height: 32px; max-width: 150px; }
   .milkdown { padding: 18px 16px 36px; }
   .milkdown .ProseMirror { padding: 2px; }
-  .milkdown .ProseMirror:focus-visible { outline-offset: 4px; }
   .ProseMirror h1 { font-size: 1.7em; }
   .ProseMirror h2 { font-size: 1.4em; }
   .ProseMirror pre { padding: 10px 12px; }

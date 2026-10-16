@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Remove the focus outline around the visual document surface while keeping focus indicators on editor controls.
 - Give off-chain tasks the same step-panel header as tasks in the main chain.
 - Open documents in one visual Markdown editor with formatting tools, undo and preserved drafts on save conflicts; isolate editor styles from the board.
 - Move task dependencies and follow-up links into the step preview, and give step cards more room for their titles by removing subtitles.
