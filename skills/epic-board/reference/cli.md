@@ -12,7 +12,11 @@
 | `branch` | `branch SHOP-1 WEB-31 web feat/form --worktree ~/src/web-form --mr 412` | a task branch; `--delete` removes it |
 | `open-item` | `open-item SHOP-1 WEB-31 add Rebase` / `open-item SHOP-1 WEB-31 done <oid>` | loose ends of a task |
 | `wait` | `wait SHOP-1 add psp --kind decision --title "Pick a provider" --details "…" --task WEB-31 --ref step:WEB-31/wire --check "Fees compared"` | an item that needs a human; kind: decision, approval, review, action, other |
-| `wait done` | `wait SHOP-1 done psp --checked c1,c2 --resolution "Provider A"` | confirm; every checklist id must be listed. `undo` reopens, `remove` deletes |
+| `wait show` | `wait SHOP-1 show psp --json` | full question, current version and response/history |
+| `wait submit` | `wait SHOP-1 submit psp --version V --submission-id S --confirmed --checked c1,c2 --comment "Checked fees"` | human response; single/multi use `--selected a,b`; remains pending agent review |
+| `wait resolve` | `wait SHOP-1 resolve psp --version V --submission-id S --resolution "Provider A applied to the plan"` | agent accepts the current submitted response with an outcome |
+| `wait revise` | `wait SHOP-1 revise psp --version V --reason "Fee structure changed" --title "Confirm revised provider"` | new revision, preserving question/answer history; optional request flags from add replace supplied fields |
+| `wait remove` | `wait SHOP-1 remove mistaken --version V` | delete only open requests without response history |
 | `decide` | `decide SHOP-1 --task WEB-31 --text "Cards first" [--by product]` | a decision, append-only |
 | `merge` | `merge SHOP-1 --set '[{"id":"m1","text":"api","branch":"api:feat/x"}]'` | the merge order as a whole; a step may point at a pending item with `"waiting":"<id>"` |
 | `bind` | `bind SHOP-1 --session <sid> --task WEB-31 --agent claude` | bind a session; `--agent`: claude, codex, grok, gemini, … |
@@ -26,3 +30,19 @@
 | `export` | `export SHOP-1 [--out file.html]` | one read-only HTML file with styles, script, epic, documents and the last 200 history events |
 | `doctor` | `doctor [--repo PATH]` | node, git, glab, gh, data dir, `git ls-remote`, forge auth per host |
 | `service` | `service install` / `status` / `uninstall` | user service: launchd (macOS) or systemd --user (Linux) |
+
+## Interactive requests
+
+`wait add` accepts `--input confirm|single|multi` (default confirm), repeatable `--option id=text`, and `--recommend id`. Choice formats need at least two options; recommendation does not preselect an answer. `--ref waiting:<id>` links another request. `--check` remains an all-required checklist, separate from selectable options.
+
+```sh
+epic.mjs wait SHOP-1 add psp --title "Choose provider" --input single \
+  --option a="Provider A" --option b="Provider B" --recommend a --check "Fees compared"
+epic.mjs wait SHOP-1 show psp --json
+```
+
+Read the current version before every mutation; copy the current response's submissionId for resolve. Keep the same submissionId and payload when retrying a lost submit response. A new version after submit must be read before resolve/revise. `wait show` without `--json` also prints the full item.
+
+`revise` requires `--reason`, including reopening closed requests. Omitted request flags retain their values; supplied `--check` flags replace the entire checklist, and supplied `--option` flags replace all options. `--details -` and `--task -` clear those fields. Supply all options when changing a recommendation.
+
+Legacy `done` and `undo` fail with instructions to use resolve/revise. Human submission remains pending and does not grant permission for push, publication, merge or task completion. Review answers only after the user asks in chat; hooks and brief provide context without starting work automatically.

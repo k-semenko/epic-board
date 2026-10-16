@@ -43,10 +43,20 @@ A pending item must be actionable without reading the chat:
 
 - `--title` — the question or action in one line.
 - `--details` — Markdown: what exactly to decide or do, why it blocks, the options and their cost.
-- `--ref` (repeatable) — what it touches on the board: `task:<id>`, `step:<task>/<step>`, `branch:<repo>:<branch>`, `doc:<id>`, `decision:<id>`, or an `https://` link.
-- `--check` (repeatable) — what must be true before it counts as done; the page will not accept "done" until every point is ticked.
+- `--ref` (repeatable) — what it touches on the board: `task:<id>`, `step:<task>/<step>`, `branch:<repo>:<branch>`, `doc:<id>`, `decision:<id>`, `waiting:<id>`, or an `https://` link.
+- `--input confirm|single|multi` — confirmation by default, one option or several options. Choice inputs need two or more stable `--option id=text` flags. `--recommend id` marks advice without selecting for the human.
+- `--check` (repeatable) — all-required conditions for submitting any answer; separate from selectable options.
 
-The user confirms on the page. Mark it yourself only when the user told you it is done: `wait <epic> done <id> --checked c1,c2 --resolution "<what was decided>"`. `undo` reopens, `remove` deletes a mistaken item.
+The human submits an answer on the page; it becomes `answered` and remains unresolved. Review answers only after the user asks in chat, for example “Check agreed decisions”. SessionStart, PreCompact and brief are informational: never start or schedule review from a page submission or hook.
+
+1. Read `wait <epic> show <id> --json`; inspect the current question, version and latest round response (including selected option labels, checklist and comment). Re-read relevant task/branch context.
+2. If the answer is sufficient, record how it was used: `wait <epic> resolve <id> --version <current-version> --submission-id <current-response-id> --resolution "<concrete outcome>"`.
+3. If clarification is required, use `wait <epic> revise <id> --version <current-version> --reason "<what needs clarification and why>" [request flags from add]`. This creates an open revision and preserves past answers. Reopening a closed item also uses revise with a reason.
+4. For a separate question, create a new ID with `--ref waiting:<original-id>`; resolve the original separately when appropriate.
+
+All mutations require the current version. On conflict, read again and assess the new state before acting. `wait submit` records a human answer only when explicitly authorized; use `--confirmed` for confirm or `--selected a,b` for choices, plus all `--checked` IDs, a stable `--submission-id` and optional `--comment`. Retrying a lost response uses the same ID and payload. Never invent a human answer to close a request.
+
+Supplied checklist/option flags in revise replace their entire arrays. `wait remove <id> --version <current-version>` deletes only open requests with no submitted history. Legacy `done`/`undo` direct callers to resolve/revise. Closing a request does not complete its task or grant permission for push, publication or merge. The separate `decide` journal is updated only when needed; responses are not duplicated automatically.
 
 ## Do not write
 

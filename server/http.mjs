@@ -152,14 +152,17 @@ export function createBoardServer({ port, run = execRunner } = {}) {
         const { epic } = await refreshEpic(id, { scope: body.scope || 'all', task: body.task, branch: body.branch, run });
         return send(res, 200, epic);
       }
-      if (m === 'POST' && parts[3] === 'waiting' && parts.length === 6 && parts[5] === 'done') {
-        const body = await readBody(req);
-        const checked = Array.isArray(body.checked) ? body.checked.map(String) : [];
-        return send(res, 200, store.resolveWaiting(id, parts[4], { checked, resolution: body.resolution }, { by: 'button' }));
-      }
-      if (m === 'POST' && parts[3] === 'waiting' && parts.length === 6 && parts[5] === 'undo') {
-        await readBody(req);
-        return send(res, 200, store.reopenWaiting(id, parts[4], { by: 'button' }));
+      if (m === 'POST' && parts[3] === 'waiting' && parts.length === 6) {
+        const action = parts[5];
+        if (action === 'done' || action === 'undo') {
+          throw new BoardError(400, 'waiting-action', `Use waiting/${parts[4]}/${action === 'done' ? 'resolve with version, submissionId and resolution after human submission' : 'revise with version and reason'}`);
+        }
+        const mutate = new Map([['submit', store.submitWaiting], ['resolve', store.resolveWaiting], ['revise', store.reviseWaiting], ['remove', store.removeWaiting]]).get(action);
+        if (mutate) {
+          const body = await readBody(req);
+          if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BoardError(400, 'bad-body', 'waiting action body must be an object');
+          return send(res, 200, mutate(id, parts[4], body, { by: action === 'submit' ? 'button' : 'agent' }));
+        }
       }
       throw new BoardError(404, 'not-found', 'no such path');
     } catch (e) {

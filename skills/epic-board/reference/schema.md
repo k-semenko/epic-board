@@ -1,10 +1,10 @@
-# Epic data model (schema 2)
+# Epic data model (schema 3)
 
-One JSON file per epic in `<data>/epics/<id>.json`, plus `<id>.history.ndjson` (every change with before/after) and `<id>/docs/` for documents kept on the board. Schema 1 files are migrated on read and rewritten on the next change.
+One JSON file per epic in `<data>/epics/<id>.json`, plus `<id>.history.ndjson` (every change with before/after) and `<id>/docs/` for documents kept on the board. Schema 1 and 2 files migrate sequentially on read and are rewritten on the next change.
 
 ```json
 {
-  "schema": 2,
+  "schema": 3,
   "id": "SHOP-1",
   "title": "One-page checkout",
   "goal": "Customers pay on one page; the old checkout is switched off",
@@ -40,7 +40,8 @@ One JSON file per epic in `<data>/epics/<id>.json`, plus `<id>.history.ndjson` (
       "task": "WEB-31", "refs": ["step:WEB-31/wire", "https://example.com/comparison"],
       "checklist": [{ "id": "c1", "text": "Fees compared" }, { "id": "c2", "text": "Refund API checked" }],
       "since": "2026-10-16T08:00:00Z",
-      "doneAt": "2026-10-16T10:00:00Z", "checked": ["c1", "c2"], "resolution": "Provider A"
+      "input": { "type": "single", "options": [{ "id": "a", "text": "Provider A", "recommended": true }, { "id": "b", "text": "Provider B" }] },
+      "status": "open", "revision": 1, "version": "opaque-server-token", "rounds": []
     }
   ],
   "mergeOrder": [
@@ -70,7 +71,13 @@ Rules:
 - `steps[].state`: `done | active | todo | blocked | waiting`. `active` means "we are here".
 - `steps[].after`: references `<task>/<step>`. Without `after` a step follows the previous step of its task; write `after` only for cross-task links and forks.
 - `repos[].provider`: `gitlab` (asks `glab mr view`) or `github` (asks `gh pr view`); `project` is `<host>/<owner>/<name>` so the CLI never guesses the host. Without a provider a branch gets git facts only.
-- `waiting[].kind`: `decision | approval | review | action | other`. `refs` must point at things on the board or be `http(s)` links. Done items stay with `doneAt`, `checked` and `resolution`; done requires every checklist id.
+- `waiting[].kind`: `decision | approval | review | action | other`. `refs` support `task:`, `step:`, `branch:`, `doc:`, `decision:`, `waiting:<id>` and `http(s)` links.
+- `input.type`: `confirm` (default), `single` (exactly one selection), `multi` (at least one selection). Choice inputs require at least two options with unique stable IDs and nonempty text; `hint` and `recommended` are optional. A recommendation does not select anything. Every checklist ID must be checked for all input types.
+- `status`: `open` waits for a human; `answered` waits for agent review requested in chat; `closed` has an agent outcome. `doneAt` and `resolution` exist only after closure. Both open and answered items block dependencies.
+- `revision` starts at 1; revision 2 and later require a nonempty `revisionReason`. `version` is an opaque token checked under the epic lock and changed on each mutation. Read it immediately before acting.
+- Each immutable `rounds[]` entry contains `{revision, version, request, response, review?}`. `request` snapshots `title`, `details`, `kind`, `task`, `refs`, `input`, `checklist`, `revisionReason` when present. `response` contains `submissionId`, `at`, `by`, explicit `confirmed`, `selected`, `checked`, optional `comment`. `review` is written once with `outcome: accepted|revised`, `at`, `by`, `text`.
+- Revision archives an answered round with outcome `revised`; reopening a closed item preserves its existing `accepted` review. New revisions start open without a response. The existing checklist and input arrays are retained unless explicitly replaced.
+- Legacy closed items preserve their prior `doneAt`, `checked`, `resolution` and question in `legacyClosure`; no human response is invented. Migrated tokens are deterministic from the epic ID and original item until the first mutation.
 - A branch in `facts` is keyed `<repo>:<branch>`. git runs in `branches[].worktree` when it exists, else in `repos[repo].path`.
 - `facts` is written by refresh only; a PATCH with `facts` is rejected (400).
 
@@ -82,12 +89,26 @@ Rules:
 | `tasks[].steps` | `id` | same |
 | `tasks[].branches` | `repo` + `name` | `{"repo", "name", "$delete": true}` |
 | `tasks[].open` | `id` | `$delete` |
-| `waiting` | `id` | `$delete` |
-| `waiting[].checklist` | `id` | `$delete` |
+| `waiting` | `id` | creation only; use dedicated versioned actions to change/remove existing items |
 | `decisions` | `id` (assigned by the server) | append only |
 | `sessions` | `id` | `$delete` |
 | `docs` | `id` | through `doc remove` |
-| `mergeOrder`, `refs`, `after` | — | replaced whole |
+| `mergeOrder`, `refs`, `after`, `waiting[].checklist`, `input.options` | — | replaced whole; waiting request changes use `revise` |
 
 - `after` pointing at a missing step is 400.
 - Branch names are validated before they reach git; `repo` must exist in `repos`.
+
+## Waiting lifecycle API
+
+POST `/api/epics/:epic/waiting/:id/<action>` with JSON:
+
+| Action | Body |
+|---|---|
+| `submit` | `{version, submissionId, confirmed?, selected?, checked?, comment?}`; confirm requires `confirmed:true`; selection/checklist IDs are arrays |
+| `resolve` | `{version, submissionId, resolution}`; current answered round and nonempty outcome required |
+| `revise` | `{version, reason, patch?}`; patch contains request fields only; omitted patch retains the question |
+| `remove` | `{version}`; only open items with no rounds |
+
+A submit with the same submissionId and identical content replays the saved response and current state, including after review. A reused ID with different content conflicts. Stale versions and competing transitions return 409 without writing. Malformed input returns 400. `done` and `undo` return actionable errors directing callers to `resolve` and `revise`.
+
+Generic PATCH cannot write/remove lifecycle fields (`status`, `version`, `revision`, `revisionReason`, `rounds`, `legacyClosure`, `doneAt`, `resolution`) or alter/delete existing requests through array/null replacement. It may create a new request with server-generated lifecycle fields. Use `revise` for request fields and `remove` for an unsubmitted mistaken request. Human submission never closes an item or starts an agent.

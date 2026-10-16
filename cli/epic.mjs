@@ -16,6 +16,9 @@ const OPTIONS = {
   status: { type: 'string' }, tracker: { type: 'string' }, state: { type: 'string' }, after: { type: 'string' },
   label: { type: 'string' }, note: { type: 'string' }, worktree: { type: 'string' }, mr: { type: 'string' },
   kind: { type: 'string' }, text: { type: 'string' }, details: { type: 'string' }, ref: { type: 'string', multiple: true },
+  input: { type: 'string' }, option: { type: 'string', multiple: true }, recommend: { type: 'string' },
+  version: { type: 'string' }, 'submission-id': { type: 'string' }, selected: { type: 'string' },
+  comment: { type: 'string' }, confirmed: { type: 'boolean' }, reason: { type: 'string' },
   check: { type: 'string', multiple: true }, checked: { type: 'string' }, resolution: { type: 'string' },
   task: { type: 'string' }, by: { type: 'string' }, set: { type: 'string' }, session: { type: 'string' },
   doing: { type: 'string' }, next: { type: 'string' }, agent: { type: 'string' }, branch: { type: 'string' }, why: { type: 'string' },
@@ -32,8 +35,13 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
   branch <epic> <task> <repo> <branch> [--worktree P] [--mr N] [--delete]
   open-item <epic> <task> add <text> | done <id>
   wait <epic> add <id> --title T [--kind decision|approval|review|action|other] [--details MD] [--task T]
-                       [--ref task:T|step:T/S|branch:repo:name|doc:ID|decision:ID|https://...]... [--check "item"]...
-  wait <epic> done <id> [--checked c1,c2] [--resolution R] | undo <id> | remove <id>
+                       [--ref task:T|step:T/S|branch:repo:name|doc:ID|decision:ID|waiting:ID|https://...]... [--check "item"]...
+                       [--input confirm|single|multi] [--option id=text]... [--recommend id]
+  wait <epic> show <id> [--json]              full request, version and responses
+  wait <epic> submit <id> --version V --submission-id S [--confirmed | --selected a,b] [--checked c1,c2] [--comment C]
+  wait <epic> resolve <id> --version V --submission-id S --resolution R
+  wait <epic> revise <id> --version V --reason R [request flags from add]
+  wait <epic> remove <id> --version V          only unanswered requests without history
   decide <epic> --text T [--task T] [--by NAME]
   merge <epic> --set '[{"id":"m1","text":"...","branch":"repo:branch"}]'
   bind <epic> --session SID [--task T] [--agent claude|codex|...]
@@ -61,6 +69,22 @@ const patch = (epic, body, why) => store.patchEpic(epic, body, { by: 'cli', why:
 // "-" clears a field: the merge patch treats null as removal.
 const orNull = (v) => (v === '-' ? null : v);
 
+const listIds = (value) => value === undefined ? [] : value.split(',').map((s) => s.trim()).filter(Boolean);
+const waitingRequest = (o) => {
+  let input;
+  if (o.input !== undefined || o.option !== undefined || o.recommend !== undefined) {
+    const options = o.option?.map((value) => {
+      const separator = value.indexOf('=');
+      if (separator < 1 || !value.slice(separator + 1).trim()) throw new BoardError(400, 'usage', '--option must be id=text');
+      const id = value.slice(0, separator);
+      return defined({ id, text: value.slice(separator + 1), recommended: id === o.recommend ? true : undefined });
+    });
+    if (o.recommend !== undefined && !options?.some((x) => x.id === o.recommend)) throw new BoardError(400, 'usage', '--recommend must name one of the supplied --option IDs');
+    input = defined({ type: o.input || 'confirm', options });
+  }
+  return defined({ title: o.title, kind: o.kind, details: orNull(o.details), task: orNull(o.task), refs: o.ref, checklist: o.check?.map((text, i) => ({ id: `c${i + 1}`, text })), input });
+};
+
 const COMMANDS = {
   help: () => ({ text: HELP }),
   new: ([epic], o) => {
@@ -81,18 +105,20 @@ const COMMANDS = {
     throw new BoardError(400, 'usage', 'open-item <epic> <task> add <text> | done <id>');
   },
   wait: ([epic, action, id], o) => {
-    if (action === 'add') {
-      const checklist = o.check ? o.check.map((text, i) => ({ id: `c${i + 1}`, text })) : undefined;
-      const exists = (store.readEpic(epic).waiting || []).some((w) => w.id === id);
-      return patch(epic, { waiting: [defined({ id: need(id, 'item id'), kind: o.kind || (exists ? undefined : 'decision'), title: o.title, details: orNull(o.details), task: orNull(o.task), refs: o.ref, checklist, since: exists ? undefined : now() })] }, o.why);
+    const itemId = need(id, 'item id');
+    const opts = { by: 'cli', why: o.why || '' };
+    if (action === 'show') {
+      const item = (store.readEpic(epic).waiting || []).find((w) => w.id === itemId);
+      if (!item) throw new BoardError(404, 'no-waiting', `epic has no waiting item ${itemId}`);
+      return o.json ? item : { text: JSON.stringify(item, null, 2) };
     }
-    if (action === 'done') {
-      const checked = o.checked ? o.checked.split(',').map((s) => s.trim()).filter(Boolean) : [];
-      return store.resolveWaiting(epic, need(id, 'item id'), { checked, resolution: o.resolution }, { by: 'cli', why: o.why || '' });
-    }
-    if (action === 'undo') return store.reopenWaiting(epic, need(id, 'item id'), { by: 'cli', why: o.why || '' });
-    if (action === 'remove') return patch(epic, { waiting: [{ id: need(id, 'item id'), $delete: true }] }, o.why);
-    throw new BoardError(400, 'usage', 'wait <epic> add <id> --title ... | done <id> [--checked c1,c2] | undo <id> | remove <id>');
+    if (action === 'add') return patch(epic, { waiting: [{ id: itemId, kind: o.kind || 'decision', ...waitingRequest(o), since: now() }] }, o.why);
+    if (action === 'done' || action === 'undo') throw new BoardError(400, 'usage', `Use wait ${epic} ${action === 'done' ? `resolve ${itemId} --version V --submission-id S --resolution R after human submission` : `revise ${itemId} --version V --reason R`}`);
+    if (action === 'submit') return store.submitWaiting(epic, itemId, defined({ version: need(o.version, '--version'), submissionId: need(o['submission-id'], '--submission-id'), confirmed: o.confirmed, selected: listIds(o.selected), checked: listIds(o.checked), comment: o.comment }), opts);
+    if (action === 'resolve') return store.resolveWaiting(epic, itemId, { version: need(o.version, '--version'), submissionId: need(o['submission-id'], '--submission-id'), resolution: need(o.resolution, '--resolution') }, opts);
+    if (action === 'revise') return store.reviseWaiting(epic, itemId, { version: need(o.version, '--version'), reason: need(o.reason, '--reason'), patch: waitingRequest(o) }, opts);
+    if (action === 'remove') return store.removeWaiting(epic, itemId, { version: need(o.version, '--version') }, opts);
+    throw new BoardError(400, 'usage', 'wait <epic> add|show|submit|resolve|revise|remove <id>; run epic.mjs help');
   },
   decide: ([epic], o) => patch(epic, { decisions: [defined({ task: o.task, text: need(o.text, '--text'), by: o.by })] }, o.why),
   merge: ([epic], o) => {

@@ -103,25 +103,62 @@ test('host and origin checks', async () => {
   assert.equal(noJson.status, 415);
 });
 
-test('waiting done button and refresh', async () => {
-  await call('/api/epics/5', { method: 'PATCH', body: { patch: { waiting: [{ id: 'w1', kind: 'action', title: 'Migrate', checklist: [{ id: 'c1', text: 'Backup' }] }] } } });
-  const partial = await call('/api/epics/5/waiting/w1/done', { method: 'POST', body: {} });
-  assert.equal(partial.status, 400);
-  assert.match((await partial.json()).detail, /Backup/);
-  assert.equal((await call('/api/epics/5/waiting/nope/done', { method: 'POST', body: {} })).status, 404);
-  assert.equal((await call('/api/epics/5/waiting/w1/done', { method: 'POST', body: { checked: ['c1'], resolution: 'done at 10' } })).status, 200);
-  let epic = await (await call('/api/epics/5')).json();
-  assert.equal(epic.waiting.length, 1, 'a done item stays on the list');
-  assert.ok(epic.waiting[0].doneAt);
-  const list = await (await call('/api/epics')).json();
-  assert.equal(list.find((e) => e.id === '5').waiting, 0, 'done items are not counted as waiting');
-  assert.ok(list.find((e) => e.id === '5').createdAt);
-  assert.equal(list.find((e) => e.id === '5').tasks, 1);
-  assert.equal(list.find((e) => e.id === '5').branches, 0);
-  assert.equal((await call('/api/epics/5/waiting/w1/undo', { method: 'POST', body: {} })).status, 200);
-  epic = await (await call('/api/epics/5')).json();
-  assert.equal('doneAt' in epic.waiting[0], false);
+test('waiting submission stays pending until agent resolution and supports guarded revision/removal', async () => {
+  const path = '/api/epics/5/waiting/w1';
+  await call('/api/epics/5', { method: 'PATCH', body: { patch: { waiting: [{ id: 'w1', kind: 'decision', title: 'Provider', input: { type: 'single', options: [{ id: 'a', text: 'Provider A' }, { id: 'b', text: 'Provider B' }] }, checklist: [{ id: 'c1', text: 'Backup' }] }] } } });
+  let w = (await (await call('/api/epics/5')).json()).waiting[0];
+  const submit = { version: w.version, submissionId: 'human-1', selected: ['a'], checked: ['c1'], comment: 'Fees checked' };
+  assert.equal((await call(`${path}/done`, { method: 'POST', body: {} })).status, 400);
+  const invalid = await call(`${path}/submit`, { method: 'POST', body: { ...submit, selected: [] } });
+  assert.equal(invalid.status, 400);
+  const accepted = await call(`${path}/submit`, { method: 'POST', body: submit });
+  assert.equal(accepted.status, 200);
+  w = (await accepted.json()).waiting[0];
+  assert.equal(w.status, 'answered');
+  assert.equal(w.doneAt, undefined);
+  assert.deepEqual(w.rounds[0].response.selected, ['a']);
+  assert.equal((await (await call('/api/epics')).json()).find((e) => e.id === '5').waiting, 1);
+  assert.equal((await call(`${path}/resolve`, { method: 'POST', body: { version: submit.version, submissionId: 'human-1', resolution: 'Use A' } })).status, 409);
+  assert.equal((await call(`${path}/resolve`, { method: 'POST', body: { version: w.version, submissionId: 'other', resolution: 'Use A' } })).status, 409);
+  const closed = await call(`${path}/resolve`, { method: 'POST', body: { version: w.version, submissionId: 'human-1', resolution: 'Use A' } });
+  assert.equal(closed.status, 200);
+  w = (await closed.json()).waiting[0];
+  assert.equal(w.status, 'closed');
+  assert.ok(w.doneAt);
+  assert.equal(w.rounds[0].review.by, 'agent');
+  assert.equal((await (await call('/api/epics')).json()).find((e) => e.id === '5').waiting, 0);
+  assert.equal((await call(`${path}/submit`, { method: 'POST', body: submit })).status, 200, 'lost responses may be retried after review');
+  assert.equal((await call(`${path}/undo`, { method: 'POST', body: {} })).status, 400);
+  const revised = await call(`${path}/revise`, { method: 'POST', body: { version: w.version, reason: 'Confirm new fees', patch: { title: 'Provider after fee change' } } });
+  assert.equal(revised.status, 200);
+  w = (await revised.json()).waiting[0];
+  assert.equal(w.status, 'open');
+  assert.equal(w.revision, 2);
+  assert.equal((await call(`${path}/remove`, { method: 'POST', body: { version: w.version } })).status, 409, 'answered history cannot be deleted');
+  const added = await call('/api/epics/5', { method: 'PATCH', body: { patch: { waiting: [{ id: 'mistake', kind: 'other', title: 'Remove me' }] } } });
+  assert.equal(added.status, 200);
+  const mistake = (await (await call('/api/epics/5')).json()).waiting.find((x) => x.id === 'mistake');
+  assert.equal((await call('/api/epics/5/waiting/mistake/remove', { method: 'POST', body: {} })).status, 400);
+  assert.equal((await call('/api/epics/5/waiting/mistake/remove', { method: 'POST', body: { version: mistake.version } })).status, 200);
   assert.equal((await call('/api/epics/5/refresh', { method: 'POST', body: { scope: 'all' } })).status, 200);
+});
+
+test('waiting mutations preserve guards and malformed bodies do not change data', async () => {
+  const path = '/api/epics/5/waiting/w1/submit';
+  const before = await (await call('/api/epics/5')).json();
+  assert.equal((await call(path, { method: 'POST', body: {}, headers: { Origin: 'http://evil.example' } })).status, 403);
+  assert.equal((await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' })).status, 415);
+  for (const body of [null, [], { version: before.waiting[0].version, submissionId: 'bad', selected: 'a' }]) {
+    const response = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(response.status, 400);
+  }
+  assert.deepEqual(await (await call('/api/epics/5')).json(), before);
+});
+
+test('unknown waiting actions return 404, including object prototype names', async () => {
+  for (const action of ['missing', 'constructor', 'toString', '__proto__']) {
+    assert.equal((await call(`/api/epics/5/waiting/w1/${action}`, { method: 'POST', body: {} })).status, 404, action);
+  }
 });
 
 test('refresh can stream its progress as ndjson', async () => {

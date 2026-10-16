@@ -28,7 +28,7 @@ test('task report', () => {
   assert.match(md, /- Form layout — CI green/);
   assert.match(md, /\[#1393\]\(https:\/\/gitlab\.example\.com\/acme\/web\/-\/merge_requests\/1393\)/);
   assert.match(md, /- Rebase web on main/);
-  assert.match(md, /- Apply the migration on staging/);
+  assert.match(md, /- migration: Apply the migration on staging — waiting for human/);
   assert.throws(() => buildReport(sampleEpic(), { task: 'nope' }), { status: 404 });
 });
 
@@ -36,5 +36,5 @@ test('brief and report treat resolved items as done', () => {
   const epic = sampleEpic();
   Object.assign(epic.waiting[0], { doneAt: '2026-10-16T10:00:00Z', resolution: 'applied at 10:00' });
   assert.doesNotMatch(buildBrief(epic), /migration/);
-  assert.match(buildReport(epic, { task: 'WEB-8' }), /\*\*Resolved\*\*\n\n- Apply the migration on staging — applied at 10:00/);
+  assert.match(buildReport(epic, { task: 'WEB-8' }), /\*\*Resolved\*\*\n\n- migration: Apply the migration on staging — outcome: applied at 10:00/);
 });
