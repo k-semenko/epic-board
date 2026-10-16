@@ -129,7 +129,7 @@ h2 .count { font-size: 11px; color: var(--warn); }
 .tl-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .tl-bar .here { margin: 0; }
 .tl-tools { display: flex; gap: 6px; }
-.tl-scroll { overflow: auto; cursor: grab; max-height: 70vh; user-select: none; }
+.tl-scroll { overflow-x: scroll; overflow-y: auto; cursor: grab; max-height: 70vh; user-select: none; }
 .tl-scroll.dragging { cursor: grabbing; }
 .tl-svg { display: block; }
 .tl-edge { fill: none; stroke: var(--muted); stroke-width: 1.4; opacity: .7; }

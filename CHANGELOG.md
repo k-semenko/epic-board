@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Group off-chain tasks into an animated card carousel with wheel, keyboard and button navigation, keeping its height fixed and remembering the front card.
 - Keep map cards below the sticky header and make its background opaque while scrolling.
 - Browse off-chain cards without changing the opened task or step; select a task only when its card is activated.
+- Reserve horizontal scrollbar space in the step timeline to keep the document and preview panels from shifting between tasks.
 
 ## [0.5.1] - 2026-10-16
 
