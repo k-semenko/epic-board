@@ -33,6 +33,7 @@ const PATHS = {
   link: '<path d="M6.5 9.5l3-3M7 4.5l1.2-1.2a2.5 2.5 0 0 1 3.5 3.5L10.5 8M9 11.5l-1.2 1.2a2.5 2.5 0 0 1-3.5-3.5L5.5 8"/>',
   info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.3v3.7M8 5v.1"/>',
   list: '<path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.1M2.5 8h.1M2.5 12h.1"/>',
+  layers: '<path d="m8 1.5 6.5 3.7L8 8.9 1.5 5.2zM1.5 8.2 8 11.9l6.5-3.7M1.5 11.2 8 14.9l6.5-3.7"/>',
   board: '<rect x="2" y="2.5" width="12" height="11" rx="2"/><path d="M6 2.5v11M10 6h4"/>',
   search: '<circle cx="7" cy="7" r="4.5"/><path d="M10.4 10.4L14 14"/>',
   undo: '<path d="M5.5 4L2.5 7l3 3M2.8 7H10a3.5 3.5 0 0 1 0 7H8"/>',

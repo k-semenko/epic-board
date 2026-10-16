@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Shared epic page block order, configured from the header with drag and drop or keyboard controls and preserved in HTML exports.
 
+### Changed
+
+- Move task dependencies and follow-up links into the step preview, and give step cards more room for their titles by removing subtitles.
+- Remove the redundant document count from the step preview.
+- Align the task number, title, status and tracker link on the same text baseline.
+- Show off-chain tasks as separate cards at the end of the overview, without arrows, with access to their steps and documents.
+- Group off-chain tasks into an animated card carousel with wheel, keyboard and button navigation, keeping its height fixed and remembering the front card.
+- Keep map cards below the sticky header and make its background opaque while scrolling.
+
 ## [0.5.1] - 2026-10-16
 
 ### Added

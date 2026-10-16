@@ -1,4 +1,4 @@
-import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep } from './lanes.mjs';
+import { buildLanes, layoutMap, buildOverview, sideStack, cycleSide, defaultOpen, defaultStep, MERGE_ID, GOAL_ID } from './lanes.mjs';
 import { icon, STATE_ICON, agentBadge, logo } from './icons.mjs';
 import { describeEvent, historyEntries } from './history.mjs';
 import { renderMarkdown } from './markdown.mjs';
@@ -221,7 +221,7 @@ function cardBody(n) {
   return `<div class="ov-top"><span class="mono">${esc(n.id)}</span>${n.status ? `<span class="chip">${esc(n.status)}</span>` : ''}</div>
     <div class="ov-title" title="${esc(n.fullTitle)}">${esc(n.title)}</div>
     <div class="ov-progress"><span class="bar"><i style="width:${pct}%"></i></span><span class="mono">${n.progress.done}/${n.progress.total}</span></div>
-    ${now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
+    ${n.side ? '' : now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
 }
 
 function cardState(n) {
@@ -229,6 +229,81 @@ function cardState(n) {
   if (n.current.length) return 'active';
   if (n.progress.total && n.progress.done === n.progress.total) return 'done';
   return 'todo';
+}
+
+function renderSideStack(side, open) {
+  const { front, back } = sideStack(side, open, tlState.side);
+  if (!front) return '';
+  tlState.side = front.id;
+  const cards = [front, ...back].map((n, i) => {
+    const selected = open === n.id;
+    const body = `${cardBody(n)}<span class="side-action">${icon(selected ? 'check' : 'arrowRight')}${esc(t(selected ? 'map.stepsOpen' : 'map.openSteps'))}</span>`;
+    const card = i === 0
+      ? `<button type="button" class="ov-card k-task ${cardState(n)}${selected ? ' selected' : ''}" data-open="${esc(n.id)}" aria-expanded="${selected}" aria-controls="detail">${body}</button><button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>`
+      : `<div class="ov-card k-task ${cardState(n)}" aria-hidden="true">${body}</div><button type="button" class="side-pick" data-side-pick="${esc(n.id)}" aria-label="${esc(t('map.showTask', { id: n.id }))}: ${esc(n.fullTitle)}" title="${esc(n.fullTitle)}"></button>`;
+    return `<div class="side-layer${i === 0 ? ' side-current' : ''}" data-side-id="${esc(n.id)}" style="--depth:${Math.min(i, 2)}"${i > 2 ? ' hidden' : ''}>${card}</div>`;
+  }).join('');
+  const position = side.findIndex((n) => n.id === front.id) + 1;
+  const controls = side.length > 1 ? `<div class="side-controls"><button type="button" class="icon-btn" data-side-turn="-1" aria-label="${esc(t('map.previousTask'))}" title="${esc(t('map.previousTask'))}">${icon('arrowUp')}</button><span class="mono" role="status" aria-live="polite">${esc(t('map.sidePosition', { n: position, total: side.length }))}</span><button type="button" class="icon-btn" data-side-turn="1" aria-label="${esc(t('map.nextTask'))}" title="${esc(t('map.nextTask'))}">${icon('arrowDown')}</button></div>` : '';
+  return `<section class="overview-side" aria-label="${esc(t('map.side'))}"><h3 class="ov-section-title">${icon('layers')}<span>${esc(t('map.side'))}</span><span class="mono">${side.length}</span></h3>
+    <div class="side-carousel" role="group" aria-roledescription="${esc(t('map.carousel'))}" aria-label="${esc(t('map.side'))}"><div class="side-deck${back.length ? '' : ' side-single'}">${cards}</div>${controls}</div>
+  </section>`;
+}
+
+async function rotateSide(direction, target) {
+  if (tlState.sideBusy) return;
+  const side = buildOverview(current).side;
+  const next = target || cycleSide(side, tlState.side, direction);
+  if (!next || next === tlState.side) return;
+  const deck = $('.side-deck');
+  const cards = [...deck.querySelectorAll('[data-side-id]')];
+  const outgoing = cards.find((el) => el.dataset.sideId === tlState.side);
+  const incoming = cards.find((el) => el.dataset.sideId === next);
+  const active = document.activeElement;
+  const focus = active.closest('.side-carousel') ? active.dataset.sideTurn || 'front' : null;
+  tlState.sideBusy = true;
+  deck.setAttribute('aria-busy', 'true');
+  try {
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      incoming.hidden = false;
+      incoming.style.zIndex = direction < 0 ? '5' : '3';
+      outgoing.style.zIndex = direction < 0 ? '4' : '5';
+      const full = { transform: 'translateY(0) scale(1)', opacity: 1 };
+      const behind = { transform: 'translateY(-22px) scale(.96)', opacity: 1 };
+      const below = { transform: 'translateY(190px) scale(.94)', opacity: 0 };
+      const options = { duration: 300, easing: 'cubic-bezier(.22,.68,.3,1)', fill: 'forwards' };
+      await Promise.all([
+        outgoing.animate([full, direction < 0 ? behind : below], options).finished.catch(() => {}),
+        incoming.animate([direction < 0 ? below : { transform: getComputedStyle(incoming).transform, opacity: 1 }, full], options).finished.catch(() => {}),
+      ]);
+    }
+    if (!deck.isConnected) return;
+    toggleDetail(next);
+    if (focus === 'front') $('.side-current [data-open]')?.focus({ preventScroll: true });
+    else if (focus) $(`[data-side-turn="${focus}"]`)?.focus({ preventScroll: true });
+  } finally {
+    tlState.sideBusy = false;
+    deck.removeAttribute('aria-busy');
+  }
+}
+
+function bindSideCarousel() {
+  let lastWheel = 0;
+  let wheelAmount = 0;
+  let wheelUsed = false;
+  document.addEventListener('wheel', (e) => {
+    const carousel = e.target.closest('.side-carousel');
+    if (!carousel?.querySelector('[data-side-turn]') || e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    const now = performance.now();
+    if (now - lastWheel > 180) { wheelAmount = 0; wheelUsed = false; }
+    lastWheel = now;
+    if (wheelUsed) return;
+    wheelAmount += e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 200 : 1);
+    if (Math.abs(wheelAmount) < 40) return;
+    wheelUsed = true;
+    void rotateSide(wheelAmount > 0 ? 1 : -1);
+  }, { passive: false });
 }
 
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
@@ -253,17 +328,16 @@ function renderOverview(ov, open) {
     const info = n.kind === 'task' ? `<button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>` : '';
     return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
-  return `<div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
+  return `<div class="overview${ov.side.length ? ' has-side' : ''}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}>${ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : ''}<div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
     <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
-    ${edges}${cards}</svg></div>`;
+    ${edges}${cards}</svg></div></section>${renderSideStack(ov.side, open)}</div>`;
 }
 
 // ---------- Detail: the steps of one task ----------
 
 function stepChip(step) {
-  const deps = step.deps.map((d) => `<span class="dep">${icon('dep')}${esc(t('step.after', { task: d.task, title: d.title }))}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span>`).join('');
-  const tip = [stateText(step.state), step.note].filter(Boolean).join(' — ');
-  return `<li class="step ${esc(step.state)}" title="${esc(tip)}"><span class="step-title">${stateIcon(step.state)}${esc(step.title)}</span>${deps}</li>`;
+  const tip = [stateText(step.state), step.title, step.note].filter(Boolean).join(' — ');
+  return `<li class="step ${esc(step.state)}" title="${esc(tip)}"><span class="step-title">${stateIcon(step.state)}${esc(step.title)}</span></li>`;
 }
 
 function narrowFlow(steps) {
@@ -271,7 +345,7 @@ function narrowFlow(steps) {
 }
 
 const TL = { colW: 200, nodeW: 168, nodeH: 84, rowH: 100, pad: 24 };
-const tlState = { focused: null, open: null, step: null, allDocs: false };
+const tlState = { focused: null, open: null, step: null, allDocs: false, side: null, sideBusy: false };
 
 function nodeX(col) { return TL.pad + col * TL.colW; }
 function rowY(i) { return i * TL.rowH + (TL.rowH - TL.nodeH) / 2; }
@@ -287,12 +361,11 @@ function renderTimeline(layout) {
     return `<path class="tl-edge" d="M${x1},${y} L${x2 - 2},${y}" marker-end="url(#tl-arrow)"/>`;
   }).join('');
   const nodes = layout.rows.map((r, i) => r.cells.map((c) => {
-    const tip = [stateText(c.state), c.note, c.branch].filter(Boolean).join(' — ');
+    const tip = [stateText(c.state), c.title, c.note, c.branch].filter(Boolean).join(' — ');
     const n = r.kind === 'merge' ? `<span class="n">${c.n}</span>` : '';
-    const note = c.note ? `<span class="tl-note">${esc(c.note)}</span>` : c.branch ? `<span class="tl-note mono">${esc(c.branch)}</span>` : '';
     const docCount = (current?.docs || []).filter((d) => d.task === r.id && d.step === c.id).length;
     const badge = docCount ? `<span class="tl-docs" title="${esc(t('step.docCount', { n: docCount }))}">${icon('file')}${docCount}</span>` : '';
-    return `<foreignObject x="${nodeX(c.col)}" y="${rowY(i)}" width="${TL.nodeW}" height="${TL.nodeH}"><div xmlns="http://www.w3.org/1999/xhtml" class="tl-node ${esc(c.state)}${docCount ? ' has-docs' : ''}${r.kind === 'lane' && c.id === tlState.step ? ' selected' : ''}"${r.kind === 'lane' ? ` data-step="${esc(c.id)}"` : ''} data-sid="st-${esc(r.id)}-${esc(c.id)}" title="${esc(tip)}"><span class="tl-title">${stateIcon(c.state)}${n}${esc(c.title)}</span>${note}${badge}</div></foreignObject>`;
+    return `<foreignObject x="${nodeX(c.col)}" y="${rowY(i)}" width="${TL.nodeW}" height="${TL.nodeH}"><div xmlns="http://www.w3.org/1999/xhtml" class="tl-node ${esc(c.state)}${docCount ? ' has-docs' : ''}${r.kind === 'lane' && c.id === tlState.step ? ' selected' : ''}"${r.kind === 'lane' ? ` data-step="${esc(c.id)}"` : ''} data-sid="st-${esc(r.id)}-${esc(c.id)}" title="${esc(tip)}"><span class="tl-title">${stateIcon(c.state)}${n}${esc(c.title)}</span>${badge}</div></foreignObject>`;
   }).join('')).join('');
   return `<div class="tl" id="tl"><div class="tl-scroll" id="tl-scroll"><svg class="tl-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
       <defs><marker id="tl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
@@ -301,42 +374,45 @@ function renderTimeline(layout) {
 
 // One row only: other lanes are left out, so cross-task links become the lists beside the steps.
 function detailLayout(map, open) {
-  const single = open === 'merge'
+  const single = open === MERGE_ID
     ? { lanes: [], merge: map.merge, goal: map.goal, here: [] }
-    : { lanes: map.lanes.filter((l) => l.id === open), merge: [], goal: map.goal, here: [] };
+    : { lanes: [...map.lanes, ...map.side].filter((l) => l.id === open), merge: [], goal: map.goal, here: [] };
   const full = layoutMap(single);
   const rows = full.rows.filter((r) => r.kind !== 'goal');
   const cols = Math.max(0, ...rows.flatMap((r) => r.cells.map((c) => c.col + 1)));
-  return { rows, cols, edges: full.edges.filter((e) => e.from.row === e.to.row && e.to.row !== 'goal'), focus: full.focus };
+  return { rows, cols, edges: full.edges.filter((e) => e.from.row === e.to.row && e.to.row !== GOAL_ID), focus: full.focus };
 }
 
 function linksOf(map, open) {
-  if (open === 'merge') {
+  if (open === MERGE_ID) {
     const branches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
     const incoming = map.lanes.filter((l) => l.branches.some((b) => branches.has(b))).map((l) => `<li>${icon('branch')}<span>${esc(l.id)} · ${esc(l.title)}</span></li>`);
     return { incoming, outgoing: [`<li>${icon('flag')}<span>${esc(map.goal)}</span></li>`] };
   }
-  const lane = map.lanes.find((l) => l.id === open);
+  const lanes = [...map.lanes, ...map.side];
+  const lane = lanes.find((l) => l.id === open);
   const incoming = lane.steps.flatMap((s) => s.deps.map((d) => `<li>${icon('dep')}<span><b>${esc(d.task)} · ${esc(d.title)}</b> ${icon('arrowRight', 'inl')}${esc(s.title)}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`));
-  const outgoing = map.lanes.filter((l) => l.id !== open).flatMap((l) => l.steps.flatMap((s) => s.deps.filter((d) => d.task === open).map((d) => `<li>${icon('arrowRight')}<span>${esc(d.title)} ${icon('arrowRight', 'inl')}<b>${esc(l.id)} · ${esc(s.title)}</b>${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`)));
+  const outgoing = lanes.filter((l) => l.id !== open).flatMap((l) => l.steps.flatMap((s) => s.deps.filter((d) => d.task === open).map((d) => `<li>${icon('arrowRight')}<span>${esc(d.title)} ${icon('arrowRight', 'inl')}<b>${esc(l.id)} · ${esc(s.title)}</b>${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`)));
   const mergeBranches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
   if (lane.branches.some((b) => mergeBranches.has(b))) outgoing.push(`<li>${icon('merge')}<span>${esc(t('detail.toMerge'))}</span></li>`);
   return { incoming, outgoing };
 }
 
 function renderDetail(map, open) {
-  const lane = open === 'merge' ? null : map.lanes.find((l) => l.id === open);
+  const lane = open === MERGE_ID ? null : [...map.lanes, ...map.side].find((l) => l.id === open);
   if (lane && (!tlState.step || !lane.steps.some((st) => st.id === tlState.step))) tlState.step = defaultStep(lane);
   const raw = lane ? (current?.tasks || []).find((x) => x.id === lane.id) : null;
   const title = lane ? `<span class="mono muted">${esc(lane.id)}</span> ${esc(lane.fullTitle)}` : `${icon('merge')} ${esc(t('card.merge'))}`;
+  const heading = `<h3>${title}</h3>`;
   const { incoming, outgoing } = linksOf(map, open);
   const list = (items, empty) => (items.length ? `<ul class="links">${items.join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
+  const links = `<div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>`;
   const steps = lane ? lane.steps : map.merge.map((m) => ({ id: `m${m.n}`, title: `${m.n}. ${m.text}`, state: m.waiting ? 'waiting' : 'todo', note: m.branch, deps: [] }));
-  return `<section class="detail" id="detail" aria-label="${esc(t('detail.aria'))}">
-    <header class="detail-head"><h3>${title}</h3>${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
-    <div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>
+  return `<section class="detail${lane ? '' : ' detail-merge'}" id="detail" aria-label="${esc(t('detail.aria'))}">
+    <header class="detail-head">${raw?.role === 'side' ? `<div class="detail-heading"><span class="detail-context">${esc(t('map.side'))}</span>${heading}</div>` : heading}${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
+    ${lane ? '' : links}
     ${renderTimeline(detailLayout(map, open))}
-    ${lane ? stepSplit(lane) : ''}
+    ${lane ? stepSplit(lane, links) : ''}
     <div class="lanes-narrow">${narrowFlow(steps)}</div>
   </section>`;
 }
@@ -362,34 +438,29 @@ function docsBlock(lane, step, all) {
   return `<div class="docs-block"><div class="docs-head"><h4>${esc(t(all ? 'docs.taskTitle' : 'docs.stepTitle'))} · ${docs.length}</h4><div class="docs-tools">${toggle}<button type="button" class="live-only" data-doc-add="${esc(lane.id)}">${icon('plus')}${esc(t('docs.add'))}</button></div></div><div class="docs-scroll">${rows || `<p class="muted">${esc(t(all ? 'docs.taskNone' : 'docs.stepNone'))}</p>`}</div></div>`;
 }
 
-function stepInfo(lane, stepId) {
+function stepInfo(lane, stepId, links) {
   const step = lane.steps.find((st) => st.id === stepId);
-  if (!step) return `<div class="step-info"><p class="muted">${esc(t('step.none'))}</p></div>`;
+  if (!step) return `<div class="step-info"><p class="muted">${esc(t('step.none'))}</p>${links}</div>`;
   const raw = (current?.tasks || []).find((x) => x.id === lane.id)?.steps?.find((st) => st.id === stepId) || {};
-  const deps = step.deps.map((d) => `<li>${icon('dep')}<span>${esc(d.task)} · ${esc(d.title)}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`).join('');
   const prefix = `tasks[${lane.id}].steps[${stepId}]`;
   const changes = currentHistory.filter((h) => String(h.path).startsWith(prefix)).slice(0, 6).map((h) => {
     const d = describeEvent(h);
     const value = d.change === 'add' ? t('step.added') : `${cap(d.what)}: ${d.before ?? '—'} → ${d.after ?? '—'}`;
     return `<li><span class="muted">${agoTag(h.at)}</span><span>${esc(value)}</span></li>`;
   }).join('');
-  const docCount = (current?.docs || []).filter((d) => d.task === lane.id && d.step === stepId).length;
   return `<div class="step-info">
     <div class="step-info-head">${stateIcon(step.state)}<span class="chip">${esc(cap(stateText(step.state)))}</span><span class="mono muted">${esc(lane.id)}/${esc(step.id)}</span></div>
     <h4 class="step-info-title">${esc(step.title)}</h4>
     ${step.note ? `<p class="step-info-note">${esc(step.note)}</p>` : `<p class="muted">${esc(t('step.noDescription'))}</p>`}
-    <dl class="step-info-meta">
-      <dt>${esc(t('step.dependsOn'))}</dt><dd>${deps ? `<ul class="links">${deps}</ul>` : esc(t('step.prev'))}</dd>
-      <dt>${esc(t('step.docs'))}</dt><dd>${docCount}</dd>
-      ${raw.label ? `<dt>${esc(t('step.label'))}</dt><dd>${esc(raw.label)}</dd>` : ''}
-    </dl>
+    ${links}
+    ${raw.label ? `<dl class="step-info-meta"><dt>${esc(t('step.label'))}</dt><dd>${esc(raw.label)}</dd></dl>` : ''}
     ${changes ? `<h5>${esc(t('step.changes'))}</h5><ul class="step-changes">${changes}</ul>` : ''}
   </div>`;
 }
 
-function stepSplit(lane) {
+function stepSplit(lane, links) {
   if (!tlState.step || !lane.steps.some((st) => st.id === tlState.step)) tlState.step = defaultStep(lane);
-  return `<div class="step-split">${docsBlock(lane, tlState.step, tlState.allDocs)}${stepInfo(lane, tlState.step)}</div>`;
+  return `<div class="step-split">${docsBlock(lane, tlState.step, tlState.allDocs)}${stepInfo(lane, tlState.step, links)}</div>`;
 }
 
 // One renderer for the whole page: vendored marked + DOMPurify when present, the built-in one otherwise.
@@ -647,11 +718,6 @@ function bindPan() {
 
 // ---------- Map area ----------
 
-function sideTasks(map) {
-  if (!map.side.length) return '';
-  return `<div class="side-row"><span class="muted">${esc(t('map.side'))}</span>${map.side.map((l) => `<span class="chip" title="${esc(l.fullTitle)}">${esc(l.id)} · ${esc(l.title)}${l.status ? ` · ${esc(l.status)}` : ''}</span>`).join('')}</div>`;
-}
-
 function openFromHash() {
   const m = location.hash.match(/^#t-([^/]+)(?:\/([\w.-]+))?$/);
   if (!m) return null;
@@ -662,16 +728,17 @@ function openFromHash() {
 function renderMapArea(epic) {
   const map = buildLanes(epic);
   const ov = buildOverview(epic);
-  for (const n of ov.nodes) n.docs = (epic.docs || []).filter((d) => d.task === n.id).length;
-  if (tlState.open && !ov.nodes.some((n) => n.id === tlState.open && n.kind !== 'goal')) tlState.open = null;
+  const allNodes = [...ov.nodes, ...ov.side];
+  for (const n of allNodes) n.docs = (epic.docs || []).filter((d) => d.task === n.id).length;
+  if (tlState.open === 'merge' && !allNodes.some((n) => n.kind === 'task' && n.id === 'merge')) tlState.open = MERGE_ID;
+  if (tlState.open && !allNodes.some((n) => n.id === tlState.open && n.kind !== 'goal')) tlState.open = null;
   const open = tlState.open || defaultOpen(map);
   const here = map.here.length ? map.here.map((h) => `${esc(h.task)} · ${esc(h.title)}`).join('; ') : esc(t('map.noActive'));
   const prev = $('#tl-scroll');
   const keep = prev && tlState.focused === open ? prev.scrollLeft : null;
   $('#map').innerHTML = `<p class="here"><span class="chip active-chip">${icon('target')}${esc(t('map.here'))}</span>${here}</p>`
     + renderOverview(ov, open)
-    + (open ? renderDetail(map, open) : '')
-    + sideTasks(map);
+    + (open ? renderDetail(map, open) : '');
   if (!open) return;
   bindPan();
   if (keep !== null) $('#tl-scroll').scrollLeft = keep;
@@ -681,11 +748,12 @@ function renderMapArea(epic) {
   }
 }
 
-function toggleDetail(id) {
+function toggleDetail(id, focusStack = false) {
   if (tlState.open !== id) tlState.step = null;
   tlState.open = id;
   history.replaceState(null, '', `#t-${enc(id)}`);
   renderMapArea(current);
+  if (focusStack) $('.side-current [data-open]')?.focus({ preventScroll: true });
 }
 
 function selectStep(stepId) {
@@ -1125,6 +1193,7 @@ async function bootEpic() {
     await renderEpic(id);
   });
   bindMapTools();
+  bindSideCarousel();
   bindSearch();
   bindDocs();
   if (!EXPORT) bindDecisionForms(id);
@@ -1156,8 +1225,12 @@ async function bootEpic() {
       tlState.allDocs = !tlState.allDocs;
       return void renderMapArea(current);
     }
+    const turn = el.closest('[data-side-turn]');
+    if (turn) return void rotateSide(Number(turn.dataset.sideTurn));
+    const pick = el.closest('[data-side-pick]');
+    if (pick) return void rotateSide(1, pick.dataset.sidePick);
     const openCard = el.closest('[data-open]');
-    if (openCard) toggleDetail(openCard.dataset.open);
+    if (openCard) toggleDetail(openCard.dataset.open, Boolean(openCard.closest('.side-carousel')));
     const refresh = el.closest('[data-refresh]');
     if (refresh) withButton(refresh, async () => {
       await api(`/api/epics/${enc(id)}/refresh`, { method: 'POST', body: { scope: 'branch', branch: refresh.dataset.refresh } });
@@ -1169,10 +1242,14 @@ async function bootEpic() {
       hidePopover();
       closeModals();
     }
+    if (e.target.closest?.('.side-carousel') && ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].includes(e.key)) {
+      e.preventDefault();
+      return void rotateSide(['ArrowUp', 'ArrowLeft'].includes(e.key) ? -1 : 1);
+    }
     const card = e.target.closest?.('[data-open]');
     if (card && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
-      toggleDetail(card.dataset.open);
+      toggleDetail(card.dataset.open, Boolean(card.closest('.side-carousel')));
     }
   });
   if (!EXPORT) setInterval(async () => {
