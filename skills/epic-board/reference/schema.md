@@ -12,7 +12,7 @@ One JSON file per epic in `<data>/epics/<id>.json`, plus `<id>.history.ndjson` (
   "createdAt": "2026-10-16T09:00:00Z",
   "updatedAt": "2026-10-16T09:00:00Z",
   "repos": {
-    "web": { "path": "/home/you/src/web", "base": "main", "provider": "gitlab", "project": "gitlab.com/acme/web" }
+    "web": { "path": "/home/you/src/web", "root": "/home/you/src/web", "commonDir": "/home/you/src/web/.git", "base": "main", "provider": "gitlab", "project": "gitlab.com/acme/web" }
   },
   "tasks": [
     {
@@ -78,7 +78,9 @@ Rules:
 - Each immutable `rounds[]` entry contains `{revision, version, request, response, review?}`. `request` snapshots `title`, `details`, `kind`, `task`, `refs`, `input`, `checklist`, `revisionReason` when present. `response` contains `submissionId`, `at`, `by`, explicit `confirmed`, `selected`, `checked`, optional `comment`. `review` is written once with `outcome: accepted|revised`, `at`, `by`, `text`.
 - Revision archives an answered round with outcome `revised`; reopening a closed item preserves its existing `accepted` review. New revisions start open without a response. The existing checklist and input arrays are retained unless explicitly replaced.
 - Legacy closed items preserve their prior `doneAt`, `checked`, `resolution` and question in `legacyClosure`; no human response is invented. Migrated tokens are deterministic from the epic ID and original item until the first mutation.
-- A branch in `facts` is keyed `<repo>:<branch>`. git runs in `branches[].worktree` when it exists, else in `repos[repo].path`.
+- `repos[].root` and `commonDir` are optional, captured automatically when registering an available path and backfilled by refresh. They identify the primary checkout and shared Git directory, so removing a linked worktree does not prevent Git refresh. Retargeting `path` replaces the captured identity.
+- A branch in `facts` is keyed `<repo>:<branch>`. Fetch and ref reads use the shared Git directory; cleanliness is checked only in an available branch worktree belonging to that repository.
+- Forge requests use the explicit `provider/project` without requiring a local checkout. When local Git is unavailable, `localUnavailable: true` and `localReason` accompany the last known Git facts and their original `fetchedAt`; `dirty` is unknown. MR facts have their own `fetchedAt`, and `shaMatchesHead` is `null` without a current local head.
 - `facts` is written by refresh only; a PATCH with `facts` is rejected (400).
 
 **PATCH rules** (body `{patch, by, why}`): JSON Merge Patch for objects (`null` removes a field); arrays merge by key:

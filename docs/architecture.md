@@ -22,10 +22,10 @@ server/http ──┘          │                <id>.history.ndjson
 
 ## Facts — `server/refresh.mjs`
 
-- One `git fetch --prune origin` per repository, then a pool of four branch workers.
+- One `git fetch --prune origin` per shared Git directory, then a pool of four branch workers. Repository registration and healthy refreshes remember the primary checkout and common Git directory for use after a linked worktree is removed.
 - Each worker reads head, behind/ahead against `origin/<base>`, unpushed commits against `origin/<branch>`, and worktree cleanliness.
 - Repositories with a `provider` also ask `glab mr view` or `gh pr view` with an explicit `-R <host>/<project>`. That way the CLI never guesses the host from the service's working directory.
-- A failed branch or forge call keeps the last good facts and marks the error.
+- Git and forge requests run independently. A failed source keeps its last successful facts and timestamp. Missing local Git produces a partial result while the MR still refreshes without a checkout; its comparison with the local head stays unknown.
 - Progress streams as NDJSON (`POST /api/epics/<id>/refresh?stream=1`).
 
 ## HTTP — `server/http.mjs`

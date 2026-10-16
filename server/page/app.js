@@ -1147,20 +1147,28 @@ function branchRows(epic) {
     for (const b of task.branches || []) {
       const key = `${b.repo}:${b.name}`;
       const f = epic.facts?.[key];
-      const stale = !f?.fetchedAt || nowMs() - Date.parse(f.fetchedAt) > STALE_MS;
-      const mr = f?.mr && !f.mr.error
-        ? `${isHttp(f.mr.url) ? `<a href="${esc(f.mr.url)}" target="_blank" rel="noopener noreferrer">#${b.mr.iid}</a>` : `#${b.mr.iid}`} ${esc(f.mr.draft ? 'draft' : f.mr.state)} <span class="${f.mr.pipeline === 'success' ? 'ok' : f.mr.pipeline === 'failed' ? 'crit' : 'warn'}">${esc(f.mr.pipeline ?? '')}</span>${f.mr.shaMatchesHead ? '' : ` <span class="warn">${esc(t('br.wrongHead'))}</span>`}`
-        : f?.mr?.error ? `<span class="crit">${esc(f.mr.error)}</span>` : b.mr?.iid ? `#${b.mr.iid}` : '—';
+      const localUnavailable = f?.localUnavailable === true;
+      const stale = localUnavailable || Boolean(f?.error) || !f?.fetchedAt || nowMs() - Date.parse(f.fetchedAt) > STALE_MS;
+      const mrStale = Boolean(f?.mr?.error) || !f?.mr?.fetchedAt || nowMs() - Date.parse(f.mr.fetchedAt) > STALE_MS;
+      const headMatch = localUnavailable || f?.error ? null : f?.mr?.shaMatchesHead;
+      const comparison = headMatch === false ? ` <span class="warn">${esc(t('br.wrongHead'))}</span>` : headMatch == null ? ` <span class="muted">${esc(t('br.unknownHead'))}</span>` : '';
+      const mrChecked = f?.mr?.fetchedAt ? `<div class="${mrStale ? 'stale' : 'muted'}">${phrase('br.mrChecked', { t: agoTag(f.mr.fetchedAt) })}</div>` : '';
+      const mr = !b.mr?.iid ? '—' : f?.mr && !f.mr.error
+        ? `${isHttp(f.mr.url) ? `<a href="${esc(f.mr.url)}" target="_blank" rel="noopener noreferrer">#${b.mr.iid}</a>` : `#${b.mr.iid}`} ${esc(f.mr.draft ? 'draft' : f.mr.state)} <span class="${f.mr.pipeline === 'success' ? 'ok' : f.mr.pipeline === 'failed' ? 'crit' : 'warn'}">${esc(f.mr.pipeline ?? '')}</span>${comparison}${mrChecked}`
+        : f?.mr?.error ? `<span class="crit">${esc(f.mr.error)}</span>${mrChecked}` : b.mr?.iid ? `#${b.mr.iid}` : '—';
       const counts = f
         ? `<span class="nowrap" title="${esc(t('br.behind'))}">${icon('arrowDown')}${f.behind ?? '?'}</span> <span class="nowrap" title="${esc(t('br.ahead'))}">${icon('arrowUp')}${f.ahead ?? '?'}</span>${f.unpushed ? ` <span class="warn nowrap">${icon('branch')}${esc(t('unpushed', { n: f.unpushed }))}</span>` : ''}${f.dirty ? ` <span class="warn nowrap">${icon('alert')}${esc(t('dirty'))}</span>` : ''}`
         : '—';
+      const localStatus = localUnavailable
+        ? `<div class="muted">${esc(t('br.localUnavailable'))}${f.localReason ? ` · ${esc(f.localReason)}` : ''}</div>`
+        : f?.error ? `<div class="crit">${esc(f.error)}</div>` : b.worktree && f?.worktreeExists === false ? `<div class="muted">${esc(t('br.worktreeRemoved'))}</div>` : '';
       rows.push(`<tr data-sid="b-${esc(key)}">
         <td>${esc(b.repo)}<div class="muted">${esc(task.id)}</div></td>
         <td class="mono">${esc(b.name)}</td>
-        <td class="mono">${esc(f?.head ?? '—')}<div class="muted">${esc(f?.subject ?? '')}</div></td>
-        <td class="mono">${counts}</td>
+        <td class="mono${stale ? ' stale' : ''}">${esc(f?.head ?? '—')}<div class="muted">${esc(f?.subject ?? '')}</div></td>
+        <td class="mono${stale ? ' stale' : ''}">${counts}</td>
         <td>${mr}</td>
-        <td class="mono ${stale ? 'stale' : 'muted'}">${agoTag(f?.fetchedAt)}${f?.error ? `<div class="crit">${esc(f.error)}</div>` : ''}</td>
+        <td class="mono ${stale ? 'stale' : 'muted'}">${f?.fetchedAt ? phrase('br.gitChecked', { t: agoTag(f.fetchedAt) }) : esc(t('br.gitUnchecked'))}${localStatus}</td>
         <td><button type="button" class="live-only" data-refresh="${esc(key)}">${icon('refresh')}${esc(t('br.refresh'))}</button></td>
       </tr>`);
     }
@@ -1316,7 +1324,7 @@ function markProgress(modal, e) {
   if (!el) return;
   el.className = `pr-row ${e.state === 'start' ? 'running' : e.state}`;
   el.querySelector('.pr-state').innerHTML = e.state === 'start' ? '<span class="spinner"></span>' : icon(e.state === 'ok' ? 'check' : 'alert');
-  el.querySelector('.pr-detail').textContent = e.state === 'start' ? t('refresh.running') : e.state === 'ok' ? e.detail || t('refresh.ok') : cap(e.detail || t('refresh.error'));
+  el.querySelector('.pr-detail').textContent = e.state === 'start' ? t('refresh.running') : e.state === 'ok' ? e.detail || t('refresh.ok') : e.state === 'partial' ? e.detail || t('refresh.partial') : cap(e.detail || t('refresh.error'));
 }
 
 async function runRefresh(id, modal) {
@@ -1332,6 +1340,7 @@ async function runRefresh(id, modal) {
   $('#pr-summary').textContent = t('refresh.going');
   let ok = 0;
   let failed = 0;
+  let partial = 0;
   try {
     const res = await fetch(`/api/epics/${enc(id)}/refresh?stream=1`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: 'all' }) });
     const reader = res.body.getReader();
@@ -1349,9 +1358,10 @@ async function runRefresh(id, modal) {
           markProgress(modal, e);
           if (e.type === 'branch' && e.state === 'ok') ok++;
           if (e.type === 'branch' && e.state === 'error') failed++;
+          if (e.type === 'branch' && e.state === 'partial') partial++;
         }
         if (e.type === 'error') $('#pr-summary').innerHTML = `<span class="crit">${esc(t('refresh.errorText', { e: e.detail }))}</span>`;
-        if (e.type === 'done') $('#pr-summary').innerHTML = failed ? `<span class="warn">${esc(t('refresh.doneWithErrors', { ok, failed }))}</span>` : `<span class="ok">${icon('check')}${esc(t('refresh.done', { ok }))}</span>`;
+        if (e.type === 'done') $('#pr-summary').innerHTML = partial ? `<span class="warn">${esc(t('refresh.donePartial', { ok, partial, failed }))}</span>` : failed ? `<span class="warn">${esc(t('refresh.doneWithErrors', { ok, failed }))}</span>` : `<span class="ok">${icon('check')}${esc(t('refresh.done', { ok }))}</span>`;
       }
     }
   } catch (e) {

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { dataDir } from './paths.mjs';
 import { BoardError } from './errors.mjs';
 import { migrateWaiting, prepareWaitingPatch, transitionWaiting, validateWaiting } from './waiting.mjs';
+import { inspectRepository } from './repositories.mjs';
 
 // Any tracker key works as an id (42, PROJ-12, gh.341); it also names files, so no slashes or leading dots.
 export const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -279,6 +280,9 @@ export function validateEpic(epic) {
   for (const [name, repo] of Object.entries(epic.repos || {})) {
     if (repo.provider !== undefined && !PROVIDERS.includes(repo.provider)) throw new BoardError(400, 'bad-provider', `repo ${name}: provider is ${PROVIDERS.join(' or ')}`);
     if (repo.project !== undefined && !/^[\w.-]+(\/[\w.-]+)+$/.test(String(repo.project))) throw new BoardError(400, 'bad-project', `repo ${name}: project is host/owner/name, e.g. github.com/acme/web`);
+    for (const field of ['root', 'commonDir']) {
+      if (repo[field] !== undefined && (typeof repo[field] !== 'string' || !repo[field].trim())) throw new BoardError(400, 'bad-repo-location', `repo ${name}: ${field} must be a nonempty path string`);
+    }
   }
   for (const s of epic.sessions || []) {
     if (s.agent !== undefined && !/^[a-z0-9-]{1,20}$/.test(String(s.agent))) {
@@ -326,6 +330,18 @@ function prepareDecisions(epic, patch, at) {
   return { ...patch, decisions: patch.decisions.map((d) => (d.id ? d : { ...d, id: `d${++n}`, at: d.at || at })) };
 }
 
+function prepareRepositories(epic, patch) {
+  if (!patch.repos || typeof patch.repos !== 'object' || Array.isArray(patch.repos)) return patch;
+  const repos = { ...patch.repos };
+  for (const [name, repo] of Object.entries(repos)) {
+    if (!repo || typeof repo !== 'object' || !Object.hasOwn(repo, 'path')) continue;
+    const location = inspectRepository(repo.path);
+    if (location) repos[name] = { ...repo, ...location };
+    else if (repo.path !== epic.repos?.[name]?.path) repos[name] = { ...repo, root: null, commonDir: null };
+  }
+  return { ...patch, repos };
+}
+
 // `check` sees the merged epic under the lock, before anything is written.
 export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, check } = {}) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new BoardError(400, 'bad-patch', 'patch must be an object');
@@ -337,7 +353,7 @@ export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, chec
     const epic = readEpic(id);
     const at = new Date().toISOString();
     const changes = [];
-    const next = mergeObject(epic, prepareDecisions(epic, prepareWaitingPatch(epic, patch, at), at), '', changes);
+    const next = mergeObject(epic, prepareRepositories(epic, prepareDecisions(epic, prepareWaitingPatch(epic, patch, at), at)), '', changes);
     validateEpic(next);
     if (check) check(next);
     if (!changes.length) return { epic, changes };
@@ -389,20 +405,51 @@ export function reopenWaiting() {
   throw new BoardError(400, 'waiting-action', 'use wait revise with version and a reason');
 }
 
-const WATCHED = ['head', 'behind', 'ahead', 'unpushed', 'remoteBehind', 'dirty', 'mr.state', 'mr.draft', 'mr.pipeline', 'error'];
+const WATCHED = ['head', 'behind', 'ahead', 'unpushed', 'remoteBehind', 'dirty', 'mr.state', 'mr.draft', 'mr.pipeline', 'error', 'localUnavailable'];
 const pick = (obj, dotted) => dotted.split('.').reduce((v, k) => (v == null ? undefined : v[k]), obj);
 
 // A failed refresh keeps the last good facts and their fetchedAt, so the page can show them as stale.
-export function writeFacts(id, results, { at = new Date().toISOString() } = {}) {
+export function writeFacts(id, results, { at = new Date().toISOString(), repoLocations = {} } = {}) {
   return withLock(id, () => {
     const epic = readEpic(id);
     const facts = { ...(epic.facts || {}) };
     const events = [];
+    const observedRepos = Object.keys(repoLocations).sort((a, b) => b.length - a.length);
+    for (const [name, observed] of Object.entries(repoLocations)) {
+      const repo = epic.repos?.[name];
+      if (!repo || repo.path !== observed.path) continue;
+      for (const field of ['root', 'commonDir']) {
+        if (typeof observed[field] !== 'string' || !observed[field].trim() || same(repo[field], observed[field])) continue;
+        events.push({ at, by: 'refresh', why: '', op: 'refresh', path: `repos.${name}.${field}`, before: repo[field] ?? null, after: observed[field] });
+        repo[field] = observed[field];
+      }
+    }
     for (const [key, result] of Object.entries(results)) {
+      const repoName = observedRepos.find((name) => key.startsWith(`${name}:`));
+      if (repoName !== undefined && (!epic.repos?.[repoName] || epic.repos[repoName].path !== repoLocations[repoName].path)) continue;
       const prev = facts[key] || null;
-      const next = result.error ? { ...(prev || {}), error: result.error, errorAt: at } : { ...result, fetchedAt: at, error: null };
-      // A glab failure keeps the last good MR facts, like a git failure keeps the branch facts.
-      if (!result.error && next.mr) next.mr = next.mr.error ? { ...(prev?.mr || {}), error: next.mr.error, errorAt: at } : { ...next.mr, fetchedAt: at };
+      let next;
+      if (result.localUnavailable === true) {
+        next = { ...(prev || {}), error: null, localUnavailable: true, localReason: result.localReason || 'Local repository is unavailable', dirty: null, worktreeExists: false };
+        delete next.errorAt;
+      } else if (result.error) {
+        next = { ...(prev || {}), error: result.error, errorAt: at };
+        if (Object.hasOwn(result, 'worktreeExists')) {
+          delete next.localUnavailable;
+          delete next.localReason;
+        }
+        for (const field of ['dirty', 'worktreeExists']) {
+          if (Object.hasOwn(result, field)) next[field] = result[field];
+        }
+      } else {
+        next = { ...result, fetchedAt: at, error: null };
+        delete next.localUnavailable;
+        delete next.localReason;
+      }
+      // Git and forge requests have separate successful timestamps.
+      if (result.mr === null) next.mr = null;
+      else if (result.mr) next.mr = result.mr.error ? { ...(prev?.mr || {}), error: result.mr.error, errorAt: at } : { ...result.mr, fetchedAt: at };
+      if (next.mr && (result.error || result.localUnavailable === true)) next.mr = { ...next.mr, shaMatchesHead: null };
       for (const field of WATCHED) {
         const before = pick(prev, field) ?? null;
         const after = pick(next, field) ?? null;

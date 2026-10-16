@@ -10,12 +10,13 @@ export function ago(iso, now = Date.now()) {
 
 export function branchLine(key, f, mrIid) {
   if (!f) return `${key} · no facts yet, run refresh`;
-  const parts = [`${key} ${f.head ?? '?'}`];
+  const parts = [`${key} ${f.localUnavailable || f.error ? 'last known ' : ''}${f.head ?? '?'}`];
   if (f.behind) parts.push(`behind ${f.behind}`);
   if (f.unpushed) parts.push(`unpushed ${f.unpushed}`);
   if (f.dirty) parts.push('dirty tree');
   if (f.mr && !f.mr.error) parts.push(`MR ${mrIid ? `#${mrIid} ` : ''}${[f.mr.draft ? 'draft' : f.mr.state, f.mr.pipeline].filter(Boolean).join(' ')}`);
   if (f.mr?.error) parts.push(`MR: ${f.mr.error}`);
+  if (f.localUnavailable) parts.push('local Git unavailable');
   if (f.error) parts.push(`error: ${f.error}`);
   return parts.join(' · ');
 }

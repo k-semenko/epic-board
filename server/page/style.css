@@ -476,6 +476,7 @@ button.doc-open .chip svg.i { display: none; }
 .pr-state { display: inline-flex; justify-content: center; }
 .pr-state svg.i { margin: 0; }
 .pr-row.ok .pr-state { color: var(--ok); }
+.pr-row.partial .pr-state, .pr-row.partial .pr-detail { color: var(--warn); }
 .pr-row.error .pr-state { color: var(--crit); }
 .pr-row.error .pr-detail { color: var(--crit); }
 .pr-detail { overflow-wrap: anywhere; font-size: 12.5px; }

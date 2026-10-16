@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Keep repository root and common Git paths so refresh survives deleted worktrees; refresh merge requests independently and distinguish current MR state from unavailable local Git data.
 - Show editable Markdown markers in the active document block and render formatting when the cursor moves away.
 - Remove the focus outline around the visual document surface while keeping focus indicators on editor controls.
 - Give off-chain tasks the same step-panel header as tasks in the main chain.

@@ -18,7 +18,7 @@ export function buildReport(epic, { task } = {}) {
       const f = epic.facts?.[`${b.repo}:${b.name}`];
       const mr = b.mr?.iid ? (f?.mr?.url ? ` — [#${b.mr.iid}](${f.mr.url})` : ` — #${b.mr.iid}`) : '';
       const state = f?.mr && !f.mr.error ? `, ${f.mr.state}${f.mr.pipeline ? `, pipeline ${f.mr.pipeline}` : ''}` : '';
-      out.push(`- ${b.repo}: \`${b.name}\` @ \`${f?.head ?? '?'}\`${mr}${state}`);
+      out.push(`- ${b.repo}: \`${b.name}\` @ \`${f?.head ?? '?'}\`${f?.localUnavailable || f?.error ? ' (last known local head)' : ''}${mr}${state}`);
     }
   }
   const decisions = (epic.decisions || []).filter((d) => d.task === t.id);

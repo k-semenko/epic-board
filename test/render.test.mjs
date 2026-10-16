@@ -21,6 +21,13 @@ test('ago', () => {
   assert.equal(ago(null, now), '-');
 });
 
+test('brief and report label retained local facts when only the MR can be refreshed', () => {
+  const epic = sampleEpic();
+  Object.assign(epic.facts['web:feat/payment-form'], { localUnavailable: true, dirty: null });
+  assert.match(buildBrief(epic), /web:feat\/payment-form last known eaf756ec85.*local Git unavailable/);
+  assert.match(buildReport(epic, { task: 'WEB-8' }), /eaf756ec85` \(last known local head\)/);
+});
+
 test('task report', () => {
   const md = buildReport(sampleEpic(), { task: 'WEB-8' });
   assert.match(md, /^\*\*Report: \[web\] Payment form\*\*/);
