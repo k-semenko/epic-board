@@ -3,12 +3,13 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readEpic, readHistory } from './store.mjs';
 import { allTexts } from './docs.mjs';
+import { readSettings } from './settings.mjs';
 
 const PAGE = join(dirname(fileURLToPath(import.meta.url)), 'page');
 const VENDOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'vendor');
 const inlineScript = (code) => `<script>\n${code.replace(/<\/script/gi, '<\\/script')}\n</script>`;
 // Order matters: a module may only import the ones listed before it.
-const DEPS = { './i18n.mjs': '__i18n', './lanes.mjs': '__lanes', './icons.mjs': '__icons', './history.mjs': '__history', './markdown.mjs': '__markdown' };
+const DEPS = { './i18n.mjs': '__i18n', './lanes.mjs': '__lanes', './icons.mjs': '__icons', './history.mjs': '__history', './markdown.mjs': '__markdown', './section-order.mjs': '__sectionOrder', './section-settings.mjs': '__sectionSettings' };
 const IMPORT = /^import\s*\{([^}]+)\}\s*from\s*'([^']+)';\s*$/gm;
 const linkImports = (src) => src.replace(IMPORT, (_, list, from) => {
   if (!DEPS[from]) throw new Error(`export bundle: unknown module ${from}`);
@@ -38,7 +39,7 @@ export function buildExport(id) {
   const epic = readEpic(id);
   const history = readHistory(id, { limit: 200 });
   const css = readFileSync(join(PAGE, 'style.css'), 'utf8');
-  const data = { epic, history, docs: allTexts(id), exportedAt: new Date().toISOString() };
+  const data = { epic, history, docs: allTexts(id), settings: readSettings(), exportedAt: new Date().toISOString() };
   return readFileSync(join(PAGE, 'epic.html'), 'utf8')
     .replace(/<title>[^<]*<\/title>/, `<title>${escHtml(epic.id)} · ${escHtml(epic.title)}</title>`)
     .replace('<link rel="stylesheet" href="/static/style.css">', () => `<style>\n${css}\n</style>`)

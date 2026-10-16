@@ -3,6 +3,7 @@ import { icon, STATE_ICON, agentBadge, logo } from './icons.mjs';
 import { describeEvent } from './history.mjs';
 import { renderMarkdown } from './markdown.mjs';
 import { t, getLang, setLang, locale } from './i18n.mjs';
+import { bindSectionSettings } from './section-settings.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -22,6 +23,7 @@ const EXPORT = typeof window !== 'undefined' ? window.__EPIC_EXPORT__ || null : 
 
 function exportApi(path, method) {
   if (method !== 'GET') throw new Error(t('export.readOnly'));
+  if (path === '/api/settings') return EXPORT.settings || {};
   if (/\/history/.test(path)) return EXPORT.history.slice(0, Number(new URLSearchParams(path.split('?')[1]).get('limit')) || 20);
   if (/\/docs-text$/.test(path)) return EXPORT.docs || [];
   const doc = path.match(/\/docs\/([^/]+)$/);
@@ -1074,7 +1076,8 @@ async function bootEpic() {
   bindMapTools();
   bindSearch();
   bindDocs();
-  await renderEpic(id);
+  const sectionSettings = bindSectionSettings({ api, onError: alertBox, readOnly: Boolean(EXPORT) });
+  await Promise.all([renderEpic(id), sectionSettings.reload().catch((err) => alertBox(err.message))]);
   $('#refresh-all').addEventListener('click', () => refreshModal(current));
   document.addEventListener('click', (e) => {
     const el = e.target;
@@ -1139,6 +1142,7 @@ async function bootEpic() {
     }
   });
   if (!EXPORT) setInterval(async () => {
+    await sectionSettings.reload().catch(() => {});
     try {
       const { updatedAt } = await api(`/api/epics/${enc(id)}/rev`);
       if (current && updatedAt !== current.updatedAt && !$('#confirm-modal:not([hidden])')) await renderEpic(id);

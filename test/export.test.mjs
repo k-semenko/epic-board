@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { tmpHome } from './helpers.mjs';
 
 tmpHome();
@@ -40,4 +42,16 @@ test('export is a self-contained html page with the epic and its history', () =>
 
 test('unknown epic is 404', () => {
   assert.throws(() => buildExport('404'), { status: 404 });
+});
+
+test('export snapshots the shared section order for offline viewing', () => {
+  const file = join(process.env.EPIC_BOARD_HOME, 'settings.json');
+  writeFileSync(file, JSON.stringify({ epicSectionOrder: ['history', 'map', 'waiting', 'branches', 'sessions', 'decisions'] }));
+  try {
+    const html = buildExport('42');
+    const data = JSON.parse(html.match(/window\.__EPIC_EXPORT__ = (.*?);<\/script>/s)[1]);
+    assert.deepEqual(data.settings, { epicSectionOrder: ['history', 'map', 'waiting', 'branches', 'sessions', 'decisions'] });
+  } finally {
+    rmSync(file);
+  }
 });

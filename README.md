@@ -14,6 +14,7 @@ It ships as a [Claude Code](https://code.claude.com) plugin: the agent writes to
 - **Session plans.** Each agent session records what it is doing and what comes next; the board shows Claude, Codex, Grok and Gemini sessions side by side.
 - **Export.** One self-contained, read-only HTML file to hand to someone who has no board.
 - **English and Russian** interface.
+- **Block order.** Open the gear in an epic's header → “Block order”, drag the blocks and save. The order applies to every epic on the board and is included in HTML exports.
 - **Local and dependency-free.** Node ≥ 22, no npm dependencies, listens on `127.0.0.1` only, data stays in your home directory.
 
 ## Install

@@ -52,6 +52,46 @@ test('errors carry status and json', async () => {
   assert.equal((await call('/nope')).status, 404);
 });
 
+test('global settings can be saved without changing epic data or history', async () => {
+  const defaults = await call('/api/settings');
+  assert.equal(defaults.status, 200);
+  assert.deepEqual(await defaults.json(), { epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'] });
+  const before = await (await call('/api/epics/5')).json();
+  const history = await (await call('/api/epics/5/history')).json();
+  const settings = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
+  const saved = await call('/api/settings', { method: 'PUT', body: settings });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(await saved.json(), settings);
+  assert.deepEqual(await (await call('/api/settings')).json(), settings);
+  assert.deepEqual(await (await call('/api/epics/5')).json(), before);
+  assert.deepEqual(await (await call('/api/epics/5/history')).json(), history);
+});
+
+test('invalid settings requests return 400 and preserve the saved order', async () => {
+  const before = await (await call('/api/settings')).json();
+  const invalid = [
+    {},
+    { epicSectionOrder: 'map' },
+    { epicSectionOrder: ['map', 'waiting'] },
+    { epicSectionOrder: ['map', 'map', 'branches', 'sessions', 'decisions', 'history'] },
+    { epicSectionOrder: ['other', 'waiting', 'branches', 'sessions', 'decisions', 'history'] },
+    { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'], port: 1234 },
+  ];
+  for (const body of invalid) {
+    const response = await call('/api/settings', { method: 'PUT', body });
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.equal((await response.json()).error, 'bad-settings');
+    assert.deepEqual(await (await call('/api/settings')).json(), before);
+  }
+});
+
+test('settings writes use the same origin and JSON guards as epic writes', async () => {
+  const body = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
+  assert.equal((await call('/api/settings', { method: 'PUT', body, headers: { Origin: 'http://evil.example' } })).status, 403);
+  const response = await fetch(`${base}/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) });
+  assert.equal(response.status, 415);
+});
+
 test('host and origin checks', async () => {
   assert.equal(await raw('/api/epics', { headers: { Host: 'evil.example' } }), 403);
   assert.equal(await raw('/api/epics', { headers: { Host: `localhost:${port}` } }), 200);

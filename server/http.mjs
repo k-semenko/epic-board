@@ -9,6 +9,7 @@ import { allowedHosts, publicUrl } from './paths.mjs';
 import { VERSION } from './version.mjs';
 import * as docs from './docs.mjs';
 import { BoardError } from './errors.mjs';
+import { readSettings, writeSettings } from './settings.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' };
@@ -80,6 +81,10 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       if (m === 'GET' && parts[0] === 'vendor' && parts.length === 2 && ['marked.min.js', 'purify.min.js'].includes(parts[1])) return serveFile(res, join(ROOT, 'vendor', parts[1]));
       if (parts[0] !== 'api') throw new BoardError(404, 'not-found', 'no such path');
       if (parts[1] === 'health' && m === 'GET') return send(res, 200, { ok: true, version: VERSION });
+      if (parts[1] === 'settings' && parts.length === 2) {
+        if (m === 'GET') return send(res, 200, readSettings());
+        if (m === 'PUT') return send(res, 200, writeSettings(await readBody(req)));
+      }
 
       if (parts[1] === 'selfcheck' && m === 'GET') {
         const { selfcheck } = await import('./selfcheck.mjs');

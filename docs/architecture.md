@@ -32,6 +32,7 @@ server/http ──┘          │                <id>.history.ndjson
 - Serves the page, the vendored `marked` and `DOMPurify`, and a JSON API.
 - Endpoints: list, read, patch, history, rev, refresh, docs, export, waiting done/undo, selfcheck, health.
 - Every request must carry an allowed `Host`, as protection against DNS rebinding.
+- `GET/PUT /api/settings` reads and atomically replaces the shared epic block order in `<data>/settings.json`, separately from epic data and history.
 - A non-GET request must carry a matching `Origin` (when present) and `Content-Type: application/json`.
 
 ## Page — `server/page/`
@@ -39,6 +40,7 @@ server/http ──┘          │                <id>.history.ndjson
 - Plain ES modules with no bundler. `lanes.mjs` is the pure model of the map, shared with the tests; `app.js` renders.
 - `i18n.mjs` holds both dictionaries; the language follows the browser and can be switched on the page.
 - The export (`server/export.mjs`) inlines CSS, the vendored libraries, the data and a bundle of the modules into one HTML file. In that file the page runs read-only.
+- The header settings menu opens a block-order dialog. Changes stay in a draft until saved; section nodes move in the DOM so their content and controls stay intact. All epics use the same server setting, polled alongside epic revisions; exports carry a snapshot of it.
 
 ## Documents — `server/docs.mjs`
 

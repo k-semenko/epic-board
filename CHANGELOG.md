@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Shared epic page block order, configured from the header with drag and drop or keyboard controls and preserved in HTML exports.
+
 ## [0.5.1] - 2026-10-16
 
 ### Added
