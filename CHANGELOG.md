@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Move task dependencies and follow-up links into the step preview, and give step cards more room for their titles by removing subtitles.
+- Remove the redundant document count from the step preview.
 
 ## [0.5.1] - 2026-10-16
 

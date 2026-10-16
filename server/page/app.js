@@ -364,16 +364,12 @@ function stepInfo(lane, stepId, links) {
     const value = d.change === 'add' ? t('step.added') : `${cap(d.what)}: ${d.before ?? '—'} → ${d.after ?? '—'}`;
     return `<li><span class="muted">${agoTag(h.at)}</span><span>${esc(value)}</span></li>`;
   }).join('');
-  const docCount = (current?.docs || []).filter((d) => d.task === lane.id && d.step === stepId).length;
   return `<div class="step-info">
     <div class="step-info-head">${stateIcon(step.state)}<span class="chip">${esc(cap(stateText(step.state)))}</span><span class="mono muted">${esc(lane.id)}/${esc(step.id)}</span></div>
     <h4 class="step-info-title">${esc(step.title)}</h4>
     ${step.note ? `<p class="step-info-note">${esc(step.note)}</p>` : `<p class="muted">${esc(t('step.noDescription'))}</p>`}
     ${links}
-    <dl class="step-info-meta">
-      <dt>${esc(t('step.docs'))}</dt><dd>${docCount}</dd>
-      ${raw.label ? `<dt>${esc(t('step.label'))}</dt><dd>${esc(raw.label)}</dd>` : ''}
-    </dl>
+    ${raw.label ? `<dl class="step-info-meta"><dt>${esc(t('step.label'))}</dt><dd>${esc(raw.label)}</dd></dl>` : ''}
     ${changes ? `<h5>${esc(t('step.changes'))}</h5><ul class="step-changes">${changes}</ul>` : ''}
   </div>`;
 }
