@@ -193,8 +193,10 @@ button.ov-card:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .ov-line.now { color: var(--accent); font-weight: 600; }
 .ov-flags { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; margin-top: auto; }
 .detail { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
-.detail-head { display: flex; align-items: flex-start; gap: 10px; }
+.detail-head { display: flex; align-items: baseline; gap: 10px; }
 .detail-head h3 { margin: 0; flex: 1; display: flex; align-items: baseline; gap: 6px; }
+.detail-head .ext { display: block; }
+.detail-merge .detail-head h3 { align-items: center; }
 .detail-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .detail-links h4 { margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .detail-links p { margin: 0; font-size: 13px; }
@@ -210,8 +212,8 @@ svg.i.inl { color: var(--muted); margin: 0 .3em; }
 .side-row .chip { white-space: normal; }
 
 /* Icon rows: flex centring keeps a 16 px icon on the text's optical middle in every font size. */
-.chip, .ov-top, .ov-flags > span, .wait-meta, .session-head, .agent, .brand, .nav-link, .meta > span, .step-title, .tl-title, .here, .detail-head h3, .search { display: inline-flex; align-items: center; }
-.ov-top, .here, .session-head, .detail-head h3 { display: flex; }
+.chip, .ov-top, .ov-flags > span, .wait-meta, .session-head, .agent, .brand, .nav-link, .meta > span, .step-title, .tl-title, .here, .search { display: inline-flex; align-items: center; }
+.ov-top, .here, .session-head { display: flex; }
 .chip svg.i { margin-right: .3em; }
 .step-title, .tl-title { display: flex; align-items: flex-start; }
 .step-title > svg.i, .tl-title > svg.i { margin-top: .18em; }
