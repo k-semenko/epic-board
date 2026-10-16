@@ -232,7 +232,7 @@ function cardState(n) {
 }
 
 function renderSideStack(side, open) {
-  const { front, back } = sideStack(side, open, tlState.side);
+  const { front, back } = sideStack(side, tlState.side, open);
   if (!front) return '';
   tlState.side = front.id;
   const cards = [front, ...back].map((n, i) => {
@@ -253,6 +253,7 @@ function renderSideStack(side, open) {
 async function rotateSide(direction, target) {
   if (tlState.sideBusy) return;
   const side = buildOverview(current).side;
+  for (const n of side) n.docs = (current.docs || []).filter((d) => d.task === n.id).length;
   const next = target || cycleSide(side, tlState.side, direction);
   if (!next || next === tlState.side) return;
   const deck = $('.side-deck');
@@ -278,7 +279,11 @@ async function rotateSide(direction, target) {
       ]);
     }
     if (!deck.isConnected) return;
-    toggleDetail(next);
+    if (target) toggleDetail(next);
+    else {
+      tlState.side = next;
+      deck.closest('.overview-side').outerHTML = renderSideStack(side, tlState.open || defaultOpen(buildLanes(current)));
+    }
     if (focus === 'front') $('.side-current [data-open]')?.focus({ preventScroll: true });
     else if (focus) $(`[data-side-turn="${focus}"]`)?.focus({ preventScroll: true });
   } finally {
@@ -749,9 +754,10 @@ function renderMapArea(epic) {
 }
 
 function toggleDetail(id, focusStack = false) {
-  if (tlState.open !== id) tlState.step = null;
+  if ((tlState.open || defaultOpen(buildLanes(current))) !== id) tlState.step = null;
   tlState.open = id;
-  history.replaceState(null, '', `#t-${enc(id)}`);
+  if ((current.tasks || []).some((task) => task.id === id && task.role === 'side')) tlState.side = id;
+  history.replaceState(null, '', `#t-${enc(id)}${tlState.step ? `/${enc(tlState.step)}` : ''}`);
   renderMapArea(current);
   if (focusStack) $('.side-current [data-open]')?.focus({ preventScroll: true });
 }
@@ -908,7 +914,7 @@ function modalHost(id) {
 }
 
 function jumpToTask(taskId, stepId) {
-  if (taskId !== (tlState.open || defaultOpen(buildLanes(current)))) toggleDetail(taskId);
+  toggleDetail(taskId);
   if (stepId) selectStep(stepId);
   requestAnimationFrame(() => (stepId ? flash(`st-${taskId}-${stepId}`) : $('#map-frame')?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
 }
@@ -1049,7 +1055,7 @@ function bindSearch() {
         openDoc(it.doc).catch((err) => alertBox(err.message));
         return;
       }
-      if (it.open && it.open !== (tlState.open || defaultOpen(buildLanes(current)))) toggleDetail(it.open);
+      if (it.open) toggleDetail(it.open);
       requestAnimationFrame(() => (it.target ? flash(it.target) : $('#map-frame')?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
       return;
     }

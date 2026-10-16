@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Show off-chain tasks as separate cards at the end of the overview, without arrows, with access to their steps and documents.
 - Group off-chain tasks into an animated card carousel with wheel, keyboard and button navigation, keeping its height fixed and remembering the front card.
 - Keep map cards below the sticky header and make its background opaque while scrolling.
+- Browse off-chain cards without changing the opened task or step; select a task only when its card is activated.
 
 ## [0.5.1] - 2026-10-16
 
