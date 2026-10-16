@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sampleEpic } from './fixtures/sample-epic.mjs';
-import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep } from '../server/page/lanes.mjs';
+import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep, sideStack } from '../server/page/lanes.mjs';
 
 test('main tasks become lanes in order, side tasks separate', () => {
   const map = buildLanes(sampleEpic());
@@ -103,12 +103,15 @@ for (const taskId of ['goal', 'merge']) {
   });
 }
 
-test('overview: side cards follow the goal without moving the task chain', () => {
+test('overview: side cards are separate from the task chain and have no map coordinates', () => {
   const o = buildOverview(sampleEpic());
   assert.deepEqual(o.nodes.map((n) => [n.id, n.col, n.row]), [
-    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0], ['OPS-3', 4, 0],
+    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0],
   ]);
-  assert.equal(o.cols, 5);
+  assert.deepEqual(o.side.map((n) => [n.id, n.kind, n.side]), [['OPS-3', 'task', true]]);
+  assert.equal(o.side[0].col, undefined);
+  assert.equal(o.side[0].row, undefined);
+  assert.equal(o.cols, 4);
   assert.equal(o.rows, 1);
 });
 
@@ -128,9 +131,11 @@ test('overview: multiple side cards keep their order and have no dependency, mer
   assert.ok(o.edges.every((e) => !sideIds.has(e.from) && !sideIds.has(e.to)));
   assert.deepEqual(o.edges.map((e) => `${e.from}>${e.to}`).sort(), ['@merge>@goal', 'API-7>WEB-8', 'WEB-8>@merge']);
   assert.deepEqual(o.nodes.map((n) => [n.id, n.col, n.row]), [
-    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0], ['OPS-3', 4, 0], ['DOC-4', 5, 0],
+    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0],
   ]);
-  assert.equal(o.cols, 6);
+  assert.deepEqual(o.side.map((n) => n.id), ['OPS-3', 'DOC-4']);
+  assert.ok(o.side.every((n) => n.col === undefined && n.row === undefined));
+  assert.equal(o.cols, 4);
   assert.equal(o.rows, 1);
 });
 
@@ -155,16 +160,42 @@ test('overview: side task ids goal and merge stay distinct from service nodes', 
     { id: 'guide', text: 'Publish certificate guide', branch: 'docs:feat/certificate-guide' },
   );
   const o = buildOverview(epic);
-  assert.equal(new Set(o.nodes.map((n) => n.id)).size, o.nodes.length, 'every task and service node has a unique id');
+  assert.ok(Array.isArray(o.side), 'side cards have their own collection');
+  const cards = [...o.nodes, ...o.side];
+  assert.equal(new Set(cards.map((n) => n.id)).size, cards.length, 'every task and service node has a unique id');
   assert.equal(o.nodes.find((n) => n.kind === 'goal').id, '@goal');
   assert.equal(o.nodes.find((n) => n.kind === 'merge').id, '@merge');
-  assert.deepEqual(o.nodes.filter((n) => n.side).map((n) => [n.id, n.kind]), [['goal', 'task'], ['merge', 'task']]);
+  assert.deepEqual(o.side.map((n) => [n.id, n.kind, n.side]), [['goal', 'task', true], ['merge', 'task', true]]);
   assert.ok(o.edges.every((e) => !['goal', 'merge'].includes(e.from) && !['goal', 'merge'].includes(e.to)));
   assert.deepEqual(o.edges.map((e) => `${e.from}>${e.to}`).sort(), ['@merge>@goal', 'API-7>WEB-8', 'WEB-8>@merge']);
   assert.deepEqual(o.nodes.map((n) => [n.id, n.col, n.row]), [
-    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0], ['goal', 4, 0], ['merge', 5, 0],
+    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0],
   ]);
-  assert.equal(o.cols, 6);
+  assert.equal(o.cols, 4);
+});
+
+test('overview: no side tasks produce an empty side collection', () => {
+  const epic = sampleEpic();
+  epic.tasks = epic.tasks.filter((t) => t.role !== 'side');
+  const o = buildOverview(epic);
+  assert.deepEqual(o.side, []);
+  assert.equal(o.cols, 4);
+  assert.equal(o.rows, 1);
+});
+
+test('overview: side-only tasks leave one goal cell and no arrows in the map', () => {
+  const o = buildOverview({
+    goal: 'Staging is ready',
+    tasks: [
+      { id: 'OPS-3', title: 'Staging certificates', role: 'side', steps: [{ id: 'cert', title: 'Issue certificate', state: 'active' }] },
+      { id: 'DOC-4', title: 'Staging guide', role: 'side', steps: [{ id: 'guide', title: 'Write guide', state: 'todo', after: ['OPS-3/cert'] }] },
+    ],
+  });
+  assert.deepEqual(o.nodes.map((n) => [n.id, n.col, n.row]), [['@goal', 0, 0]]);
+  assert.deepEqual(o.side.map((n) => n.id), ['OPS-3', 'DOC-4']);
+  assert.deepEqual(o.edges, []);
+  assert.equal(o.cols, 1);
+  assert.equal(o.rows, 1);
 });
 
 test('overview: side cards carry task metadata and count only unresolved waiting items', () => {
@@ -184,7 +215,9 @@ test('overview: side cards carry task metadata and count only unresolved waiting
     { id: 'check-cert', task: 'OPS-3', title: 'Check certificate' },
     { id: 'issued-cert', task: 'OPS-3', title: 'Issue certificate', doneAt: '2026-10-16T10:00:00Z' },
   );
-  const card = buildOverview(epic).nodes.find((n) => n.id === 'OPS-3');
+  const o = buildOverview(epic);
+  assert.ok(Array.isArray(o.side), 'side cards have their own collection');
+  const card = o.side.find((n) => n.id === 'OPS-3');
   assert.ok(card, 'the side task has an overview card');
   assert.equal(card.kind, 'task');
   assert.equal(card.side, true);
@@ -263,4 +296,42 @@ test('default step of a task: active, else the first unfinished, else the last',
   assert.equal(defaultStep(lanes[0]), 'night');
   assert.equal(defaultStep({ steps: [{ id: 'a', state: 'done' }, { id: 'b', state: 'done' }] }), 'b');
   assert.equal(defaultStep({ steps: [] }), null);
+});
+
+const stackCards = Object.freeze([
+  Object.freeze({ id: 'OPS-3', title: 'Staging certificates' }),
+  Object.freeze({ id: 'DOC-4', title: 'Staging guide' }),
+  Object.freeze({ id: 'QA-5', title: 'Staging acceptance' }),
+]);
+
+test('side stack: the open side task wins and repeated selection is stable', () => {
+  const stack = sideStack(stackCards, 'DOC-4', 'QA-5');
+  assert.equal(stack.front, stackCards[1]);
+  assert.deepEqual(stack.back, [stackCards[0], stackCards[2]]);
+  assert.deepEqual(sideStack(stackCards, 'DOC-4', stack.front.id), stack);
+  assert.deepEqual(stackCards.map((c) => c.id), ['OPS-3', 'DOC-4', 'QA-5']);
+});
+
+test('side stack: opening a main task keeps the previously selected side task', () => {
+  const stack = sideStack(stackCards, 'WEB-8', 'QA-5');
+  assert.equal(stack.front, stackCards[2]);
+  assert.deepEqual(stack.back, [stackCards[0], stackCards[1]]);
+  assert.deepEqual(sideStack(stackCards, 'API-7', stack.front.id), stack);
+});
+
+test('side stack: stale ids fall back to a surviving previous task or the first card', () => {
+  assert.equal(sideStack(stackCards, 'removed-open', 'DOC-4').front, stackCards[1]);
+  const fallback = { front: stackCards[0], back: [stackCards[1], stackCards[2]] };
+  assert.deepEqual(sideStack(stackCards, 'removed-open', 'removed-previous'), fallback);
+  assert.deepEqual(sideStack(stackCards, null, 'removed-previous'), fallback);
+  assert.deepEqual(sideStack(stackCards, null, null), fallback);
+});
+
+test('side stack: zero cards have no front or back even with stale selections', () => {
+  assert.deepEqual(sideStack([], 'OPS-3', 'DOC-4'), { front: null, back: [] });
+});
+
+test('side stack: one card stays in front without duplicating it in back', () => {
+  assert.deepEqual(sideStack([stackCards[0]], 'WEB-8', 'removed-previous'), { front: stackCards[0], back: [] });
+  assert.deepEqual(sideStack([stackCards[0]], 'OPS-3', 'OPS-3'), { front: stackCards[0], back: [] });
 });

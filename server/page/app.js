@@ -1,4 +1,4 @@
-import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep, MERGE_ID, GOAL_ID } from './lanes.mjs';
+import { buildLanes, layoutMap, buildOverview, sideStack, defaultOpen, defaultStep, MERGE_ID, GOAL_ID } from './lanes.mjs';
 import { icon, STATE_ICON, agentBadge, logo } from './icons.mjs';
 import { describeEvent } from './history.mjs';
 import { renderMarkdown } from './markdown.mjs';
@@ -206,7 +206,6 @@ function cardBody(n) {
     ? `<div class="ov-line now">${icon('play')}<span>${esc(n.current.join('; '))}</span></div>`
     : `<div class="ov-line muted">${icon(allDone ? 'check' : 'circle')}<span>${esc(t(allDone ? 'card.allDone' : 'card.noActive'))}</span></div>`;
   const flags = [
-    n.side ? `<span class="muted">${esc(t('map.side'))}</span>` : '',
     n.waiting ? `<span class="warn">${icon('clock')}${esc(t('card.waiting', { n: n.waiting }))}</span>` : '',
     n.unpushed ? `<span class="warn">${icon('branch')}${esc(t('unpushed.short'))}</span>` : '',
     n.dirty ? `<span class="warn">${icon('alert')}${esc(t('dirty'))}</span>` : '',
@@ -215,7 +214,7 @@ function cardBody(n) {
   return `<div class="ov-top"><span class="mono">${esc(n.id)}</span>${n.status ? `<span class="chip">${esc(n.status)}</span>` : ''}</div>
     <div class="ov-title" title="${esc(n.fullTitle)}">${esc(n.title)}</div>
     <div class="ov-progress"><span class="bar"><i style="width:${pct}%"></i></span><span class="mono">${n.progress.done}/${n.progress.total}</span></div>
-    ${now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
+    ${n.side ? '' : now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
 }
 
 function cardState(n) {
@@ -223,6 +222,20 @@ function cardState(n) {
   if (n.current.length) return 'active';
   if (n.progress.total && n.progress.done === n.progress.total) return 'done';
   return 'todo';
+}
+
+function renderSideStack(side, open) {
+  const { front, back } = sideStack(side, open, tlState.side);
+  if (!front) return '';
+  tlState.side = front.id;
+  const peeks = back.map((n, i) => {
+    const done = n.progress.total && n.progress.done === n.progress.total;
+    return `<button type="button" class="side-peek${done ? ' done' : ''}" style="--stack-index:${i};--stack-inset:${Math.min(back.length - i, 3) * 5}px;z-index:${i + 1}" data-open="${esc(n.id)}" aria-expanded="false" aria-controls="detail" aria-label="${esc(t('task.more', { id: n.id }))}: ${esc(n.fullTitle)}" title="${esc(n.fullTitle)}"><span class="mono">${esc(n.id)}</span><span class="side-peek-title">${esc(n.title)}</span><span class="side-peek-progress${done ? ' ok' : ''}">${done ? icon('check') : ''}${n.progress.done}/${n.progress.total}</span></button>`;
+  }).join('');
+  const selected = open === front.id;
+  return `<section class="overview-side" aria-label="${esc(t('map.side'))}"><h3 class="ov-section-title">${icon('layers')}<span>${esc(t('map.side'))}</span><span class="mono">${side.length}</span></h3>
+    <div class="side-stack" style="--stack-count:${back.length}">${back.length ? `<div class="side-peeks">${peeks}</div>` : ''}<div class="side-front" style="z-index:${back.length + 1}"><button type="button" class="ov-card k-task ${cardState(front)}${selected ? ' selected' : ''}" data-open="${esc(front.id)}" aria-expanded="${selected}" aria-controls="detail">${cardBody(front)}<span class="side-action">${icon(selected ? 'check' : 'arrowRight')}${esc(t(selected ? 'map.stepsOpen' : 'map.openSteps'))}</span></button><button type="button" class="icon-btn info-btn ov-info" data-info="${esc(front.id)}" aria-label="${esc(t('task.more', { id: front.id }))}">${icon('info')}</button></div></div>
+  </section>`;
 }
 
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
@@ -245,11 +258,11 @@ function renderOverview(ov, open) {
   const cards = ov.nodes.map((n) => {
     const attrs = n.kind === 'goal' ? '' : ` role="button" tabindex="0" data-open="${esc(n.id)}" aria-expanded="${open === n.id}"`;
     const info = n.kind === 'task' ? `<button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>` : '';
-    return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${n.side ? ' off-chain' : ''}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
+    return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
-  return `<div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
+  return `<div class="overview${ov.side.length ? ' has-side' : ''}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}>${ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : ''}<div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
     <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
-    ${edges}${cards}</svg></div>`;
+    ${edges}${cards}</svg></div></section>${renderSideStack(ov.side, open)}</div>`;
 }
 
 // ---------- Detail: the steps of one task ----------
@@ -264,7 +277,7 @@ function narrowFlow(steps) {
 }
 
 const TL = { colW: 200, nodeW: 168, nodeH: 84, rowH: 100, pad: 24 };
-const tlState = { focused: null, open: null, step: null, allDocs: false };
+const tlState = { focused: null, open: null, step: null, allDocs: false, side: null };
 
 function nodeX(col) { return TL.pad + col * TL.colW; }
 function rowY(i) { return i * TL.rowH + (TL.rowH - TL.nodeH) / 2; }
@@ -322,12 +335,13 @@ function renderDetail(map, open) {
   if (lane && (!tlState.step || !lane.steps.some((st) => st.id === tlState.step))) tlState.step = defaultStep(lane);
   const raw = lane ? (current?.tasks || []).find((x) => x.id === lane.id) : null;
   const title = lane ? `<span class="mono muted">${esc(lane.id)}</span> ${esc(lane.fullTitle)}` : `${icon('merge')} ${esc(t('card.merge'))}`;
+  const heading = `<h3>${title}</h3>`;
   const { incoming, outgoing } = linksOf(map, open);
   const list = (items, empty) => (items.length ? `<ul class="links">${items.join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
   const links = `<div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>`;
   const steps = lane ? lane.steps : map.merge.map((m) => ({ id: `m${m.n}`, title: `${m.n}. ${m.text}`, state: m.waiting ? 'waiting' : 'todo', note: m.branch, deps: [] }));
   return `<section class="detail${lane ? '' : ' detail-merge'}" id="detail" aria-label="${esc(t('detail.aria'))}">
-    <header class="detail-head"><h3>${title}</h3>${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
+    <header class="detail-head">${raw?.role === 'side' ? `<div class="detail-heading"><span class="detail-context">${esc(t('map.side'))}</span>${heading}</div>` : heading}${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
     ${lane ? '' : links}
     ${renderTimeline(detailLayout(map, open))}
     ${lane ? stepSplit(lane, links) : ''}
@@ -646,9 +660,10 @@ function openFromHash() {
 function renderMapArea(epic) {
   const map = buildLanes(epic);
   const ov = buildOverview(epic);
-  for (const n of ov.nodes) n.docs = (epic.docs || []).filter((d) => d.task === n.id).length;
-  if (tlState.open === 'merge' && !ov.nodes.some((n) => n.kind === 'task' && n.id === 'merge')) tlState.open = MERGE_ID;
-  if (tlState.open && !ov.nodes.some((n) => n.id === tlState.open && n.kind !== 'goal')) tlState.open = null;
+  const allNodes = [...ov.nodes, ...ov.side];
+  for (const n of allNodes) n.docs = (epic.docs || []).filter((d) => d.task === n.id).length;
+  if (tlState.open === 'merge' && !allNodes.some((n) => n.kind === 'task' && n.id === 'merge')) tlState.open = MERGE_ID;
+  if (tlState.open && !allNodes.some((n) => n.id === tlState.open && n.kind !== 'goal')) tlState.open = null;
   const open = tlState.open || defaultOpen(map);
   const here = map.here.length ? map.here.map((h) => `${esc(h.task)} · ${esc(h.title)}`).join('; ') : esc(t('map.noActive'));
   const prev = $('#tl-scroll');
@@ -665,11 +680,12 @@ function renderMapArea(epic) {
   }
 }
 
-function toggleDetail(id) {
+function toggleDetail(id, focusStack = false) {
   if (tlState.open !== id) tlState.step = null;
   tlState.open = id;
   history.replaceState(null, '', `#t-${enc(id)}`);
   renderMapArea(current);
+  if (focusStack) $('.side-front [data-open]')?.focus({ preventScroll: true });
 }
 
 function selectStep(stepId) {
@@ -1093,7 +1109,7 @@ async function bootEpic() {
       return void renderMapArea(current);
     }
     const openCard = el.closest('[data-open]');
-    if (openCard) toggleDetail(openCard.dataset.open);
+    if (openCard) toggleDetail(openCard.dataset.open, Boolean(openCard.closest('.side-stack')));
     const done = el.closest('[data-done]');
     if (done) return confirmModal(current, done.dataset.done);
     const confirm = el.closest('[data-confirm]');
@@ -1126,7 +1142,7 @@ async function bootEpic() {
     const card = e.target.closest?.('[data-open]');
     if (card && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
-      toggleDetail(card.dataset.open);
+      toggleDetail(card.dataset.open, Boolean(card.closest('.side-stack')));
     }
   });
   if (!EXPORT) setInterval(async () => {

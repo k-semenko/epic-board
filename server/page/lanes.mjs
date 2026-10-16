@@ -135,7 +135,7 @@ export function buildOverview(epic) {
   }
 
   const facts = epic.facts || {};
-  const taskNode = (l, col) => {
+  const taskNode = (l) => {
     const branchFacts = l.branches.map((b) => facts[b]).filter(Boolean);
     return {
       id: l.id,
@@ -143,7 +143,6 @@ export function buildOverview(epic) {
       title: l.title,
       fullTitle: l.fullTitle,
       status: l.status,
-      col,
       progress: { done: l.steps.filter((s) => s.state === 'done').length, total: l.steps.length },
       current: l.steps.filter((s) => s.state === 'active').map((s) => s.title),
       waiting: (epic.waiting || []).filter((w) => w.task === l.id && !w.doneAt).length,
@@ -151,7 +150,8 @@ export function buildOverview(epic) {
       dirty: branchFacts.some((f) => f.dirty === true),
     };
   };
-  const nodes = lanes.map((l) => taskNode(l, col.get(l.id)));
+  const nodes = lanes.map((l) => ({ ...taskNode(l), col: col.get(l.id) }));
+  const side = map.side.map((l) => ({ ...taskNode(l), side: true }));
   const edges = [...links.values()].filter((e) => col.has(e.from));
 
   const mergeBranches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
@@ -174,14 +174,18 @@ export function buildOverview(epic) {
   const goalCol = Math.max(-1, ...nodes.map((n) => n.col)) + 1;
   nodes.push({ id: GOAL_ID, kind: 'goal', title: map.goal, col: goalCol });
   for (const id of goalFrom) edges.push({ from: id, to: GOAL_ID, labels: [] });
-  for (const [i, lane] of map.side.entries()) nodes.push({ ...taskNode(lane, goalCol + i + 1), side: true });
 
   const perCol = new Map();
   for (const n of nodes) {
     n.row = perCol.get(n.col) ?? 0;
     perCol.set(n.col, n.row + 1);
   }
-  return { nodes, edges, cols: goalCol + map.side.length + 1, rows: Math.max(...perCol.values()) };
+  return { nodes, side, edges, cols: goalCol + 1, rows: Math.max(...perCol.values()) };
+}
+
+export function sideStack(side, open, previous) {
+  const front = side.find((n) => n.id === open) ?? side.find((n) => n.id === previous) ?? side[0] ?? null;
+  return { front, back: side.filter((n) => n !== front) };
 }
 
 // The map always shows one task opened: where the work is now, otherwise the first one.
