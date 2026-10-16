@@ -194,11 +194,16 @@ test('page modules are served as javascript', async () => {
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-type'), /text\/javascript/);
   assert.equal((await call('/vendor/mermaid.min.js')).status, 404);
-  for (const lib of ['marked.min.js', 'purify.min.js', 'milkdown.min.js']) {
+  for (const lib of ['marked.min.js', 'purify.min.js', 'vditor.min.js', 'vditor-lute.min.js', 'vditor-icons.js', 'vditor-i18n.js', 'vditor-adapter.js']) {
     const v = await call(`/vendor/${lib}`);
     assert.equal(v.status, 200, lib);
     assert.match(v.headers.get('content-type'), /text\/javascript/);
   }
+  const css = await call('/vendor/vditor.css');
+  assert.equal(css.status, 200);
+  assert.match(css.headers.get('content-type'), /text\/css/);
+  assert.equal((await call('/vendor/milkdown.min.js')).status, 404);
+  assert.equal((await call('/vendor/vditor.LICENSE.txt')).status, 404);
   assert.equal((await call('/vendor/..%2Fpackage.json')).status, 404);
 });
 

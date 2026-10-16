@@ -1,49 +1,39 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { gzipSync } from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 
 const source = dirname(fileURLToPath(import.meta.url));
 const root = resolve(source, '../..');
 const temporary = mkdtempSync(join(tmpdir(), 'epic-board-editor-build-'));
+const output = join(root, 'vendor');
 try {
-  for (const name of ['package.json', 'package-lock.json', 'entry.mjs']) copyFileSync(join(source, name), join(temporary, name));
+  for (const name of ['package.json', 'package-lock.json']) copyFileSync(join(source, name), join(temporary, name));
   execFileSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: temporary, stdio: 'inherit' });
-  const { build } = await import(pathToFileURL(join(temporary, 'node_modules/esbuild/lib/main.js')));
-  const output = join(root, 'vendor/milkdown.min.js');
-  mkdirSync(dirname(output), { recursive: true });
-  const result = await build({
-    absWorkingDir: temporary, entryPoints: ['entry.mjs'], outfile: output,
-    bundle: true, format: 'iife', platform: 'browser', target: ['es2022'],
-    minify: true, legalComments: 'inline', metafile: true,
-    banner: { js: '/*! Milkdown 7.22.3 browser bundle. Licenses: milkdown.LICENSE.txt. Rebuild: node scripts/vendor/build.mjs */' },
-  });
-  if (Object.values(result.metafile.outputs).some((file) => file.imports.length)) throw new Error('The editor bundle has external imports');
-  const packages = new Map();
-  for (const input of Object.keys(result.metafile.inputs)) {
-    if (!input.startsWith('node_modules/')) continue;
-    let folder = dirname(join(temporary, input));
-    while (!existsSync(join(folder, 'package.json'))) folder = dirname(folder);
-    const manifest = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8'));
-    packages.set(`${manifest.name}@${manifest.version}`, { folder, manifest });
+  const vditor = join(temporary, 'node_modules/vditor');
+  const files = {
+    'dist/index.min.js': 'vditor.min.js', 'dist/index.css': 'vditor.css',
+    'dist/js/lute/lute.min.js': 'vditor-lute.min.js', 'dist/js/icons/ant.js': 'vditor-icons.js',
+    LICENSE: 'vditor.LICENSE.txt',
+  };
+  mkdirSync(output, { recursive: true });
+  for (const [from, to] of Object.entries(files)) {
+    if (from.endsWith('.css')) writeFileSync(join(output, to), `${readFileSync(join(vditor, from), 'utf8').trimEnd()}\n`);
+    else copyFileSync(join(vditor, from), join(output, to));
+    chmodSync(join(output, to), 0o644);
   }
-  const notices = [...packages].sort(([a], [b]) => a.localeCompare(b)).map(([name, { folder, manifest }]) => {
-    const files = readdirSync(folder).filter((file) => /^(licen[cs]e|copying|notice)(\..+)?$/i.test(file)).sort();
-    const supplemental = name === 'format@0.2.2' ? join(root, 'vendor/milkdown-format.LICENSE.txt') : null;
-    if (!files.length && !supplemental) throw new Error(`No bundled license text found for ${name}`);
-    const text = files.length
-      ? files.map((file) => `${file}\n${readFileSync(join(folder, file), 'utf8').trim()}\n`).join('\n')
-      : readFileSync(supplemental, 'utf8');
-    const license = manifest.license || manifest.licenses?.map((item) => item.type).join(' OR ') || 'See license text';
-    return `${name}\nLicense: ${license}\n${text}`;
-  });
-  writeFileSync(join(root, 'vendor/milkdown.LICENSE.txt'), `Licenses for packages included in milkdown.min.js\n\n${notices.join('\n--------------------\n\n')}`);
-  const bundle = readFileSync(output);
-  console.log(`milkdown.min.js: ${bundle.length} bytes, gzip ${gzipSync(bundle).length} bytes`);
-  console.log(`${packages.size} bundled package licenses written to vendor/milkdown.LICENSE.txt`);
+  const en = readFileSync(join(vditor, 'dist/js/i18n/en_US.js'), 'utf8');
+  const ru = readFileSync(join(vditor, 'dist/js/i18n/ru_RU.js'), 'utf8');
+  writeFileSync(join(output, 'vditor-i18n.js'), `(()=>{${en};const en=window.VditorI18n;${ru};globalThis.EpicVditorI18n={en,ru:window.VditorI18n};})();\n`);
+  const preserve = readFileSync(join(source, 'preserve.mjs'), 'utf8').replace(/^export /gm, '');
+  const entry = readFileSync(join(source, 'entry.mjs'), 'utf8').replace(/^import .* from '\.\/preserve\.mjs';\n/m, '');
+  writeFileSync(join(output, 'vditor-adapter.js'), `(()=>{\n${preserve}\n${entry}\n})();\n`);
+  copyFileSync(join(source, 'licenses/lute.LICENSE.txt'), join(output, 'vditor-lute.LICENSE.txt'));
+  copyFileSync(join(temporary, 'node_modules/diff-match-patch/LICENSE'), join(output, 'vditor-diff-match-patch.LICENSE.txt'));
+  for (const file of ['milkdown.min.js', 'milkdown.LICENSE.txt', 'milkdown-format.LICENSE.txt']) rmSync(join(output, file), { force: true });
+  console.log('Vditor 4.0.0 assets, local adapter, translations and licenses rebuilt');
 } finally {
   rmSync(temporary, { recursive: true, force: true });
 }

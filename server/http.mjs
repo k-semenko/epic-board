@@ -14,6 +14,10 @@ import { readSettings, writeSettings } from './settings.mjs';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' };
 const BY = new Set(['agent', 'button', 'cli', 'hook']);
+const VENDOR_FILES = new Set([
+  'marked.min.js', 'purify.min.js', 'vditor.min.js', 'vditor.css',
+  'vditor-lute.min.js', 'vditor-icons.js', 'vditor-i18n.js', 'vditor-adapter.js',
+]);
 
 function send(res, status, body, type = 'application/json; charset=utf-8') {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
@@ -79,7 +83,7 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       }
       if (m === 'GET' && parts[0] === 'static' && parts.length === 2 && /^[\w.-]+$/.test(parts[1])) return serveFile(res, join(ROOT, 'server/page', parts[1]));
       // Only the vendored libraries listed here are served; the folder itself is not browsable.
-      if (m === 'GET' && parts[0] === 'vendor' && parts.length === 2 && ['marked.min.js', 'purify.min.js', 'milkdown.min.js'].includes(parts[1])) return serveFile(res, join(ROOT, 'vendor', parts[1]));
+      if (m === 'GET' && parts[0] === 'vendor' && parts.length === 2 && VENDOR_FILES.has(parts[1])) return serveFile(res, join(ROOT, 'vendor', parts[1]));
       if (parts[0] !== 'api') throw new BoardError(404, 'not-found', 'no such path');
       if (parts[1] === 'health' && m === 'GET') return send(res, 200, { ok: true, version: VERSION });
       if (parts[1] === 'settings' && parts.length === 2) {

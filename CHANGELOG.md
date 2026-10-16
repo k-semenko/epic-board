@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Show editable Markdown markers in the active document block and render formatting when the cursor moves away.
 - Remove the focus outline around the visual document surface while keeping focus indicators on editor controls.
 - Give off-chain tasks the same step-panel header as tasks in the main chain.
 - Open documents in one visual Markdown editor with formatting tools, undo and preserved drafts on save conflicts; isolate editor styles from the board.
