@@ -43,6 +43,6 @@ epic.mjs wait SHOP-1 show psp --json
 
 Read the current version before every mutation; copy the current response's submissionId for resolve. Keep the same submissionId and payload when retrying a lost submit response. A new version after submit must be read before resolve/revise. `wait show` without `--json` also prints the full item.
 
-`revise` requires `--reason`, including reopening closed requests. Omitted request flags retain their values; supplied `--check` flags replace the entire checklist, and supplied `--option` flags replace all options. `--details -` and `--task -` clear those fields. Supply all options when changing a recommendation.
+`revise` requires `--reason`, including reopening closed requests. Omitted request flags retain their values; supplied `--check` flags replace the entire checklist, and supplied `--option` flags replace all options. `--details -` and `--task -` clear those fields. `--option` without `--input` keeps the current format. `--input single|multi` alone keeps existing options; `--input confirm` removes inherited options. `--recommend id` alone changes the recommendation among current options. New supplied options replace old labels, hints and recommendation metadata.
 
 Legacy `done` and `undo` fail with instructions to use resolve/revise. Human submission remains pending and does not grant permission for push, publication, merge or task completion. Review answers only after the user asks in chat; hooks and brief provide context without starting work automatically.

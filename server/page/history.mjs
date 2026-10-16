@@ -85,3 +85,12 @@ export function describeEvent(e) {
   if (path === 'mergeOrder') return out(t('h.merge'), t('h.order'));
   return out(path, field(path), path);
 }
+
+export function historyEntries(history) {
+  return history.map((event, index) => ({ event, target: `h-${index}` }))
+    .filter(({ event }) => !/^waiting\[[^\]]+\]\.version$/.test(event.path)).slice(0, 20)
+    .map((entry) => {
+      const description = describeEvent(entry.event);
+      return { ...entry, description, searchText: [description.where, description.what, description.before, description.after].filter(Boolean).join(' · ') };
+    });
+}

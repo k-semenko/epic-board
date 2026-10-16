@@ -1,6 +1,6 @@
 import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep } from './lanes.mjs';
 import { icon, STATE_ICON, agentBadge, logo } from './icons.mjs';
-import { describeEvent } from './history.mjs';
+import { describeEvent, historyEntries } from './history.mjs';
 import { renderMarkdown } from './markdown.mjs';
 import { t, getLang, setLang, locale } from './i18n.mjs';
 import { bindSectionSettings } from './section-settings.mjs';
@@ -891,13 +891,12 @@ async function renderEpic(id) {
   $('#sessions').innerHTML = [...(epic.sessions || [])].sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt))).map((x) => `<li class="session" data-sid="s-${esc(x.id)}">
       <div class="session-head">${agentBadge(x.agent)}<code class="muted">${esc(x.id.slice(0, 8))}</code>${x.task ? `<span class="chip">${esc(x.task)}</span>` : ''}<span class="muted session-time">${icon('clock')}<span class="phrase">${agoText(x.lastAt)}</span></span></div>
       <dl class="session-body"><dt>${esc(t('session.doing'))}</dt><dd>${esc(x.doing ?? '—')}</dd><dt>${esc(t('session.next'))}</dt><dd>${esc(x.next ?? '—')}</dd></dl></li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
-  $('#history').innerHTML = history.filter((h) => !/^waiting\[[^\]]+\]\.version$/.test(h.path)).slice(0, 20).map((h, n) => {
-    const d = describeEvent(h);
+  $('#history').innerHTML = historyEntries(history).map(({ event: h, target, description: d }) => {
     const value = d.change === 'add' ? `<span class="hv-new">${esc(d.after ?? '')}</span>`
       : d.change === 'remove' ? `<span class="hv-old">${esc(d.before ?? '')}</span>`
       : `<span class="hv-old">${esc(d.before ?? '—')}</span>${icon('arrowRight', 'inl')}<span class="hv-new">${esc(d.after ?? '—')}</span>`;
     const by = ['agent', 'cli', 'refresh', 'button', 'hook'].includes(h.by) ? t(`by.${h.by}`) : cap(h.by);
-    return `<li data-sid="h-${n}"><div class="h-line"><span class="h-time muted">${agoTag(h.at)}</span><span class="chip">${esc(by)}</span><span class="h-where">${esc(cap(d.where))}</span></div>
+    return `<li data-sid="${target}"><div class="h-line"><span class="h-time muted">${agoTag(h.at)}</span><span class="chip">${esc(by)}</span><span class="h-where">${esc(cap(d.where))}</span></div>
       <div class="h-change"><span class="h-what muted">${esc(cap(d.what))}:</span> ${value}</div>${h.why ? `<div class="h-why muted">${esc(cap(h.why))}</div>` : ''}</li>`;
   }).join('') || `<li class="muted">${esc(t('none.history'))}</li>`;
   buildSearchIndex(epic, history);
@@ -922,10 +921,7 @@ function buildSearchIndex(epic, history) {
   }
   for (const x of epic.sessions || []) add(t('search.session'), [x.agent, x.doing, x.next].filter(Boolean).join(' · '), `s-${x.id}`);
   for (const d of epic.decisions || []) add(t('search.decision'), d.text, `d-${d.id}`);
-  history.forEach((h, n) => {
-    const d = describeEvent(h);
-    add(t('search.history'), [d.where, d.what, d.before, d.after].filter(Boolean).join(' · '), `h-${n}`);
-  });
+  for (const { target, searchText } of historyEntries(history)) add(t('search.history'), searchText, target);
   for (const d of epic.docs || []) add(t('search.doc', { t: kindText(d.kind) }), d.title, null, { doc: d.id });
   searchIndex = items;
   api(`/api/epics/${enc(epic.id)}/docs-text`).then((texts) => {

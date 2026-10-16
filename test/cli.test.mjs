@@ -132,3 +132,33 @@ test('CLI choice requests preserve IDs and recommendation without selecting for 
   assert.equal(cli(['wait', 'shop', 'add', 'bad-choice', '--title', 'Bad', '--input', 'single', '--option', 'a=A', '--option', 'b=B', '--recommend', 'missing']).status, 1);
   assert.equal(show().waiting.some((x) => x.id === 'bad-choice'), false);
 });
+
+test('revising choice options keeps the existing input type and guards stale versions', () => {
+  for (const type of ['single', 'multi']) {
+    const id = `revise-${type}`;
+    ok(['wait', 'shop', 'add', id, '--title', 'Provider', '--input', type, '--option', 'a=A', '--option', 'b=B']);
+    let w = JSON.parse(ok(['wait', 'shop', 'show', id, '--json']).stdout);
+    const originalVersion = w.version;
+    ok(['wait', 'shop', 'revise', id, '--version', w.version, '--reason', 'Updated labels', '--option', 'a=New A', '--option', 'b=New B']);
+    w = JSON.parse(ok(['wait', 'shop', 'show', id, '--json']).stdout);
+    assert.deepEqual(w.input, { type, options: [{ id: 'a', text: 'New A' }, { id: 'b', text: 'New B' }] });
+    assert.equal(cli(['wait', 'shop', 'revise', id, '--version', originalVersion, '--reason', 'Stale change', '--option', 'a=Old A', '--option', 'b=Old B']).status, 1);
+    assert.deepEqual(JSON.parse(ok(['wait', 'shop', 'show', id, '--json']).stdout), w);
+  }
+});
+
+test('input-only revision retains choice options and recommendation-only revision targets current options', () => {
+  ok(['wait', 'shop', 'add', 'input-patch', '--title', 'Provider', '--input', 'single', '--option', 'a=A', '--option', 'b=B', '--recommend', 'a']);
+  let w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
+  ok(['wait', 'shop', 'revise', 'input-patch', '--version', w.version, '--reason', 'Allow several', '--input', 'multi']);
+  w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
+  assert.deepEqual(w.input, { type: 'multi', options: [{ id: 'a', text: 'A', recommended: true }, { id: 'b', text: 'B' }] });
+  ok(['wait', 'shop', 'revise', 'input-patch', '--version', w.version, '--reason', 'Recommend B', '--recommend', 'b']);
+  w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
+  assert.deepEqual(w.input, { type: 'multi', options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B', recommended: true }] });
+  assert.equal(cli(['wait', 'shop', 'revise', 'input-patch', '--version', w.version, '--reason', 'Unknown advice', '--recommend', 'missing']).status, 1);
+  assert.deepEqual(JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout), w);
+  ok(['wait', 'shop', 'revise', 'input-patch', '--version', w.version, '--reason', 'Confirm the text', '--input', 'confirm']);
+  w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
+  assert.deepEqual(w.input, { type: 'confirm' });
+});

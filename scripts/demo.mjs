@@ -50,13 +50,21 @@ if (!store.listEpics().some((e) => e.id === 'SHOP-1')) {
       { id: 'psp', kind: 'decision', title: 'Pick the payment provider for launch', task: 'WEB-31', since: ago(5),
         details: 'Both providers pass the security review. Compare **fees for our volume** and the **refund API** before the form is wired, the field set depends on it.',
         refs: ['step:WEB-31/wire', 'decision:d1', `doc:${doc.id}`, 'https://example.com/psp-comparison'],
+        input: { type: 'single', options: [{ id: 'a', text: 'Provider A', recommended: true }, { id: 'b', text: 'Provider B' }] },
         checklist: [{ id: 'c1', text: 'Fees compared for 10k orders a month' }, { id: 'c2', text: 'Refund API checked' }] },
       { id: 'migration', kind: 'action', title: 'Apply migration 012 on staging', task: 'API-12', since: ago(20),
         details: 'Run `db/012_drafts.sql` on staging after the API merge, then check that `orders.draft` exists.', refs: ['branch:api:feat/draft-orders'] },
-      { id: 'review', kind: 'review', title: 'Approve the draft orders MR', task: 'API-12', since: ago(26), refs: ['task:API-12'], doneAt: ago(1), resolution: 'Approved with two small fixes' },
+      { id: 'review', kind: 'review', title: 'Approve the draft orders MR', task: 'API-12', since: ago(26), refs: ['task:API-12'] },
+      { id: 'coverage', kind: 'review', title: 'Choose acceptance checks', task: 'WEB-31', since: ago(2), input: { type: 'multi', options: [{ id: 'api', text: 'API contract tests' }, { id: 'browser', text: 'Browser checkout' }, { id: 'refund', text: 'Refund flow' }] } },
     ],
   });
+  const review = store.readEpic('SHOP-1').waiting.find((item) => item.id === 'review');
+  const answered = store.submitWaiting('SHOP-1', review.id, { version: review.version, submissionId: 'demo-review', confirmed: true }, { by: 'button' }).waiting.find((item) => item.id === review.id);
+  store.resolveWaiting('SHOP-1', review.id, { version: answered.version, submissionId: 'demo-review', resolution: 'Approved with two small fixes' }, { by: 'agent' });
+  const coverage = store.readEpic('SHOP-1').waiting.find((item) => item.id === 'coverage');
+  store.submitWaiting('SHOP-1', coverage.id, { version: coverage.version, submissionId: 'demo-coverage', selected: ['api', 'browser'] }, { by: 'button' });
 }
 
-const p = port();
-createBoardServer({ port: p }).listen(p, '127.0.0.1', () => console.log(`demo board: http://localhost:${p}/e/SHOP-1 (data ${data})`));
+const p = process.env.EPIC_BOARD_PORT === '0' ? 0 : port();
+const server = createBoardServer({ port: p });
+server.listen(p, '127.0.0.1', () => console.log(`demo board: http://localhost:${server.address().port}/e/SHOP-1 (data ${data})`));

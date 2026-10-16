@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { describeEvent } from '../server/page/history.mjs';
+import * as historyPage from '../server/page/history.mjs';
 import { setLang, t, DICT } from '../server/page/i18n.mjs';
 
 setLang('en', { persist: false });
@@ -80,4 +81,23 @@ test('decision lifecycle events describe human answers, agent review and new rev
 test('history preserves choice labels when a choice response also contains confirmed true', () => {
   const event = describeEvent({ op: 'set', path: 'waiting[q].rounds', before: [], after: [{ request: { title: 'Storage', input: { type: 'single', options: [{ id: 'repo', text: 'Repository' }] } }, response: { selected: ['repo'], confirmed: true } }] });
   assert.equal(event.after, 'Storage · Repository');
+});
+
+
+test('history search shares visible lifecycle entries and their original anchors', () => {
+  const rounds = { op: 'set', path: 'waiting[q].rounds', before: [], after: [{ request: { title: 'Storage', input: { type: 'single', options: [{ id: 'repo', text: 'Repository' }] } }, response: { selected: ['repo'] } }] };
+  const version = { op: 'set', path: 'waiting[q].version', before: 'opaque-old', after: 'opaque-new' };
+  const stage = { op: 'set', path: 'waiting[q].status', before: 'open', after: 'answered' };
+  const entries = historyPage.historyEntries([rounds, version, stage]);
+  assert.deepEqual(entries.map(({ target, searchText }) => ({ target, searchText })), [
+    { target: 'h-0', searchText: 'needs decision · answer submitted · Storage · Repository' },
+    { target: 'h-2', searchText: 'needs decision · stage · Waiting for you · Waiting for agent' },
+  ]);
+  assert.equal(entries[0].description.after, 'Storage · Repository');
+  assert.equal(entries[1].description.after, 'Waiting for agent');
+  assert.equal(entries[1].event, stage);
+  const limited = historyPage.historyEntries([version, ...Array.from({ length: 21 }, () => stage)]);
+  assert.equal(limited.length, 20);
+  assert.equal(limited.at(-1).target, 'h-20');
+  assert.equal(limited.some((entry) => entry.searchText.includes('opaque-')), false);
 });

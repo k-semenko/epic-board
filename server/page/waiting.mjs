@@ -2,6 +2,15 @@ import { t, locale } from './i18n.mjs';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+function submissionToken() {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 const statusOf = (item) => item.status || (item.doneAt ? 'closed' : 'open');
 const date = (value) => value ? `<time datetime="${esc(value)}">${esc(new Date(value).toLocaleString(locale()))}</time>` : '';
 const requestText = (request) => [request.title, request.details, request.revisionReason, ...(request.input?.options || []).flatMap((o) => [o.text, o.hint]), ...(request.checklist || []).map((c) => c.text)].filter(Boolean).join(' · ');
@@ -98,9 +107,17 @@ export class DecisionDrafts {
       try { storage = globalThis.sessionStorage; } catch {}
     }
     this.storage = storage;
-    this.items = {};
-    try { this.items = JSON.parse(storage?.getItem(this.key) || '{}'); } catch {}
-    for (const draft of Object.values(this.items)) draft.busy = false;
+    this.items = Object.create(null);
+    try {
+      const saved = JSON.parse(storage?.getItem(this.key) || '{}');
+      if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+        for (const [id, draft] of Object.entries(saved)) {
+          if (draft && typeof draft === 'object' && typeof draft.version === 'string' && draft.request && Array.isArray(draft.selected) && Array.isArray(draft.checked) && typeof draft.comment === 'string' && Array.isArray(draft.previous)) {
+            this.items[id] = { ...draft, busy: false };
+          }
+        }
+      }
+    } catch {}
   }
 
   save() {
@@ -140,7 +157,7 @@ export class DecisionDrafts {
     if (type === 'single' && draft.selected.length !== 1) throw new Error(t('w.invalidSingle'));
     if (type === 'multi' && draft.selected.length < 1) throw new Error(t('w.invalidMulti'));
     if ((item.checklist || []).some((condition) => !draft.checked.includes(condition.id))) throw new Error(t('w.invalidChecklist'));
-    if (!draft.payload) draft.payload = { version: draft.version, submissionId: globalThis.crypto.randomUUID(), confirmed: type === 'confirm', selected: [...draft.selected], checked: [...draft.checked], comment: draft.comment };
+    if (!draft.payload) draft.payload = { version: draft.version, submissionId: submissionToken(), confirmed: type === 'confirm', selected: [...draft.selected], checked: [...draft.checked], comment: draft.comment };
     this.save();
     return clone(draft.payload);
   }

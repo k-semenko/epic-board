@@ -138,3 +138,57 @@ test('restricted session storage falls back to in-memory drafts', () => {
     else delete globalThis.sessionStorage;
   }
 });
+
+test('all formats prepare stable retry identities without secure-context randomUUID', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
+  const crypto = globalThis.crypto;
+  Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { getRandomValues: crypto.getRandomValues.bind(crypto) } });
+  try {
+    const tokens = [];
+    for (const type of ['confirm', 'single', 'multi']) {
+      const item = question({ id: type, input: type === 'confirm' ? { type } : { ...choice, type } });
+      const drafts = new waiting.DecisionDrafts('nonsecure', null);
+      drafts.update(item, { selected: type === 'confirm' ? [] : ['repo'], checked: [], comment: 'HTTP origin' });
+      const payload = drafts.prepare(item);
+      assert.match(payload.submissionId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      assert.deepEqual(drafts.prepare(item), payload);
+      tokens.push(payload.submissionId);
+    }
+    assert.equal(new Set(tokens).size, 3);
+  } finally {
+    Object.defineProperty(globalThis, 'crypto', descriptor);
+  }
+});
+
+test('special valid item IDs keep drafts isolated through editing, submission, reload and refresh', () => {
+  const stored = new Map();
+  const storage = { getItem: (key) => stored.get(key), setItem: (key, value) => stored.set(key, value) };
+  const drafts = new waiting.DecisionDrafts('special-ids', storage);
+  for (const id of ['constructor', 'toString', '__proto__']) {
+    const item = question({ id, input: choice });
+    const draft = drafts.get(item);
+    assert.equal(draft.request?.title, 'Choose storage');
+    assert.match(waiting.renderWaitingCard(item, { draft }), /Choose storage/);
+    drafts.update(item, { selected: ['repo'], checked: [], comment: `Draft ${id}` });
+    assert.deepEqual(drafts.prepare(item).selected, ['repo']);
+  }
+  const restored = new waiting.DecisionDrafts('special-ids', storage);
+  for (const id of ['constructor', 'toString', '__proto__']) {
+    const item = question({ id, input: choice });
+    assert.equal(restored.get(item).comment, `Draft ${id}`);
+    assert.equal(restored.prepare(item).submissionId, drafts.prepare(item).submissionId);
+    const revised = { ...item, version: 'v2', revision: 2 };
+    const draft = restored.refresh(revised);
+    assert.equal(draft.version, 'v2');
+    assert.equal(draft.comment, '');
+    assert.equal(draft.previous[0].comment, `Draft ${id}`);
+    assert.match(waiting.renderWaitingCard(revised, { draft }), new RegExp(`Draft ${id}`));
+  }
+});
+
+test('malformed stored draft dictionaries fall back to empty in-memory drafts', () => {
+  for (const value of ['null', '[]', '42', '"broken"', '{"q":null}']) {
+    const drafts = new waiting.DecisionDrafts('malformed', { getItem: () => value });
+    assert.equal(drafts.get(question()).request.title, 'Choose storage');
+  }
+});
