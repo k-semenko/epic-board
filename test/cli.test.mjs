@@ -1,0 +1,97 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+const data = mkdtempSync(join(tmpdir(), 'eb-cli-'));
+const cli = (args, env = { EPIC_BOARD_HOME: data }) => spawnSync(process.execPath, ['cli/epic.mjs', ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
+const ok = (args) => {
+  const r = cli(args);
+  assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr}`);
+  return r;
+};
+const show = () => JSON.parse(cli(['show', 'shop', '--json']).stdout);
+
+test('build an epic through the cli', () => {
+  ok(['new', 'shop', '--title', 'Checkout', '--goal', 'One-page checkout', '--url', 'https://tracker.example.com/EPIC-1']);
+  ok(['repo', 'shop', 'web', '--path', '/w/web', '--base', 'main', '--provider', 'github', '--project', 'github.com/acme/web']);
+  ok(['task', 'shop', 'WEB-90', '--title', 'Pay button', '--role', 'main', '--status', 'In progress', '--url', 'https://tracker.example.com/WEB-90', '--tracker', 'Jira']);
+  ok(['step', 'shop', 'WEB-90/s1', '--title', 'A', '--state', 'done', '--note', 'tests ok']);
+  ok(['step', 'shop', 'WEB-90/s2', '--title', 'B', '--state', 'active', '--after', 'WEB-90/s1', '--label', 'x']);
+  ok(['branch', 'shop', 'WEB-90', 'web', 'feat/x', '--mr', '12']);
+  ok(['wait', 'shop', 'add', 'psp', '--kind', 'decision', '--title', 'Pick a provider', '--details', 'Fees **and** refunds', '--task', 'WEB-90', '--ref', 'step:WEB-90/s2', '--ref', 'https://example.com/x', '--check', 'Fees compared', '--check', 'Legal ok']);
+  ok(['decide', 'shop', '--task', 'WEB-90', '--text', 'Use cards first']);
+  ok(['open-item', 'shop', 'WEB-90', 'add', 'Rebase']);
+  ok(['merge', 'shop', '--set', JSON.stringify([{ id: 'm1', text: 'web', branch: 'web:feat/x' }])]);
+  ok(['bind', 'shop', '--session', 'sid-1', '--task', 'WEB-90']);
+  ok(['note', 'shop', '--session', 'sid-1', '--doing', 'Writing', '--next', 'Tests']);
+  const epic = show();
+  assert.equal(epic.url, 'https://tracker.example.com/EPIC-1');
+  assert.deepEqual(epic.repos.web, { path: '/w/web', base: 'main', provider: 'github', project: 'github.com/acme/web' });
+  const task = epic.tasks[0];
+  assert.deepEqual([task.status, task.tracker, task.url], ['In progress', 'Jira', 'https://tracker.example.com/WEB-90']);
+  assert.ok(task.statusCheckedAt);
+  assert.equal(task.steps[1].after[0], 'WEB-90/s1');
+  assert.equal(task.branches[0].mr.iid, 12);
+  const w = epic.waiting[0];
+  assert.deepEqual([w.title, w.details, w.refs, w.checklist], ['Pick a provider', 'Fees **and** refunds', ['step:WEB-90/s2', 'https://example.com/x'], [{ id: 'c1', text: 'Fees compared' }, { id: 'c2', text: 'Legal ok' }]]);
+  assert.equal(epic.decisions[0].by, undefined, 'no author is invented');
+  const brief = cli(['show', 'shop', '--session', 'sid-1']).stdout;
+  assert.match(brief, /doing: Writing/);
+  assert.match(brief, /Needs a decision: 1/);
+  assert.ok(brief.trim().split('\n').length <= 25);
+  assert.match(ok(['report', 'shop', '--task', 'WEB-90']).stdout, /\*\*Report: Pay button\*\*/);
+  assert.match(ok(['url', 'shop']).stdout, /\/e\/shop/);
+  const docPath = ok(['doc', 'new', 'shop', 'WEB-90/s1', '--kind', 'plan', '--title', 'Stage plan']).stdout.trim();
+  assert.match(docPath, /plan-.*\.md$/);
+  writeFileSync(docPath, '# Stage plan\ntext\n');
+  assert.match(ok(['doc', 'list', 'shop']).stdout, /WEB-90\/s1 · plan · Stage plan/);
+  ok(['docs-mode', 'shop', 'board']);
+  assert.equal(show().docsMode, 'board');
+  assert.equal(cli(['docs-mode', 'shop', 'weird']).status, 1);
+  ok(['doc', 'remove', 'shop', show().docs[0].id]);
+  const out = join(data, 'export.html');
+  ok(['export', 'shop', '--out', out]);
+  assert.match(readFileSync(out, 'utf8'), /__EPIC_EXPORT__/);
+  ok(['open-item', 'shop', 'WEB-90', 'done', task.open[0].id]);
+  const partial = cli(['wait', 'shop', 'done', 'psp', '--checked', 'c1']);
+  assert.equal(partial.status, 1);
+  assert.match(partial.stderr, /Legal ok/);
+  ok(['wait', 'shop', 'done', 'psp', '--checked', 'c1,c2', '--resolution', 'Cards via provider X']);
+  let after = show();
+  assert.ok(after.waiting[0].doneAt, 'done keeps the item and stamps it');
+  assert.equal(after.waiting[0].resolution, 'Cards via provider X');
+  ok(['wait', 'shop', 'undo', 'psp']);
+  assert.equal(show().waiting[0].doneAt, undefined);
+  ok(['wait', 'shop', 'remove', 'psp']);
+  assert.equal(show().waiting.length, 0);
+  ok(['bind', 'shop', '--session', 'sid-2', '--agent', 'codex']);
+  assert.equal(show().sessions.find((s) => s.id === 'sid-2').agent, 'codex');
+  assert.equal(cli(['bind', 'shop', '--session', 'sid-3', '--agent', 'Bad Agent!']).status, 1);
+});
+
+test('errors go to stderr with code 1', () => {
+  const r = cli(['step', 'shop', 'WEB-90/s3', '--title', 'C', '--after', 'WEB-90/nope']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /missing step/);
+  assert.equal(cli(['note', 'shop', '--session', 'unbound', '--doing', 'x']).status, 1);
+  assert.equal(cli(['frobnicate']).status, 1);
+  assert.match(cli(['help']).stdout, /wait <epic> add/);
+});
+
+test('a copy of the plugin (like the cache) finds data through the config', () => {
+  const home = mkdtempSync(join(tmpdir(), 'eb-home-'));
+  mkdirSync(join(home, '.config', 'epic-board'), { recursive: true });
+  writeFileSync(join(home, '.config', 'epic-board', 'config.json'), JSON.stringify({ dataDir: data }));
+  const copy = mkdtempSync(join(tmpdir(), 'eb-copy-'));
+  for (const dir of ['cli', 'server']) cpSync(dir, join(copy, dir), { recursive: true });
+  cpSync('package.json', join(copy, 'package.json'));
+  const env = { ...process.env, HOME: home };
+  delete env.EPIC_BOARD_HOME;
+  delete env.XDG_CONFIG_HOME;
+  const r = spawnSync(process.execPath, [join(copy, 'cli/epic.mjs'), 'show', 'shop', '--json'], { encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).id, 'shop');
+});

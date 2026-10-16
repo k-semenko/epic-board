@@ -1,0 +1,26 @@
+{
+  "name": "epic-board",
+  "version": "0.5.0",
+  "description": "Local board for multi-repository work: tasks from any tracker, steps, branches, merge requests, decisions. Ships as a Claude Code plugin.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/k-semenko/epic-board.git"
+  },
+  "homepage": "https://github.com/k-semenko/epic-board#readme",
+  "bugs": {
+    "url": "https://github.com/k-semenko/epic-board/issues"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "start": "node server/index.mjs",
+    "check": "node scripts/release/check-versions.mjs && node scripts/release/privacy-scan.mjs",
+    "pack": "node scripts/release/pack.mjs",
+    "demo": "node scripts/demo.mjs"
+  }
+}

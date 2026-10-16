@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+      - run: npm run check
+
+  validate-plugin:
+    name: validate plugin manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Bump deliberately: Dependabot does not track global npm installs.
+      CLAUDE_CODE_VERSION: 2.1.300
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Install Claude Code CLI (job fails if install fails)
+        run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+      - name: claude plugin validate --strict (manifest lint, must pass)
+        continue-on-error: false
+        run: |
+          claude --version
+          claude plugin validate --strict .
+
+  selfhosted-smoke:
+    name: self-hosted smoke
+    # Self-hosted runner never sees pull_request code: only pushes to main in the upstream repo.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'k-semenko/epic-board'
+    needs: [test]
+    runs-on: [self-hosted, linux, epic-board]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node --version
+      - run: npm test

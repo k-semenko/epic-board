@@ -1,0 +1,5 @@
+* @k-semenko
+
+# Workflows run on the self-hosted runner; changes to them need the maintainer.
+/.github/ @k-semenko
+/scripts/runner/ @k-semenko

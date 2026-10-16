@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>epic-board</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-in">
+  <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>epic-board</a>
+  <div class="top-search"><label class="search"><span data-icon="search"></span><input id="q" type="search" data-i18n-ph="epic.search" autocomplete="off"></label><div id="search-results" class="search-results" hidden></div></div>
+  <button type="button" id="lang" class="lang-btn">RU</button>
+</div></nav>
+<main class="wrap" id="epic">
+  <header class="head">
+    <div><h1 id="title" data-i18n="loading">Loading…</h1><p id="goal" class="muted"></p></div>
+    <div class="actions">
+      <span id="updated" class="mono muted"></span>
+      <button id="refresh-all" type="button" class="live-only"><span data-icon="refresh"></span><span data-i18n="epic.refreshAll">Refresh all</span></button>
+      <a id="export-link" class="button live-only" href="#" download data-i18n-title="epic.exportTip"><span data-icon="download"></span><span data-i18n="epic.export">Export</span></a>
+    </div>
+  </header>
+  <p id="export-note" class="export-note" hidden></p>
+  <section class="waiting-section"><h2><span data-i18n="sec.waiting">Needs decision</span> <span id="waiting-count" class="count"></span></h2><ul id="waiting" class="list"></ul></section>
+  <section class="map-section"><div class="section-head"><h2 data-i18n="sec.map">Map</h2>
+    <div class="map-tools">
+      <button type="button" data-fullscreen><span data-icon="expand"></span><span data-i18n="map.full">Full screen</span></button>
+    </div></div>
+    <div class="map-frame" id="map-frame"><div id="map" class="map"></div></div></section>
+  <section><h2 data-i18n="sec.branches">Branches and merge requests</h2><div class="scroll"><table id="branches"></table></div></section>
+  <section><h2 data-i18n="sec.sessions">Sessions</h2><ul id="sessions" class="list"></ul></section>
+  <section><h2 data-i18n="sec.decisions">Decisions</h2><ul id="decisions" class="list"></ul></section>
+  <section><h2 data-i18n="sec.history">History</h2><ul id="history" class="list history"></ul></section>
+</main>
+<div id="popover" class="popover" role="dialog" hidden></div>
+<script src="/vendor/marked.min.js"></script>
+<script src="/vendor/purify.min.js"></script>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,173 @@
+// UI strings in both languages; a key missing in one language falls back to English.
+const en = {
+  'nav.all': 'All epics',
+  'lang.switch': 'Русский',
+  'loading': 'Loading…',
+  'ago': '{t} ago',
+  'unit.min': '{n} min', 'unit.h': '{n} h', 'unit.d': '{n} d',
+  'day.none': 'No date', 'day.today': 'Today', 'day.yesterday': 'Yesterday',
+  'index.title': 'Epics',
+  'index.search': 'Search epics: id, title, goal',
+  'index.none': 'Nothing found',
+  'index.empty': 'No epics yet. Create one: <code>epic.mjs new &lt;id&gt; --title …</code>',
+  'index.waiting': 'Needs decision: {n}', 'index.nothing': 'Nothing pending',
+  'index.tasks': 'Tasks: {n}', 'index.branches': 'Branches: {n}', 'index.updated': 'Updated {t}',
+  'stat.epics': 'Epics', 'stat.tasks': 'Tasks', 'stat.branches': 'Branches', 'stat.waiting': 'Needs decision',
+  'epic.search': 'Search this epic: steps, branches, decisions, history',
+  'epic.refreshAll': 'Refresh all', 'epic.export': 'Export',
+  'epic.exportTip': 'One HTML file with all data, styles and script: send it to anyone, it opens without the service',
+  'epic.factsUpdated': 'Facts updated {a} · edited {b}', 'epic.edited': 'Edited {a}',
+  'sec.waiting': 'Needs decision', 'sec.map': 'Map', 'sec.branches': 'Branches and merge requests', 'sec.sessions': 'Sessions', 'sec.decisions': 'Decisions', 'sec.history': 'History',
+  'map.full': 'Full screen', 'map.collapse': 'Collapse', 'map.here': 'We are here', 'map.noActive': 'No active steps', 'map.side': 'Off the chain',
+  'close': 'Close', 'cancel': 'Cancel', 'nodata': 'No data',
+  'task.statusChecked': 'Status checked {t}', 'task.statusUnchecked': 'Status not checked', 'task.open': 'Open in tracker',
+  'task.steps': 'Steps', 'task.open.items': 'Loose ends', 'task.branches': 'Branches', 'task.more': 'Details on task {id}',
+  'unpushed': 'Unpushed {n}', 'unpushed.short': 'Unpushed', 'dirty': 'Dirty',
+  'state.done': 'done', 'state.active': 'we are here', 'state.waiting': 'waiting', 'state.blocked': 'blocked', 'state.todo': 'ahead',
+  'card.goal': 'Goal', 'card.merge': 'Merge', 'card.mergeSteps': 'Steps in order: {n}', 'card.allDone': 'All steps done', 'card.noActive': 'No active step', 'card.waiting': 'Waiting {n}',
+  'step.after': 'After {task} · {title}', 'step.none': 'No steps', 'step.noDescription': 'No description', 'step.dependsOn': 'Depends on', 'step.prev': 'The previous step of the task',
+  'step.docs': 'Documents', 'step.label': 'Link label', 'step.changes': 'Step changes', 'step.added': 'step added', 'step.docCount': 'Documents: {n}',
+  'detail.aria': 'Task steps', 'detail.dependsOn': 'Depends on', 'detail.leadsTo': 'Leads to', 'detail.noIn': 'Nothing outside the task', 'detail.noOut': 'Nowhere outside the task', 'detail.toMerge': 'Into merge',
+  'kind.spec': 'Spec', 'kind.plan': 'Plan', 'kind.log': 'Log', 'kind.review': 'Review', 'kind.note': 'Note',
+  'docs.wholeTask': 'Whole task', 'docs.onlyStep': 'This step only', 'docs.allTask': 'All task documents · {n}', 'docs.add': 'Add',
+  'docs.taskTitle': 'Task documents', 'docs.stepTitle': 'Step documents', 'docs.taskNone': 'The task has no documents yet', 'docs.stepNone': 'This step has no documents',
+  'doc.toc': 'Contents', 'doc.wholeEpic': 'Whole epic', 'doc.save': 'Save', 'doc.edit': 'Edit', 'doc.versions': 'Versions', 'doc.owned': 'Stored on the board', 'doc.linked': 'Linked',
+  'doc.unsavedClose': 'You have unsaved changes. Close without saving?', 'doc.unsavedCancel': 'Discard unsaved changes?', 'doc.reload': 'Reload',
+  'doc.noVersions': 'No earlier versions: they appear when you save from the board', 'doc.versionOf': 'Version of {t}', 'doc.restore': 'Put this version into the editor',
+  'doc.new': 'New document · {task}', 'doc.kind': 'Kind', 'doc.step': 'Step', 'doc.title': 'Title', 'doc.titlePh': 'Stage 3 plan', 'doc.where': 'Where to keep it',
+  'doc.onBoard': 'On the board', 'doc.link': 'Link a file from a repository', 'doc.path': 'Path to .md', 'doc.create': 'Create',
+  'doc.mode.linked': 'This epic links documents from repositories.', 'doc.mode.board': 'This epic keeps documents on the board.', 'doc.mode.none': 'This epic has no document place chosen yet.',
+  'br.repo': 'Repo', 'br.branch': 'Branch', 'br.head': 'Head', 'br.base': 'Base / push', 'br.mr': 'MR / PR', 'br.fact': 'Fact', 'br.none': 'No branches', 'br.refresh': 'Refresh',
+  'br.behind': 'behind the base', 'br.ahead': 'ahead of the base', 'br.wrongHead': 'Different head',
+  'none.decisions': 'No decisions', 'none.sessions': 'No sessions', 'none.history': 'Empty', 'none.waiting': 'Nothing needs a decision',
+  'session.doing': 'Doing', 'session.next': 'Next',
+  'by.agent': 'Agent', 'by.cli': 'Agent', 'by.refresh': 'Refresh', 'by.button': 'Button', 'by.hook': 'Hook',
+  'search.waiting': 'Needs decision', 'search.task': 'Task', 'search.step': 'Step {id}', 'search.open': 'Loose end {id}', 'search.branch': 'Branch', 'search.session': 'Session',
+  'search.decision': 'Decision', 'search.history': 'History', 'search.doc': 'Document · {t}', 'search.none': 'Nothing found',
+  'refresh.title': 'Refresh epic facts', 'refresh.preview': 'Preview', 'refresh.aria': 'Refreshing facts',
+  'refresh.text': 'Each repository runs <code>git fetch</code> once, then every branch gets its head, distance from the base, unpushed commits and worktree state recounted. Branches with a merge request also ask the forge CLI (<code>glab</code> or <code>gh</code>) for state, draft flag and pipeline. Task statuses in your tracker are not touched. A failed branch keeps its previous facts.',
+  'refresh.repos': 'Repositories · {n}', 'refresh.branches': 'Branches · {n}', 'refresh.git': 'git: head, base, push', 'refresh.mr': 'git: head, base, push · {cli}: #{n}',
+  'refresh.start': 'Refresh', 'refresh.running': 'Running…', 'refresh.queued': 'Queued', 'refresh.ok': 'Done', 'refresh.error': 'Error', 'refresh.going': 'In progress…',
+  'refresh.errorText': 'Error: {e}', 'refresh.doneWithErrors': 'Done: {ok} refreshed, {failed} failed', 'refresh.done': 'Done: {ok} refreshed',
+  'export.note': 'Epic export of {t}: a read-only snapshot, refresh buttons are off.', 'export.readOnly': 'This is an epic export: read only',
+  'w.kind.decision': 'decision', 'w.kind.approval': 'approval', 'w.kind.review': 'review', 'w.kind.action': 'action', 'w.kind.other': 'other',
+  'w.since': 'waiting {t}', 'w.doneAt': 'Done {t}', 'w.done': 'Done…', 'w.undo': 'Reopen', 'w.checklist': 'Checklist · {n}', 'w.links': 'Linked',
+  'w.confirmTitle': 'Confirm it is done', 'w.confirmHint': 'Tick every item to confirm.', 'w.resolution': 'What was decided or done (optional)',
+  'w.confirm': 'Mark done', 'w.ref.decision': 'Decision', 'w.missing': 'not on the board',
+  'h.epic': 'epic', 'h.created': 'created', 'h.step': 'step', 'h.branch': 'branch', 'h.open': 'loose end', 'h.added': '{k} added', 'h.removed': '{k} removed',
+  'h.taskAdded': 'task added', 'h.taskRemoved': 'task removed', 'h.waiting': 'needs decision', 'h.itemAdded': 'item added', 'h.itemRemoved': 'item removed',
+  'h.decisions': 'decisions', 'h.decisionAdded': 'decision added', 'h.session': 'session {id}', 'h.bound': 'bound', 'h.repo': 'repo {name}', 'h.described': 'described',
+  'h.merge': 'merge', 'h.order': 'order',
+  'f.state': 'state', 'f.title': 'title', 'f.note': 'note', 'f.status': 'status', 'f.statusCheckedAt': 'status checked', 'f.after': 'depends on', 'f.label': 'link label',
+  'f.role': 'role', 'f.doing': 'doing', 'f.next': 'next', 'f.lastAt': 'mark', 'f.head': 'head', 'f.behind': 'behind the base', 'f.ahead': 'ahead of the base',
+  'f.unpushed': 'unpushed', 'f.remoteBehind': 'behind origin', 'f.dirty': 'dirty tree', 'f.error': 'error', 'f.doneAt': 'done', 'f.agent': 'agent', 'f.task': 'task',
+  'f.startedAt': 'started', 'f.text': 'text', 'f.worktree': 'worktree', 'f.goal': 'goal', 'f.url': 'link', 'f.details': 'details', 'f.resolution': 'resolution',
+  'f.checklist': 'checklist', 'f.checked': 'confirmed', 'f.refs': 'links', 'f.kind': 'kind', 'f.tracker': 'tracker',
+  'f.mr.state': 'MR', 'f.mr.draft': 'MR draft', 'f.mr.pipeline': 'MR pipeline',
+  'agent.none': 'agent not set',
+};
+
+const ru = {
+  'nav.all': 'Все эпики',
+  'lang.switch': 'English',
+  'loading': 'Загружаю…',
+  'ago': '{t} назад',
+  'unit.min': '{n} мин', 'unit.h': '{n} ч', 'unit.d': '{n} д',
+  'day.none': 'Без даты', 'day.today': 'Сегодня', 'day.yesterday': 'Вчера',
+  'index.title': 'Эпики',
+  'index.search': 'Поиск эпиков: id, название, цель',
+  'index.none': 'Ничего не нашлось',
+  'index.empty': 'Эпиков пока нет. Создать: <code>epic.mjs new &lt;id&gt; --title …</code>',
+  'index.waiting': 'Ждёт решения: {n}', 'index.nothing': 'Ничего не ждёт',
+  'index.tasks': 'Задач: {n}', 'index.branches': 'Веток: {n}', 'index.updated': 'Обновлено {t}',
+  'stat.epics': 'Эпиков', 'stat.tasks': 'Задач', 'stat.branches': 'Веток', 'stat.waiting': 'Ждёт решения',
+  'epic.search': 'Поиск по эпику: шаги, ветки, решения, история',
+  'epic.refreshAll': 'Обновить всё', 'epic.export': 'Экспорт',
+  'epic.exportTip': 'Один HTML-файл со всеми данными, стилями и скриптом: можно отправить человеку, откроется без сервиса',
+  'epic.factsUpdated': 'Факты обновлены {a} · правка {b}', 'epic.edited': 'Правка {a}',
+  'sec.waiting': 'Ждёт решения', 'sec.map': 'Карта', 'sec.branches': 'Ветки и MR', 'sec.sessions': 'Сессии', 'sec.decisions': 'Решения', 'sec.history': 'История',
+  'map.full': 'Во весь экран', 'map.collapse': 'Свернуть', 'map.here': 'Мы здесь', 'map.noActive': 'Активных шагов нет', 'map.side': 'Вне цепочки',
+  'close': 'Закрыть', 'cancel': 'Отмена', 'nodata': 'Нет данных',
+  'task.statusChecked': 'Статус сверен {t}', 'task.statusUnchecked': 'Статус не сверен', 'task.open': 'Открыть в трекере',
+  'task.steps': 'Шаги', 'task.open.items': 'Хвосты', 'task.branches': 'Ветки', 'task.more': 'Подробно о задаче {id}',
+  'unpushed': 'Не запушено {n}', 'unpushed.short': 'Не запушено', 'dirty': 'Грязное',
+  'state.done': 'готово', 'state.active': 'мы здесь', 'state.waiting': 'ждёт', 'state.blocked': 'заблокировано', 'state.todo': 'впереди',
+  'card.goal': 'Цель', 'card.merge': 'Слияние', 'card.mergeSteps': 'Шагов по порядку: {n}', 'card.allDone': 'Все шаги готовы', 'card.noActive': 'Активного шага нет', 'card.waiting': 'Ждёт {n}',
+  'step.after': 'После {task} · {title}', 'step.none': 'Шагов нет', 'step.noDescription': 'Описания нет', 'step.dependsOn': 'Зависит от', 'step.prev': 'Предыдущий шаг задачи',
+  'step.docs': 'Документы', 'step.label': 'Подпись связи', 'step.changes': 'Изменения шага', 'step.added': 'шаг добавлен', 'step.docCount': 'Документов: {n}',
+  'detail.aria': 'Шаги задачи', 'detail.dependsOn': 'Зависит от', 'detail.leadsTo': 'Дальше ведёт в', 'detail.noIn': 'Ни от чего вне задачи', 'detail.noOut': 'Никуда вне задачи', 'detail.toMerge': 'В слияние',
+  'kind.spec': 'Спека', 'kind.plan': 'План', 'kind.log': 'Журнал', 'kind.review': 'Ревью', 'kind.note': 'Заметка',
+  'docs.wholeTask': 'Вся задача', 'docs.onlyStep': 'Только этот шаг', 'docs.allTask': 'Все документы по задаче · {n}', 'docs.add': 'Добавить',
+  'docs.taskTitle': 'Документы задачи', 'docs.stepTitle': 'Документы шага', 'docs.taskNone': 'У задачи документов пока нет', 'docs.stepNone': 'У этого шага документов нет',
+  'doc.toc': 'Содержание', 'doc.wholeEpic': 'Весь эпик', 'doc.save': 'Сохранить', 'doc.edit': 'Редактировать', 'doc.versions': 'Версии', 'doc.owned': 'Хранится на доске', 'doc.linked': 'Привязан',
+  'doc.unsavedClose': 'Есть несохранённые правки. Закрыть без сохранения?', 'doc.unsavedCancel': 'Отменить несохранённые правки?', 'doc.reload': 'Перезагрузить',
+  'doc.noVersions': 'Прежних версий нет: они появляются при сохранении из доски', 'doc.versionOf': 'Версия от {t}', 'doc.restore': 'Вернуть эту версию в редактор',
+  'doc.new': 'Новый документ · {task}', 'doc.kind': 'Вид', 'doc.step': 'Шаг', 'doc.title': 'Название', 'doc.titlePh': 'План этапа 3', 'doc.where': 'Где хранить',
+  'doc.onBoard': 'На доске', 'doc.link': 'Привязать файл из репозитория', 'doc.path': 'Путь к .md', 'doc.create': 'Создать',
+  'doc.mode.linked': 'Эпик привязывает документы из репозиториев.', 'doc.mode.board': 'Эпик хранит документы на доске.', 'doc.mode.none': 'Место документов для эпика не выбрано.',
+  'br.repo': 'Репо', 'br.branch': 'Ветка', 'br.head': 'Голова', 'br.base': 'База / пуш', 'br.mr': 'MR / PR', 'br.fact': 'Факт', 'br.none': 'Веток нет', 'br.refresh': 'Обновить',
+  'br.behind': 'отстаёт от базы', 'br.ahead': 'впереди базы', 'br.wrongHead': 'Не та голова',
+  'none.decisions': 'Решений нет', 'none.sessions': 'Сессий нет', 'none.history': 'Пусто', 'none.waiting': 'Ничего не ждёт решения',
+  'session.doing': 'Делаю', 'session.next': 'Дальше',
+  'by.agent': 'Агент', 'by.cli': 'Агент', 'by.refresh': 'Обновление', 'by.button': 'Кнопка', 'by.hook': 'Хук',
+  'search.waiting': 'Ждёт решения', 'search.task': 'Задача', 'search.step': 'Шаг {id}', 'search.open': 'Хвост {id}', 'search.branch': 'Ветка', 'search.session': 'Сессия',
+  'search.decision': 'Решение', 'search.history': 'История', 'search.doc': 'Документ · {t}', 'search.none': 'Ничего не нашлось',
+  'refresh.title': 'Обновить факты эпика', 'refresh.preview': 'Предпросмотр', 'refresh.aria': 'Обновление фактов',
+  'refresh.text': 'Для каждого репозитория один раз выполнится <code>git fetch</code>, затем по каждой ветке пересчитаются голова, отставание и опережение от базы, незапушенные коммиты и чистота ворктри. Для веток с MR или PR — запрос через CLI площадки (<code>glab</code> или <code>gh</code>): состояние, черновик, пайплайн. Статусы задач в трекере не трогаются. Ошибка одной ветки не стирает её прежние факты.',
+  'refresh.repos': 'Репозитории · {n}', 'refresh.branches': 'Ветки · {n}', 'refresh.git': 'git: голова, база, пуш', 'refresh.mr': 'git: голова, база, пуш · {cli}: #{n}',
+  'refresh.start': 'Обновить', 'refresh.running': 'Выполняется…', 'refresh.queued': 'В очереди', 'refresh.ok': 'Готово', 'refresh.error': 'Ошибка', 'refresh.going': 'Идёт…',
+  'refresh.errorText': 'Ошибка: {e}', 'refresh.doneWithErrors': 'Готово: обновлено {ok}, с ошибкой {failed}', 'refresh.done': 'Готово: обновлено {ok}',
+  'export.note': 'Экспорт эпика от {t}: снимок только для чтения, кнопки обновления отключены.', 'export.readOnly': 'Это экспорт эпика: только чтение',
+  'w.kind.decision': 'решение', 'w.kind.approval': 'одобрение', 'w.kind.review': 'ревью', 'w.kind.action': 'действие', 'w.kind.other': 'другое',
+  'w.since': 'ждёт {t}', 'w.doneAt': 'Выполнено {t}', 'w.done': 'Выполнено…', 'w.undo': 'Вернуть', 'w.checklist': 'Чеклист · {n}', 'w.links': 'Связано',
+  'w.confirmTitle': 'Подтвердить выполнение', 'w.confirmHint': 'Отметь все пункты, чтобы подтвердить.', 'w.resolution': 'Что решено или сделано (необязательно)',
+  'w.confirm': 'Выполнено', 'w.ref.decision': 'Решение', 'w.missing': 'нет на доске',
+  'h.epic': 'эпик', 'h.created': 'создан', 'h.step': 'шаг', 'h.branch': 'ветка', 'h.open': 'хвост', 'h.added': 'добавлено: {k}', 'h.removed': 'удалено: {k}',
+  'h.taskAdded': 'задача добавлена', 'h.taskRemoved': 'задача удалена', 'h.waiting': 'ждёт решения', 'h.itemAdded': 'пункт добавлен', 'h.itemRemoved': 'пункт удалён',
+  'h.decisions': 'решения', 'h.decisionAdded': 'решение добавлено', 'h.session': 'сессия {id}', 'h.bound': 'привязана', 'h.repo': 'репо {name}', 'h.described': 'описан',
+  'h.merge': 'слияние', 'h.order': 'порядок',
+  'f.state': 'состояние', 'f.title': 'название', 'f.note': 'заметка', 'f.status': 'статус', 'f.statusCheckedAt': 'статус сверен', 'f.after': 'зависит от', 'f.label': 'подпись связи',
+  'f.role': 'роль', 'f.doing': 'делаю', 'f.next': 'дальше', 'f.lastAt': 'отметка', 'f.head': 'голова', 'f.behind': 'отстаёт от базы', 'f.ahead': 'впереди базы',
+  'f.unpushed': 'не запушено', 'f.remoteBehind': 'отстаёт от origin', 'f.dirty': 'грязное дерево', 'f.error': 'ошибка', 'f.doneAt': 'выполнено', 'f.agent': 'агент', 'f.task': 'задача',
+  'f.startedAt': 'начата', 'f.text': 'текст', 'f.worktree': 'ворктри', 'f.goal': 'цель', 'f.url': 'ссылка', 'f.details': 'описание', 'f.resolution': 'итог',
+  'f.checklist': 'чеклист', 'f.checked': 'подтверждено', 'f.refs': 'связи', 'f.kind': 'вид', 'f.tracker': 'трекер',
+  'f.mr.state': 'MR', 'f.mr.draft': 'черновик MR', 'f.mr.pipeline': 'пайплайн MR',
+  'agent.none': 'агент не указан',
+};
+
+export const DICT = { en, ru };
+const KEY = 'epic-board.lang';
+
+function detect() {
+  try {
+    const saved = globalThis.localStorage?.getItem(KEY);
+    if (saved && DICT[saved]) return saved;
+  } catch {}
+  const nav = globalThis.navigator?.language || 'en';
+  return nav.toLowerCase().startsWith('ru') ? 'ru' : 'en';
+}
+
+let lang = detect();
+
+export function getLang() {
+  return lang;
+}
+
+export function setLang(next, { persist = true } = {}) {
+  lang = DICT[next] ? next : 'en';
+  if (persist) {
+    try {
+      globalThis.localStorage?.setItem(KEY, lang);
+    } catch {}
+  }
+  return lang;
+}
+
+export function t(key, vars = {}) {
+  const text = DICT[lang][key] ?? en[key] ?? key;
+  return text.replace(/\{(\w+)\}/g, (m, k) => (vars[k] !== undefined ? String(vars[k]) : m));
+}
+
+export function locale() {
+  return lang === 'ru' ? 'ru-RU' : 'en-GB';
+}

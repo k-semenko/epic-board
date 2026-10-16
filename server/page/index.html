@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>epic-board</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-in">
+  <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>epic-board</a>
+  <div class="top-search"><label class="search"><span data-icon="search"></span><input id="q" type="search" data-i18n-ph="index.search" autocomplete="off"></label><div id="search-results" class="search-results" hidden></div></div>
+  <button type="button" id="lang" class="lang-btn">RU</button>
+</div></nav>
+<main class="wrap">
+  <header class="head"><h1 data-i18n="index.title">Epics</h1></header>
+  <div id="stats" class="stats"></div>
+  <div id="epics"><p class="muted" data-i18n="loading">Loading…</p></div>
+</main>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
