@@ -33,17 +33,33 @@ function documentApp({ mapFull = false } = {}) {
     appendChild() { mounted = true; },
   };
   const topbar = { getBoundingClientRect: () => ({ bottom: headerBottom, height: headerBottom }) };
+  const saveButton = { disabled: false };
   const document = {
     body, documentElement: { scrollTop: 420 }, addEventListener() {},
-    createElement: () => panel,
+    createElement(tag) {
+      if (tag === 'aside') return panel;
+      assert.equal(tag, 'iframe');
+      const frame = Object.assign(new EventTarget(), {
+        contentDocument: { querySelector: () => ({}) },
+        contentWindow: { EpicMarkdown: { mountMarkdownEditor: ({ text }) => ({ getMarkdown: () => text, destroy() {} }) } },
+        remove() { editorHost.children.splice(editorHost.children.indexOf(frame), 1); },
+      });
+      return frame;
+    },
     querySelector(selector) {
       if (selector === '#doc-panel') return mounted ? panel : null;
       if (selector === '#map-frame') return frame;
       if (selector === '.topbar') return topbar;
       if (selector === '#df-path-row') return { hidden: true };
       if (selector === '#doc-form') return { addEventListener() {} };
+      if (selector === '#doc-editor') return editorHost;
+      if (selector === '[data-doc-save]') return panel.innerHTML.includes('data-doc-save') ? saveButton : null;
       return null;
     },
+  };
+  const editorHost = {
+    ownerDocument: document, children: [],
+    appendChild(frame) { this.children.push(frame); queueMicrotask(() => frame.dispatchEvent(new Event('load'))); },
   };
   const window = { scrollX: 17, scrollY: 420, confirm: () => true, addEventListener() {}, scrollTo: (...args) => mutations.push(['scrollTo', ...args]) };
   const bundle = bundleScript();
@@ -71,6 +87,7 @@ function documentApp({ mapFull = false } = {}) {
   const doc = { id: 'plan', title: 'Checkout plan', kind: 'plan', task: 'WEB-8', step: 's3', owned: true, path: '/board/docs/plan.md' };
   return {
     app: context.app, panel, doc, mutations,
+    editorHost, ready: () => new Promise((resolve) => setImmediate(resolve)),
     isMapFull: () => frameClasses.has('map-full'),
     snapshot: () => ({ classes: [...classes], styles: { ...body.style }, scrollX: window.scrollX, scrollY: window.scrollY, scrollTop: document.documentElement.scrollTop }),
     resizeHeader(bottom) { headerBottom = bottom; for (const callback of resizeCallbacks) callback([{ target: topbar }]); },
@@ -78,18 +95,31 @@ function documentApp({ mapFull = false } = {}) {
 }
 
 for (const mode of ['view', 'edit']) {
-  test(`document ${mode} keeps the page body and scroll unchanged`, () => {
+  test(`document ${mode} keeps the page body and scroll unchanged`, async () => {
     const harness = documentApp();
     const before = harness.snapshot();
     harness.app.docState.mode = mode;
     harness.app.renderDocPanel(harness.doc);
+    await harness.ready();
     assert.equal(harness.panel.hidden, false);
     assert.ok(Number.parseFloat(harness.panel.style.top) >= 72);
-    assert.match(harness.panel.innerHTML, mode === 'edit' ? /id="doc-text"/ : /class="doc-body"/);
+    assert.match(harness.panel.innerHTML, mode === 'edit' ? /id="doc-editor"/ : /class="doc-body"/);
     assert.deepEqual(harness.mutations, []);
     assert.deepEqual(harness.snapshot(), before);
   });
 }
+
+test('document editing uses one formatted editing surface', async () => {
+  const harness = documentApp();
+  harness.app.docState.mode = 'edit';
+  harness.app.renderDocPanel(harness.doc);
+  await harness.ready();
+  assert.match(harness.panel.innerHTML, /id="doc-editor"/);
+  assert.doesNotMatch(harness.panel.innerHTML, /id="doc-text"|id="doc-preview"/);
+  assert.equal(harness.editorHost.children.length, 1);
+  assert.equal(harness.editorHost.children[0].src, '/editor');
+  assert.equal(harness.app.docState.ready, true);
+});
 
 test('new document form keeps the page body and scroll unchanged', () => {
   const harness = documentApp();

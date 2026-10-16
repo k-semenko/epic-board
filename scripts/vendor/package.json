@@ -1,0 +1,12 @@
+{
+  "name": "epic-board-editor-vendor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build-only dependencies for the checked-in browser editor bundle",
+  "dependencies": {
+    "@milkdown/kit": "7.22.3",
+    "esbuild": "0.25.12",
+    "remark-frontmatter": "5.0.0"
+  }
+}

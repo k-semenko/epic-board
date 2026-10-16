@@ -72,13 +72,14 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       const m = req.method;
 
       if (m === 'GET' && parts.length === 0) return serveFile(res, join(ROOT, 'server/page/index.html'));
+      if (m === 'GET' && parts.length === 1 && parts[0] === 'editor') return serveFile(res, join(ROOT, 'server/page/doc-editor.html'));
       if (m === 'GET' && parts[0] === 'e' && parts.length === 2) {
         store.checkId(parts[1]);
         return serveFile(res, join(ROOT, 'server/page/epic.html'));
       }
       if (m === 'GET' && parts[0] === 'static' && parts.length === 2 && /^[\w.-]+$/.test(parts[1])) return serveFile(res, join(ROOT, 'server/page', parts[1]));
       // Only the vendored libraries listed here are served; the folder itself is not browsable.
-      if (m === 'GET' && parts[0] === 'vendor' && parts.length === 2 && ['marked.min.js', 'purify.min.js'].includes(parts[1])) return serveFile(res, join(ROOT, 'vendor', parts[1]));
+      if (m === 'GET' && parts[0] === 'vendor' && parts.length === 2 && ['marked.min.js', 'purify.min.js', 'milkdown.min.js'].includes(parts[1])) return serveFile(res, join(ROOT, 'vendor', parts[1]));
       if (parts[0] !== 'api') throw new BoardError(404, 'not-found', 'no such path');
       if (parts[1] === 'health' && m === 'GET') return send(res, 200, { ok: true, version: VERSION });
       if (parts[1] === 'settings' && parts.length === 2) {

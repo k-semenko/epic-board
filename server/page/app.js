@@ -6,6 +6,7 @@ import { t, getLang, setLang, locale } from './i18n.mjs';
 import { bindSectionSettings } from './section-settings.mjs';
 import { DecisionDrafts, renderWaitingCard, waitingCounts, waitingSearchText } from './waiting.mjs';
 import { paginate, renderPagination } from './pagination.mjs';
+import { createDocEditor } from './doc-editor.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -501,7 +502,37 @@ function renderMd(text) {
   return renderMarkdown(text);
 }
 
-const docState = { id: null, text: '', mtimeMs: 0, mode: 'view', dirty: false };
+const docState = { id: null, text: '', draft: null, mtimeMs: 0, mode: 'view', dirty: false, ready: false, saving: false };
+let docEditor = null;
+let docRequest = 0;
+
+function disposeDocEditor() {
+  const editor = docEditor;
+  docEditor = null;
+  docState.ready = false;
+  docState.saving = false;
+  editor?.destroy();
+}
+
+function updateDocButtons() {
+  const save = $('[data-doc-save]');
+  if (save) save.disabled = !docState.ready || docState.saving || !docState.dirty;
+  for (const selector of ['[data-doc-cancel]', '[data-doc-restore]']) {
+    const control = $(selector);
+    if (control) control.disabled = docState.saving;
+  }
+}
+
+function setDocExtra(html) {
+  const extra = $('#doc-extra');
+  extra.innerHTML = html;
+  extra.hidden = !html;
+  updateDocButtons();
+}
+
+function docError(error) {
+  setDocExtra(`<p class="doc-error" role="alert">${icon('alert')}${esc(error.message)} <button type="button" data-doc-reload>${icon('refresh')}${esc(t('doc.reload'))}</button></p>`);
+}
 
 function positionDocPanel(panel) {
   const bottom = $('.topbar')?.getBoundingClientRect().bottom || 0;
@@ -530,6 +561,7 @@ function showDocPanel(panel) {
 }
 
 function renderDocPanel(doc, extra = '') {
+  disposeDocEditor();
   const panel = docPanel();
   const { html, toc } = renderMd(docState.text);
   const tocHtml = toc.length ? `<nav class="doc-toc"><h5>${esc(t('doc.toc'))}</h5>${toc.map((x) => `<a href="#${esc(x.id)}" class="lvl${x.level}" data-toc="${esc(x.id)}">${esc(x.text)}</a>`).join('')}</nav>` : '';
@@ -539,59 +571,110 @@ function renderDocPanel(doc, extra = '') {
       <div class="doc-actions">
         ${docState.mode === 'edit'
           ? `<button type="button" data-doc-save>${icon('save')}${esc(t('doc.save'))}</button><button type="button" data-doc-cancel>${esc(t('cancel'))}</button>`
-          : `<button type="button" class="live-only" data-doc-edit>${icon('edit')}${esc(t('doc.edit'))}</button><button type="button" class="live-only" data-doc-versions>${icon('versions')}${esc(t('doc.versions'))}</button>`}
+          : `<button type="button" class="live-only" data-doc-edit>${icon('edit')}${esc(t('doc.edit'))}</button>`}
+        <button type="button" class="live-only" data-doc-versions>${icon('versions')}${esc(t('doc.versions'))}</button>
         <button type="button" class="icon-btn" data-doc-close aria-label="${esc(t('close'))}">${icon('close')}</button>
       </div>
       <p class="doc-meta muted">${esc(where)} · ${esc(t(doc.owned ? 'doc.owned' : 'doc.linked'))} · <span class="mono">${esc(doc.path || '')}</span></p>
-    </header>${extra}`;
+    </header><div class="doc-extra" id="doc-extra"${extra ? '' : ' hidden'}>${extra}</div>`;
   const body = docState.mode === 'edit'
-    ? `<div class="doc-edit"><textarea id="doc-text" spellcheck="false">${esc(docState.text)}</textarea><div class="doc-preview md" id="doc-preview">${html}</div></div>`
+    ? `<div class="doc-edit" id="doc-editor"></div>`
     : `<div class="doc-body">${tocHtml}<article class="md">${html}</article></div>`;
   panel.innerHTML = head + body;
   showDocPanel(panel);
+  if (docState.mode === 'edit') {
+    let editor;
+    editor = createDocEditor({
+      container: $('#doc-editor'), text: docState.draft ?? docState.text, lang: getLang(), title: t('doc.editor'),
+      onChange(text) {
+        if (docEditor !== editor) return;
+        docState.draft = text;
+        docState.dirty = text !== docState.text;
+        updateDocButtons();
+      },
+      onSave: () => saveDoc(),
+      onError(error) { if (docEditor === editor) docError(error); },
+    });
+    docEditor = editor;
+    editor.ready.then(() => {
+      if (docEditor !== editor) return;
+      docState.ready = true;
+      updateDocButtons();
+    }).catch(() => {});
+    updateDocButtons();
+  }
 }
 
-async function openDoc(id, mode = 'view') {
+async function openDoc(id, mode = EXPORT ? 'view' : 'edit') {
+  const request = ++docRequest;
   const r = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}`);
-  Object.assign(docState, { id, text: r.text, mtimeMs: r.mtimeMs, mode, dirty: false, doc: r.doc });
+  if (request !== docRequest) return;
+  if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedClose'))) return;
+  Object.assign(docState, { id, text: r.text, draft: r.text, mtimeMs: r.mtimeMs, mode, dirty: false, saving: false, doc: r.doc });
   renderDocPanel(r.doc);
 }
 
 function closeDoc() {
+  docRequest++;
   if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedClose'))) return;
+  disposeDocEditor();
   docPanel().hidden = true;
   docState.id = null;
 }
 
 async function saveDoc() {
-  const text = $('#doc-text').value;
+  const editor = docEditor;
+  const id = docState.id;
+  if (!editor || docState.saving) return;
+  docState.saving = true;
+  updateDocButtons();
   try {
-    const r = await api(`/api/epics/${enc(current.id)}/docs/${enc(docState.id)}`, { method: 'PUT', body: { text, mtimeMs: docState.mtimeMs } });
-    Object.assign(docState, { text, mtimeMs: r.mtimeMs, mode: 'view', dirty: false });
-    renderDocPanel(docState.doc);
+    const text = await editor.getMarkdown();
+    if (docEditor !== editor || docState.id !== id || text === docState.text) return;
+    const r = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}`, { method: 'PUT', body: { text, mtimeMs: docState.mtimeMs } });
+    if (docEditor !== editor || docState.id !== id) return;
+    Object.assign(docState, { text, mtimeMs: r.mtimeMs });
+    const draft = await editor.getMarkdown();
+    if (docEditor !== editor || docState.id !== id) return;
+    Object.assign(docState, { draft, dirty: draft !== text });
+    setDocExtra('');
   } catch (e) {
-    renderDocPanel(docState.doc, `<p class="doc-error">${icon('alert')}${esc(e.message)} <button type="button" data-doc-reload>${icon('refresh')}${esc(t('doc.reload'))}</button></p>`);
-    $('#doc-text').value = text;
+    if (docEditor === editor && docState.id === id) docError(e);
+  } finally {
+    if (docEditor === editor && docState.id === id) {
+      docState.saving = false;
+      updateDocButtons();
+    }
   }
 }
 
 async function showVersions() {
-  const list = await api(`/api/epics/${enc(current.id)}/docs/${enc(docState.id)}/versions`);
+  const id = docState.id;
+  const list = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}/versions`);
+  if (docState.id !== id) return;
   const rows = list.length
     ? list.map((v) => `<li><button type="button" data-doc-version="${esc(v.id)}">${icon('versions')}${esc(new Date(v.at).toLocaleString(locale()))}</button></li>`).join('')
     : `<li class="muted">${esc(t('doc.noVersions'))}</li>`;
-  renderDocPanel(docState.doc, `<div class="doc-versions"><h5>${esc(t('doc.versions'))}</h5><ul>${rows}</ul></div>`);
+  setDocExtra(`<div class="doc-versions"><h5>${esc(t('doc.versions'))}</h5><ul>${rows}</ul></div>`);
 }
 
 async function showVersion(versionId) {
-  const { text } = await api(`/api/epics/${enc(current.id)}/docs/${enc(docState.id)}/versions/${enc(versionId)}`);
+  const id = docState.id;
+  const { text } = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}/versions/${enc(versionId)}`);
+  if (docState.id !== id) return;
   const { html } = renderMd(text);
-  renderDocPanel(docState.doc, `<div class="doc-versions"><h5>${esc(t('doc.versionOf', { t: versionId.slice(0, 16).replace('T', ' ') }))}</h5>
+  setDocExtra(`<div class="doc-versions"><h5>${esc(t('doc.versionOf', { t: versionId.slice(0, 16).replace('T', ' ') }))}</h5>
     <button type="button" data-doc-restore="${esc(versionId)}">${icon('undo')}${esc(t('doc.restore'))}</button><article class="md doc-version-view">${html}</article></div>`);
   docState.versionText = text;
 }
 
 function addDocForm(taskId) {
+  docRequest++;
+  if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedClose'))) return;
+  disposeDocEditor();
+  docState.id = null;
+  docState.mode = 'view';
+  docState.dirty = false;
   const map = buildLanes(current);
   const lane = [...map.lanes, ...map.side].find((l) => l.id === taskId);
   const panel = docPanel();
@@ -623,7 +706,7 @@ function addDocForm(taskId) {
       const doc = await api(`/api/epics/${enc(current.id)}/docs`, { method: 'POST', body: { mode: how, task: taskId, step: $('#df-step').value || undefined, kind: $('#df-kind').value, title: $('#df-title').value.trim(), path: $('#df-path').value.trim() || undefined } });
       current = await api(`/api/epics/${enc(current.id)}`);
       renderMapArea(current);
-      await openDoc(doc.id, how === 'new' ? 'edit' : 'view');
+      await openDoc(doc.id);
     } catch (err) {
       alertBox(err.message);
     }
@@ -639,22 +722,28 @@ function bindDocs() {
     if (add) return void addDocForm(add.dataset.docAdd);
     if (el.closest('[data-doc-close]')) return closeDoc();
     if (el.closest('[data-doc-edit]')) {
+      docRequest++;
       docState.mode = 'edit';
+      docState.draft = docState.text;
       return renderDocPanel(docState.doc);
     }
     if (el.closest('[data-doc-cancel]')) {
+      docRequest++;
       if (docState.dirty && !window.confirm(t('doc.unsavedCancel'))) return;
       docState.mode = 'view';
       docState.dirty = false;
+      docState.draft = docState.text;
       return renderDocPanel(docState.doc);
     }
     if (el.closest('[data-doc-save]')) return void saveDoc();
-    if (el.closest('[data-doc-reload]')) return void openDoc(docState.id, 'view');
+    if (el.closest('[data-doc-reload]')) return void openDoc(docState.id);
     if (el.closest('[data-doc-versions]')) return void showVersions().catch((err) => alertBox(err.message));
     const ver = el.closest('[data-doc-version]');
     if (ver) return void showVersion(ver.dataset.docVersion).catch((err) => alertBox(err.message));
     if (el.closest('[data-doc-restore]')) {
-      Object.assign(docState, { mode: 'edit', dirty: true, text: docState.versionText });
+      docRequest++;
+      if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedCancel'))) return;
+      Object.assign(docState, { mode: 'edit', dirty: docState.versionText !== docState.text, draft: docState.versionText });
       return renderDocPanel(docState.doc);
     }
     const toc = el.closest('[data-toc]');
@@ -662,11 +751,6 @@ function bindDocs() {
       e.preventDefault();
       document.getElementById(toc.dataset.toc)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  });
-  document.addEventListener('input', (e) => {
-    if (e.target.id !== 'doc-text') return;
-    docState.dirty = true;
-    $('#doc-preview').innerHTML = renderMd(e.target.value).html;
   });
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 's' && docState.mode === 'edit' && !$('#doc-panel').hidden) {

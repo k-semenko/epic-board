@@ -9,7 +9,7 @@ const PAGE = join(dirname(fileURLToPath(import.meta.url)), 'page');
 const VENDOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'vendor');
 const inlineScript = (code) => `<script>\n${code.replace(/<\/script/gi, '<\\/script')}\n</script>`;
 // Order matters: a module may only import the ones listed before it.
-const DEPS = { './i18n.mjs': '__i18n', './lanes.mjs': '__lanes', './icons.mjs': '__icons', './history.mjs': '__history', './markdown.mjs': '__markdown', './section-order.mjs': '__sectionOrder', './section-settings.mjs': '__sectionSettings', './waiting.mjs': '__waiting', './pagination.mjs': '__pagination' };
+const DEPS = { './i18n.mjs': '__i18n', './lanes.mjs': '__lanes', './icons.mjs': '__icons', './history.mjs': '__history', './markdown.mjs': '__markdown', './section-order.mjs': '__sectionOrder', './section-settings.mjs': '__sectionSettings', './waiting.mjs': '__waiting', './pagination.mjs': '__pagination', './doc-editor.mjs': '__docEditor' };
 const IMPORT = /^import\s*\{([^}]+)\}\s*from\s*'([^']+)';\s*$/gm;
 const linkImports = (src) => src.replace(IMPORT, (_, list, from) => {
   if (!DEPS[from]) throw new Error(`export bundle: unknown module ${from}`);

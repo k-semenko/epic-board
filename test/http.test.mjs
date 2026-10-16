@@ -194,7 +194,7 @@ test('page modules are served as javascript', async () => {
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-type'), /text\/javascript/);
   assert.equal((await call('/vendor/mermaid.min.js')).status, 404);
-  for (const lib of ['marked.min.js', 'purify.min.js']) {
+  for (const lib of ['marked.min.js', 'purify.min.js', 'milkdown.min.js']) {
     const v = await call(`/vendor/${lib}`);
     assert.equal(v.status, 200, lib);
     assert.match(v.headers.get('content-type'), /text\/javascript/);
