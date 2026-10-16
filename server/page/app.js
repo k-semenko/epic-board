@@ -4,6 +4,7 @@ import { describeEvent } from './history.mjs';
 import { renderMarkdown } from './markdown.mjs';
 import { t, getLang, setLang, locale } from './i18n.mjs';
 import { bindSectionSettings } from './section-settings.mjs';
+import { DecisionDrafts, renderWaitingCard, waitingCounts, waitingSearchText } from './waiting.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -58,7 +59,11 @@ async function api(path, { method = 'GET', body } = {}) {
   const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
   const type = res.headers.get('content-type') || '';
   const data = type.includes('json') ? await res.json() : await res.text();
-  if (!res.ok) throw new Error(data.detail || data.error || res.statusText);
+  if (!res.ok) {
+    const error = new Error(data.detail || data.error || res.statusText);
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
 
@@ -691,8 +696,7 @@ function selectStep(stepId) {
 
 // ---------- Needs decision ----------
 
-const WAIT_KINDS = ['decision', 'approval', 'review', 'action', 'other'];
-const waitKind = (kind) => t(`w.kind.${WAIT_KINDS.includes(kind) ? kind : 'other'}`);
+let decisionDrafts = null;
 
 // A link from a pending item to something already on the board: a chip that jumps there.
 function refChip(epic, ref) {
@@ -722,6 +726,9 @@ function refChip(epic, ref) {
   } else if (kind === 'doc') {
     const doc = (epic.docs || []).find((d) => d.id === value);
     if (doc) [label, attrs, ic] = [`${kindText(doc.kind)} · ${doc.title}`, `data-doc="${esc(doc.id)}"`, 'file'];
+  } else if (kind === 'waiting') {
+    const item = (epic.waiting || []).find((x) => x.id === value);
+    if (item) [label, attrs, ic] = [item.title, `data-jump-sid="w-${esc(item.id)}"`, 'clock'];
   } else if (kind === 'decision') {
     const d = (epic.decisions || []).find((x) => x.id === value);
     if (d) [label, attrs, ic] = [`${t('w.ref.decision')}: ${d.text.length > 40 ? `${d.text.slice(0, 39)}…` : d.text}`, `data-jump-sid="d-${esc(d.id)}"`, 'flag'];
@@ -730,26 +737,95 @@ function refChip(epic, ref) {
   return `<button type="button" class="ref" ${attrs}>${icon(ic)}<span>${esc(label)}</span></button>`;
 }
 
-function waitingItem(epic, w) {
-  const task = w.task ? `<button type="button" class="ref ref-task" data-jump-task="${esc(w.task)}">${esc(w.task)}</button>` : '';
-  if (w.doneAt) {
-    return `<li class="wait done" data-sid="w-${esc(w.id)}"><div class="wait-row"><span class="chip">${esc(waitKind(w.kind))}</span><span class="wait-text"><span class="wt">${esc(w.title)}</span><span class="wait-meta">${icon('check', 'st-done')}${phrase('w.doneAt', { t: agoText(w.doneAt) })}${task}</span>${w.resolution ? `<span class="wait-resolution">${esc(w.resolution)}</span>` : ''}</span><button type="button" class="live-only" data-undo="${esc(w.id)}">${icon('undo')}${esc(t('w.undo'))}</button></div></li>`;
+function renderWaiting(epic) {
+  const root = $('#waiting');
+  const active = document.activeElement;
+  const activeForm = active?.closest('[data-wait-form]');
+  const focus = activeForm ? { id: activeForm.dataset.waitForm, name: active.name, value: active.value, start: active.selectionStart, end: active.selectionEnd } : null;
+  const expanded = [...root.querySelectorAll('details[open]')].map((el) => ({ id: el.closest('[data-sid]').dataset.sid, cls: el.className }));
+  const rank = { open: 0, answered: 1, closed: 2 };
+  const waiting = [...(epic.waiting || [])].sort((a, b) => (rank[a.status] ?? (a.doneAt ? 2 : 0)) - (rank[b.status] ?? (b.doneAt ? 2 : 0)) || String(a.since).localeCompare(String(b.since)));
+  root.innerHTML = waiting.map((item) => renderWaitingCard(item, {
+    readOnly: Boolean(EXPORT),
+    draft: EXPORT ? undefined : item.status === 'open' ? decisionDrafts.get(item) : decisionDrafts.peek(item.id),
+    renderDetails: (text) => renderMd(text).html,
+    refChip: (ref) => refChip(epic, ref),
+  })).join('') || `<li class="muted">${esc(t('none.waiting'))}</li>`;
+  for (const { id, cls } of expanded) {
+    const card = [...root.querySelectorAll('[data-sid]')].find((el) => el.dataset.sid === id);
+    const details = [...(card?.querySelectorAll('details') || [])].find((el) => el.className === cls);
+    if (details) details.open = true;
   }
-  const details = w.details ? `<div class="wait-details md">${renderMd(w.details).html}</div>` : '';
-  const refs = (w.refs || []).length ? `<div class="wait-refs"><span class="muted">${esc(t('w.links'))}:</span>${w.refs.map((r) => refChip(epic, r)).join('')}</div>` : '';
-  const checklist = (w.checklist || []).length ? `<ul class="wait-checklist">${w.checklist.map((c) => `<li>${icon('circle', 'st-todo')}<span>${esc(c.text)}</span></li>`).join('')}</ul>` : '';
-  return `<li class="wait" data-sid="w-${esc(w.id)}">
-    <div class="wait-row"><span class="chip">${esc(waitKind(w.kind))}</span><span class="wait-text"><span class="wt">${esc(w.title)}</span><span class="wait-meta">${task}${phrase('w.since', { t: agoTag(w.since) })}${(w.checklist || []).length ? `<span>${icon('list')}${esc(t('w.checklist', { n: w.checklist.length }))}</span>` : ''}</span></span><button type="button" class="live-only primary" data-done="${esc(w.id)}">${icon('check')}${esc(t('w.done'))}</button></div>
-    ${details}${refs}${checklist}
-  </li>`;
+  if (focus) {
+    const form = [...root.querySelectorAll('[data-wait-form]')].find((el) => el.dataset.waitForm === focus.id);
+    const input = [...(form?.elements || [])].find((el) => el.name === focus.name && (el.type === 'textarea' || el.value === focus.value));
+    if (input && !input.disabled && !input.closest('fieldset[disabled]')) {
+      input.focus({ preventScroll: true });
+      if (input.setSelectionRange && focus.start !== null) input.setSelectionRange(focus.start, focus.end);
+    }
+  }
+  const counts = waitingCounts(waiting);
+  $('#waiting-count').innerHTML = ['open', 'answered', 'closed'].map((status) => `<span>${esc(t(`w.status.${status}`))} <b>${counts[status]}</b></span>`).join('');
 }
 
-function renderWaiting(epic) {
-  const waiting = [...(epic.waiting || [])].sort((a, b) => Boolean(a.doneAt) - Boolean(b.doneAt) || String(a.since).localeCompare(String(b.since)));
-  $('#waiting').innerHTML = waiting.map((w) => waitingItem(epic, w)).join('') || `<li class="muted">${esc(t('none.waiting'))}</li>`;
-  const open = waiting.filter((w) => !w.doneAt).length;
-  const count = $('#waiting-count');
-  if (count) count.textContent = open ? String(open) : '';
+function bindDecisionForms(id) {
+  const root = $('#waiting');
+  const readForm = (form) => {
+    const item = current.waiting.find((w) => w.id === form.dataset.waitForm);
+    if (!item) return;
+    const data = new FormData(form);
+    decisionDrafts.update(item, { selected: data.getAll('selected'), checked: data.getAll('checked'), comment: String(data.get('comment') || '') });
+  };
+  root.addEventListener('input', (event) => {
+    const form = event.target.closest('[data-wait-form]');
+    if (form) {
+      readForm(form);
+      const error = form.querySelector('[data-wait-error]');
+      if (error) error.hidden = true;
+    }
+  });
+  root.addEventListener('change', (event) => {
+    const form = event.target.closest('[data-wait-form]');
+    if (form) readForm(form);
+  });
+  root.addEventListener('submit', async (event) => {
+    const form = event.target.closest('[data-wait-form]');
+    if (!form) return;
+    event.preventDefault();
+    if (EXPORT) return;
+    const item = current.waiting.find((w) => w.id === form.dataset.waitForm);
+    if (!item || decisionDrafts.get(item).busy) return;
+    readForm(form);
+    const result = decisionDrafts.submit(item, (body) => api(`/api/epics/${enc(id)}/waiting/${enc(item.id)}/submit`, { method: 'POST', body }));
+    renderWaiting(current);
+    try {
+      const epic = await result;
+      if (!epic) return;
+      current = epic;
+      renderWaiting(epic);
+      $('#waiting-announcement').textContent = t('w.saved');
+      await renderEpic(id).catch((error) => alertBox(error.message));
+    } catch (error) {
+      if (error.status === 409) await renderEpic(id).catch(() => {});
+      renderWaiting(current);
+      const card = [...root.querySelectorAll('[data-sid]')].find((el) => el.dataset.sid === `w-${item.id}`);
+      const message = card?.querySelector('[data-wait-error]');
+      if (message) {
+        message.tabIndex = -1;
+        message.focus({ preventScroll: true });
+      }
+    }
+  });
+  root.addEventListener('click', (event) => {
+    const refresh = event.target.closest('[data-wait-refresh]');
+    if (!refresh || EXPORT) return;
+    const item = current.waiting.find((w) => w.id === refresh.dataset.waitRefresh);
+    if (!item || decisionDrafts.get(item).busy) return;
+    decisionDrafts.refresh(item);
+    renderWaiting(current);
+    const form = [...root.querySelectorAll('[data-wait-form]')].find((el) => el.dataset.waitForm === item.id);
+    (form?.querySelector('input, textarea, button'))?.focus();
+  });
 }
 
 function modalHost(id) {
@@ -761,28 +837,6 @@ function modalHost(id) {
     document.body.appendChild(modal);
   }
   return modal;
-}
-
-// "Done" is a confirmation: when the item carries a checklist, every point must be ticked first.
-function confirmModal(epic, itemId) {
-  const w = (epic.waiting || []).find((x) => x.id === itemId);
-  if (!w) return;
-  const modal = modalHost('confirm-modal');
-  const list = w.checklist || [];
-  modal.innerHTML = `<div class="modal" role="dialog" aria-label="${esc(t('w.confirmTitle'))}">
-      <header class="modal-head"><h3>${icon('check')}${esc(t('w.confirmTitle'))}</h3><span class="chip">${esc(waitKind(w.kind))}</span></header>
-      <h4 class="confirm-title">${esc(w.title)}</h4>
-      ${w.details ? `<div class="wait-details md">${renderMd(w.details).html}</div>` : ''}
-      ${list.length ? `<p class="muted">${esc(t('w.confirmHint'))}</p><ul class="confirm-list">${list.map((c) => `<li><label><input type="checkbox" data-check="${esc(c.id)}"> ${esc(c.text)}</label></li>`).join('')}</ul>` : ''}
-      <label class="confirm-note">${esc(t('w.resolution'))}<textarea id="confirm-resolution" rows="3"></textarea></label>
-      <footer class="modal-foot"><button type="button" data-modal-close>${esc(t('cancel'))}</button><button type="button" class="primary" data-confirm="${esc(w.id)}"${list.length ? ' disabled' : ''}>${icon('check')}${esc(t('w.confirm'))}</button></footer></div>`;
-  modal.hidden = false;
-  const sync = () => {
-    const boxes = [...modal.querySelectorAll('[data-check]')];
-    modal.querySelector('[data-confirm]').disabled = !boxes.every((b) => b.checked);
-  };
-  modal.querySelectorAll('[data-check]').forEach((b) => b.addEventListener('change', sync));
-  (modal.querySelector('[data-check]') || modal.querySelector('#confirm-resolution')).focus();
 }
 
 function jumpToTask(taskId, stepId) {
@@ -837,7 +891,7 @@ async function renderEpic(id) {
   $('#sessions').innerHTML = [...(epic.sessions || [])].sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt))).map((x) => `<li class="session" data-sid="s-${esc(x.id)}">
       <div class="session-head">${agentBadge(x.agent)}<code class="muted">${esc(x.id.slice(0, 8))}</code>${x.task ? `<span class="chip">${esc(x.task)}</span>` : ''}<span class="muted session-time">${icon('clock')}<span class="phrase">${agoText(x.lastAt)}</span></span></div>
       <dl class="session-body"><dt>${esc(t('session.doing'))}</dt><dd>${esc(x.doing ?? '—')}</dd><dt>${esc(t('session.next'))}</dt><dd>${esc(x.next ?? '—')}</dd></dl></li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
-  $('#history').innerHTML = history.slice(0, 20).map((h, n) => {
+  $('#history').innerHTML = history.filter((h) => !/^waiting\[[^\]]+\]\.version$/.test(h.path)).slice(0, 20).map((h, n) => {
     const d = describeEvent(h);
     const value = d.change === 'add' ? `<span class="hv-new">${esc(d.after ?? '')}</span>`
       : d.change === 'remove' ? `<span class="hv-old">${esc(d.before ?? '')}</span>`
@@ -856,7 +910,7 @@ let searchIndex = [];
 function buildSearchIndex(epic, history) {
   const items = [];
   const add = (section, text, target, extra = {}) => items.push({ section, text: String(text ?? ''), target, ...extra });
-  for (const w of epic.waiting || []) add(t('search.waiting'), [w.title, w.details, ...(w.checklist || []).map((c) => c.text), w.resolution].filter(Boolean).join(' · '), `w-${w.id}`);
+  for (const w of epic.waiting || []) add(t('search.waiting'), waitingSearchText(w), `w-${w.id}`);
   for (const task of epic.tasks || []) {
     add(t('search.task'), `${task.id} · ${task.title}`, null, { open: task.id });
     for (const st of task.steps || []) add(t('search.step', { id: task.id }), [st.title, st.note].filter(Boolean).join(' — '), `st-${task.id}-${st.id}`, { open: task.id });
@@ -1062,6 +1116,7 @@ function closeModals() {
 
 async function bootEpic() {
   const id = EXPORT ? EXPORT.epic.id : decodeURIComponent(location.pathname.split('/')[2]);
+  decisionDrafts = new DecisionDrafts(id);
   applyI18n();
   if (EXPORT) markExport();
   const exp = $('#export-link');
@@ -1076,6 +1131,7 @@ async function bootEpic() {
   bindMapTools();
   bindSearch();
   bindDocs();
+  if (!EXPORT) bindDecisionForms(id);
   const sectionSettings = bindSectionSettings({ api, onError: alertBox, readOnly: Boolean(EXPORT) });
   await Promise.all([renderEpic(id), sectionSettings.reload().catch((err) => alertBox(err.message))]);
   $('#refresh-all').addEventListener('click', () => refreshModal(current));
@@ -1106,24 +1162,6 @@ async function bootEpic() {
     }
     const openCard = el.closest('[data-open]');
     if (openCard) toggleDetail(openCard.dataset.open);
-    const done = el.closest('[data-done]');
-    if (done) return confirmModal(current, done.dataset.done);
-    const confirm = el.closest('[data-confirm]');
-    if (confirm) {
-      const modal = $('#confirm-modal');
-      const checked = [...modal.querySelectorAll('[data-check]:checked')].map((b) => b.dataset.check);
-      const resolution = modal.querySelector('#confirm-resolution').value.trim() || undefined;
-      return void withButton(confirm, async () => {
-        await api(`/api/epics/${enc(id)}/waiting/${enc(confirm.dataset.confirm)}/done`, { method: 'POST', body: { checked, resolution } });
-        modal.hidden = true;
-        await renderEpic(id);
-      });
-    }
-    const undo = el.closest('[data-undo]');
-    if (undo) withButton(undo, async () => {
-      await api(`/api/epics/${enc(id)}/waiting/${enc(undo.dataset.undo)}/undo`, { method: 'POST', body: {} });
-      await renderEpic(id);
-    });
     const refresh = el.closest('[data-refresh]');
     if (refresh) withButton(refresh, async () => {
       await api(`/api/epics/${enc(id)}/refresh`, { method: 'POST', body: { scope: 'branch', branch: refresh.dataset.refresh } });
@@ -1145,7 +1183,7 @@ async function bootEpic() {
     await sectionSettings.reload().catch(() => {});
     try {
       const { updatedAt } = await api(`/api/epics/${enc(id)}/rev`);
-      if (current && updatedAt !== current.updatedAt && !$('#confirm-modal:not([hidden])')) await renderEpic(id);
+      if (current && updatedAt !== current.updatedAt) await renderEpic(id);
     } catch {}
   }, 10000);
 }

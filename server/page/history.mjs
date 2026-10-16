@@ -61,6 +61,16 @@ export function describeEvent(e) {
   m = path.match(/^waiting\[([^\]]+)\](.*)$/);
   if (m) {
     const name = tail(m[2]);
+    if (name === 'status') return { where: t('h.waiting'), what: t('h.waitStage'), change, before: e.before ? t(`w.status.${e.before}`) : null, after: e.after ? t(`w.status.${e.after}`) : null };
+    if (name === 'revision') return out(t('h.waiting'), t('h.waitRevision'), name);
+    if (name === 'revisionReason') return out(t('h.waiting'), t('w.revisionReason'), name);
+    if (name === 'rounds') {
+      const round = e.after?.at(-1);
+      const submitted = (e.after?.length || 0) > (e.before?.length || 0);
+      const labels = (round?.response?.selected || []).map((id) => round.request.input?.options?.find((option) => option.id === id)?.text || id);
+      const answer = round ? [round.request.title, ...(round.request.input?.type === 'confirm' ? [t('w.confirmed')] : labels), round.response.comment].filter(Boolean).join(' · ') : null;
+      return { where: t('h.waiting'), what: t(submitted ? 'h.waitSubmitted' : round?.review?.outcome === 'revised' ? 'w.returned' : 'h.waitReviewed'), change: 'add', before: null, after: show(submitted ? answer : round?.review?.text) };
+    }
     return out(t('h.waiting'), name ? field(name) : t(e.op === 'remove' ? 'h.itemRemoved' : 'h.itemAdded'), name);
   }
   m = path.match(/^decisions\[([^\]]+)\]/);

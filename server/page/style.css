@@ -514,3 +514,59 @@ button.primary:hover { filter: brightness(1.08); }
 .section-order-list .order-drop-after { box-shadow: 0 3px 0 var(--accent); border-bottom-color: var(--accent); }
 .order-error { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* Decision forms preserve the question context through human submission and agent review. */
+.waiting-section h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+.waiting-counts { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.waiting-counts b { color: var(--fg); font-variant-numeric: tabular-nums; }
+#waiting { gap: 12px; }
+#waiting > li.decision-card { --wait-color: var(--warn); --wait-bg: var(--s-waiting); display: block; padding: 15px 16px; border-left-color: var(--wait-color); min-width: 0; overflow-wrap: anywhere; }
+#waiting > li.decision-card[data-status="answered"] { --wait-color: var(--accent); --wait-bg: var(--s-active); }
+#waiting > li.decision-card[data-status="closed"] { --wait-color: var(--ok); --wait-bg: var(--s-done); }
+.wait-card-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 10px; margin-bottom: 8px; }
+.wait-type { color: var(--muted); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.wait-status { color: var(--wait-color); background: var(--wait-bg); padding: 2px 7px; border-radius: 5px; font-size: 11px; }
+.decision-card h3 { font-size: 15px; }
+.decision-card .wait-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; }
+.decision-card .wait-details { padding-left: 0; color: var(--muted); font-size: 13px; margin: 5px 0 10px; }
+.decision-card .wait-refs { padding-left: 0; margin-top: 8px; }
+.decision-card fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.decision-card legend, .wait-label { color: var(--muted); font-size: 11px; margin: 0 0 6px; padding: 0; }
+.wait-form { margin-top: 12px; }
+.wait-options { display: grid; gap: 3px; }
+.wait-option { display: flex; gap: 9px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; cursor: pointer; font-size: 13px; }
+.wait-option:has(input:checked) { border-color: var(--accent); background: var(--s-active); }
+.wait-option input { margin: 4px 0 0; width: 15px; height: 15px; accent-color: var(--accent); flex-shrink: 0; }
+.wait-option > span { display: flex; flex-wrap: wrap; gap: 3px 8px; align-items: baseline; }
+.wait-option small { font-size: 11px; color: var(--muted); }
+.decision-card .wait-prerequisites { display: grid; gap: 3px; margin-top: 12px; }
+.wait-comment, .wait-history { font-size: 12px; margin-top: 9px; }
+.decision-card summary { cursor: pointer; color: var(--muted); width: fit-content; }
+.decision-card summary:hover { color: var(--accent); }
+.wait-comment textarea { display: block; width: 100%; margin-top: 7px; padding: 8px 10px; resize: vertical; min-height: 65px; font: inherit; border: 1px solid var(--line); border-radius: 5px; color: var(--fg); background: var(--surface); }
+.decision-card input:focus-visible, .decision-card textarea:focus-visible, .decision-card summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.wait-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.wait-actions button { padding: 6px 11px; }
+.wait-error { color: var(--crit); font-size: 12px; margin: 7px 0 0; }
+.wait-answer { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.wait-answer p { margin: 0; font-size: 13px; }
+.wait-answer-comment { white-space: pre-wrap; color: var(--muted); }
+.wait-answer .wait-answer-comment { margin-top: 6px; }
+#waiting .decision-card ul { margin: 3px 0 8px; padding-left: 18px; font-size: 13px; }
+#waiting .decision-card li { display: list-item; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.wait-next { color: var(--muted); font-size: 11px; margin: 10px 0 0; }
+.wait-outcome, .wait-conflict { margin-top: 11px; padding: 9px 10px; border-radius: 5px; background: var(--s-done); font-size: 12px; }
+.wait-outcome .wait-label { color: var(--ok); }
+.wait-outcome p, .wait-conflict p { margin: 0; white-space: pre-wrap; }
+.wait-outcome.revised, .wait-conflict { background: var(--s-waiting); }
+.wait-outcome.revised .wait-label { color: var(--warn); }
+.wait-conflict button { margin-top: 8px; }
+.wait-history-round { border-left: 2px solid var(--line); padding: 8px 0 0 12px; margin-top: 8px; }
+.wait-history-round h4 { margin: 0; font-size: 13px; }
+.wait-history-round p { margin: 4px 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 480px) { #waiting > li.decision-card { padding: 12px; } }
+@media (pointer: coarse) {
+  .wait-actions button, .wait-option, .decision-card summary { min-height: 44px; }
+  .wait-comment textarea { font-size: 16px; }
+}

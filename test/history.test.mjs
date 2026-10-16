@@ -64,3 +64,20 @@ test('russian reads the same events', () => {
 test('both dictionaries have the same keys', () => {
   assert.deepEqual(Object.keys(DICT.ru).sort(), Object.keys(DICT.en).sort());
 });
+
+test('decision lifecycle events describe human answers, agent review and new revisions', () => {
+  assert.deepEqual(describeEvent({ op: 'set', path: 'waiting[q].status', before: 'open', after: 'answered' }), { where: 'needs decision', what: 'stage', change: 'set', before: 'Waiting for you', after: 'Waiting for agent' });
+  const round = { revision: 1, request: { title: 'Choose storage', input: { type: 'single', options: [{ id: 'repo', text: 'Repository' }] } }, response: { selected: ['repo'], comment: 'Keep history' } };
+  const submitted = describeEvent({ op: 'set', path: 'waiting[q].rounds', before: [], after: [round] });
+  assert.equal(submitted.what, 'answer submitted');
+  assert.equal(submitted.after, 'Choose storage · Repository · Keep history');
+  const reviewed = describeEvent({ op: 'set', path: 'waiting[q].rounds', before: [round], after: [{ ...round, review: { outcome: 'accepted', text: 'Recorded in plan' } }] });
+  assert.equal(reviewed.what, 'agent reviewed');
+  assert.equal(reviewed.after, 'Recorded in plan');
+  assert.equal(describeEvent({ op: 'set', path: 'waiting[q].revision', before: 1, after: 2 }).what, 'question revision');
+});
+
+test('history preserves choice labels when a choice response also contains confirmed true', () => {
+  const event = describeEvent({ op: 'set', path: 'waiting[q].rounds', before: [], after: [{ request: { title: 'Storage', input: { type: 'single', options: [{ id: 'repo', text: 'Repository' }] } }, response: { selected: ['repo'], confirmed: true } }] });
+  assert.equal(event.after, 'Storage · Repository');
+});
