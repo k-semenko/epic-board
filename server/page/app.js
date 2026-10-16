@@ -495,6 +495,11 @@ function renderMd(text) {
 
 const docState = { id: null, text: '', mtimeMs: 0, mode: 'view', dirty: false };
 
+function positionDocPanel(panel) {
+  const bottom = $('.topbar')?.getBoundingClientRect().bottom || 0;
+  panel.style.top = `${Math.max(0, Math.ceil(bottom)) + 8}px`;
+}
+
 function docPanel() {
   let panel = $('#doc-panel');
   if (!panel) {
@@ -503,8 +508,17 @@ function docPanel() {
     panel.className = 'doc-panel';
     panel.hidden = true;
     document.body.appendChild(panel);
+    const header = $('.topbar');
+    if (header) new ResizeObserver(() => positionDocPanel(panel)).observe(header);
+    window.addEventListener('resize', () => positionDocPanel(panel));
   }
   return panel;
+}
+
+function showDocPanel(panel) {
+  if ($('#map-frame')?.classList.contains('map-full')) setFull(false);
+  positionDocPanel(panel);
+  panel.hidden = false;
 }
 
 function renderDocPanel(doc, extra = '') {
@@ -526,8 +540,7 @@ function renderDocPanel(doc, extra = '') {
     ? `<div class="doc-edit"><textarea id="doc-text" spellcheck="false">${esc(docState.text)}</textarea><div class="doc-preview md" id="doc-preview">${html}</div></div>`
     : `<div class="doc-body">${tocHtml}<article class="md">${html}</article></div>`;
   panel.innerHTML = head + body;
-  panel.hidden = false;
-  document.body.classList.add('doc-open');
+  showDocPanel(panel);
 }
 
 async function openDoc(id, mode = 'view') {
@@ -539,7 +552,6 @@ async function openDoc(id, mode = 'view') {
 function closeDoc() {
   if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedClose'))) return;
   docPanel().hidden = true;
-  document.body.classList.remove('doc-open');
   docState.id = null;
 }
 
@@ -572,7 +584,8 @@ async function showVersion(versionId) {
 }
 
 function addDocForm(taskId) {
-  const lane = buildLanes(current).lanes.find((l) => l.id === taskId);
+  const map = buildLanes(current);
+  const lane = [...map.lanes, ...map.side].find((l) => l.id === taskId);
   const panel = docPanel();
   const mode = current.docsMode === 'linked' ? 'doc.mode.linked' : current.docsMode === 'board' ? 'doc.mode.board' : 'doc.mode.none';
   panel.innerHTML = `<header class="doc-head"><div class="doc-head-title"><h3>${esc(t('doc.new', { task: taskId }))}</h3></div><div class="doc-actions"><button type="button" class="icon-btn" data-doc-close aria-label="${esc(t('close'))}">${icon('close')}</button></div></header>
@@ -588,8 +601,7 @@ function addDocForm(taskId) {
       <p class="muted">${esc(t(mode))}</p>
       <div class="doc-actions"><button type="submit">${icon('plus')}${esc(t('doc.create'))}</button></div>
     </form>`;
-  panel.hidden = false;
-  document.body.classList.add('doc-open');
+  showDocPanel(panel);
   if (current.docsMode === 'linked') panel.querySelector('input[value="link"]').checked = true;
   const syncPath = () => {
     $('#df-path-row').hidden = panel.querySelector('input[name="df-mode"]:checked').value !== 'link';

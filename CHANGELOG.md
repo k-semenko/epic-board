@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Keep map cards below the sticky header and make its background opaque while scrolling.
 - Browse off-chain cards without changing the opened task or step; select a task only when its card is activated.
 - Reserve horizontal scrollbar space in the step timeline to keep the document and preview panels from shifting between tasks.
+- Open document viewing, editing and creation below the header without changing page spacing or hiding the page scrollbar.
 
 ## [0.5.1] - 2026-10-16
 
