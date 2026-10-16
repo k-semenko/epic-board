@@ -129,3 +129,23 @@ test('a failed forge query is counted as failed when local Git is also unavailab
   assert.match(epic.facts['r:feat/x'].mr.error, /forge unavailable/);
   assert.equal(events.find((event) => event.type === 'branch' && event.state !== 'start').state, 'error');
 });
+
+test('a pruned remote branch does not turn distance from the base into unpushed commits', async (t) => {
+  const repo = fixture(t, 'pruned-remote', (r) => ({ path: r.clone }));
+  repo.git(repo.clone, 'push', '-q', 'origin', '--delete', 'feat/x');
+  const { epic } = await refreshEpic('pruned-remote', { run: runner() });
+  const fact = epic.facts['r:feat/x'];
+  assert.equal(fact.mr.state, 'merged');
+  assert.equal(fact.ahead, 2);
+  assert.equal(fact.unpushed, null);
+  assert.equal(fact.remoteBehind, null);
+});
+
+test('a new branch without a remote has unknown publication counts', async (t) => {
+  const repo = fixture(t, 'new-local-branch', (r) => ({ path: r.clone }), 'local-only');
+  repo.git(repo.clone, 'branch', 'local-only', 'feat/x');
+  store.patchEpic('new-local-branch', { tasks: [{ id: 'T', branches: [{ repo: 'r', name: 'local-only', worktree: null, mr: null }] }] });
+  const { epic } = await refreshEpic('new-local-branch', { run: runner() });
+  assert.equal(epic.facts['r:local-only'].ahead, 2);
+  assert.equal(epic.facts['r:local-only'].unpushed, null);
+});

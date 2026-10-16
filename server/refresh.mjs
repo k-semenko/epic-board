@@ -118,7 +118,7 @@ async function branchFacts(epic, target, run, location) {
     head, subject,
     behind: base?.left ?? null,
     ahead: base?.right ?? null,
-    unpushed: own ? own.right : base?.right ?? null,
+    unpushed: own?.right ?? null,
     remoteBehind: own ? own.left : null,
     dirty, worktreeExists,
     mr: await mrFacts(repo, target, head, run),
