@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-16
+
+### Added
+
+- `publicUrl` in the config: the board can sit behind a reverse proxy on a plain address without a port.
+
+### Changed
+
+- `setup-runner.sh` stops early when dpkg has unfinished packages.
+
 ## [0.5.0] - 2026-10-16
 
 First public release.
@@ -28,5 +38,6 @@ First public release.
 - The UI is bilingual (English and Russian).
 - Linux support via `systemd --user`.
 
-[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/k-semenko/epic-board/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/k-semenko/epic-board/releases/tag/v0.5.0

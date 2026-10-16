@@ -78,6 +78,7 @@ epic url SHOP-1
 | `dataDir` | `~/.local/share/epic-board/data` | where epics, history and documents live |
 | `port` | `4747` | service port |
 | `host` | `localhost` | host name used in links; an extra allowed `Host` header, e.g. a name you mapped to `127.0.0.1` in `/etc/hosts` |
+| `publicUrl` | — | address behind a reverse proxy, e.g. `http://board.example` without a port; links use it and its host is allowed |
 | `stripProxy` | `false` | drop `HTTP(S)_PROXY` for git, glab and gh, for proxies that cannot reach your internal forge |
 
 Environment overrides: `EPIC_BOARD_HOME` (data dir), `EPIC_BOARD_PORT`, `EPIC_BOARD_STRIP_PROXY=1`. `node cli/epic.mjs doctor` shows what the service sees: tools, credentials per forge host, `git ls-remote` of a registered repository.

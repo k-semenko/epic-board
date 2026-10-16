@@ -38,3 +38,12 @@ test('port, host and url', () => {
   assert.equal(boardUrl(undefined, custom), 'http://board.test:5000/');
   assert.deepEqual(allowedHosts(5000, custom), ['localhost:5000', '127.0.0.1:5000', 'board.test:5000']);
 });
+
+test('publicUrl serves the board behind a reverse proxy without a port', () => {
+  const env = { HOME: homeWith({ host: 'board.test', publicUrl: 'http://board.test/' }) };
+  assert.equal(boardUrl('E-1', env), 'http://board.test/e/E-1');
+  assert.equal(boardUrl(undefined, env), 'http://board.test/');
+  assert.deepEqual(allowedHosts(4747, env), ['localhost:4747', '127.0.0.1:4747', 'board.test:4747', 'board.test']);
+  assert.deepEqual(allowedHosts(4747, { HOME: homeWith({ publicUrl: 'https://b.example:8443' }) }), ['localhost:4747', '127.0.0.1:4747', 'localhost:4747', 'b.example:8443'].filter((v, i, a) => a.indexOf(v) === i));
+  assert.equal(boardUrl('x', { HOME: homeWith({ publicUrl: 'javascript:alert(1)' }) }), 'http://localhost:4747/e/x', 'only http(s) urls are taken');
+});

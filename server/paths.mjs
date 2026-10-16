@@ -44,8 +44,17 @@ export function host(env = process.env) {
   return typeof value === 'string' && /^[a-z0-9.-]+$/i.test(value) ? value : 'localhost';
 }
 
+// Behind a reverse proxy (http://board.example without a port) links use this address,
+// and its Host is allowed too; only http(s) is taken.
+export function publicUrl(env = process.env) {
+  const value = readConfig(env).publicUrl;
+  if (typeof value !== 'string' || !/^https?:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(value)) return null;
+  return new URL(value);
+}
+
 export function allowedHosts(p = port(), env = process.env) {
-  return [...new Set(['localhost', '127.0.0.1', host(env)])].map((h) => `${h}:${p}`);
+  const pub = publicUrl(env);
+  return [...new Set([...['localhost', '127.0.0.1', host(env)].map((h) => `${h}:${p}`), ...(pub ? [pub.host] : [])])];
 }
 
 // Some corporate proxies swallow traffic to internal git hosts, and NO_PROXY wildcards are not always honoured.
@@ -54,6 +63,7 @@ export function stripProxy(env = process.env) {
 }
 
 export function boardUrl(id, env = process.env) {
-  const base = `http://${host(env)}:${port(env)}`;
+  const pub = publicUrl(env);
+  const base = pub ? `${pub.protocol}//${pub.host}` : `http://${host(env)}:${port(env)}`;
   return id ? `${base}/e/${encodeURIComponent(id)}` : `${base}/`;
 }

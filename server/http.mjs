@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import * as store from './store.mjs';
 import { refreshEpic, execRunner } from './refresh.mjs';
 import { buildExport } from './export.mjs';
-import { allowedHosts } from './paths.mjs';
+import { allowedHosts, publicUrl } from './paths.mjs';
 import { VERSION } from './version.mjs';
 import * as docs from './docs.mjs';
 import { BoardError } from './errors.mjs';
@@ -56,7 +56,8 @@ function guard(req, port) {
   if (!allowed.includes(req.headers.host)) throw new BoardError(403, 'bad-host', `Host ${req.headers.host} is not allowed`);
   if (req.method === 'GET') return;
   const origin = req.headers.origin;
-  if (origin && !allowed.map((h) => `http://${h}`).includes(origin)) throw new BoardError(403, 'bad-origin', `Origin ${origin} is not allowed`);
+  const origins = [...allowed.map((h) => `http://${h}`), publicUrl()?.origin].filter(Boolean);
+  if (origin && !origins.includes(origin)) throw new BoardError(403, 'bad-origin', `Origin ${origin} is not allowed`);
   if (!String(req.headers['content-type'] || '').startsWith('application/json')) throw new BoardError(415, 'not-json', 'Content-Type must be application/json');
 }
 
