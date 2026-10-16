@@ -1,4 +1,4 @@
-import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep } from './lanes.mjs';
+import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep, MERGE_ID, GOAL_ID } from './lanes.mjs';
 import { icon, STATE_ICON, agentBadge, logo } from './icons.mjs';
 import { describeEvent } from './history.mjs';
 import { renderMarkdown } from './markdown.mjs';
@@ -206,6 +206,7 @@ function cardBody(n) {
     ? `<div class="ov-line now">${icon('play')}<span>${esc(n.current.join('; '))}</span></div>`
     : `<div class="ov-line muted">${icon(allDone ? 'check' : 'circle')}<span>${esc(t(allDone ? 'card.allDone' : 'card.noActive'))}</span></div>`;
   const flags = [
+    n.side ? `<span class="muted">${esc(t('map.side'))}</span>` : '',
     n.waiting ? `<span class="warn">${icon('clock')}${esc(t('card.waiting', { n: n.waiting }))}</span>` : '',
     n.unpushed ? `<span class="warn">${icon('branch')}${esc(t('unpushed.short'))}</span>` : '',
     n.dirty ? `<span class="warn">${icon('alert')}${esc(t('dirty'))}</span>` : '',
@@ -244,7 +245,7 @@ function renderOverview(ov, open) {
   const cards = ov.nodes.map((n) => {
     const attrs = n.kind === 'goal' ? '' : ` role="button" tabindex="0" data-open="${esc(n.id)}" aria-expanded="${open === n.id}"`;
     const info = n.kind === 'task' ? `<button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>` : '';
-    return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
+    return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${n.side ? ' off-chain' : ''}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
   return `<div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
     <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
@@ -292,31 +293,32 @@ function renderTimeline(layout) {
 
 // One row only: other lanes are left out, so cross-task links become the lists beside the steps.
 function detailLayout(map, open) {
-  const single = open === 'merge'
+  const single = open === MERGE_ID
     ? { lanes: [], merge: map.merge, goal: map.goal, here: [] }
-    : { lanes: map.lanes.filter((l) => l.id === open), merge: [], goal: map.goal, here: [] };
+    : { lanes: [...map.lanes, ...map.side].filter((l) => l.id === open), merge: [], goal: map.goal, here: [] };
   const full = layoutMap(single);
   const rows = full.rows.filter((r) => r.kind !== 'goal');
   const cols = Math.max(0, ...rows.flatMap((r) => r.cells.map((c) => c.col + 1)));
-  return { rows, cols, edges: full.edges.filter((e) => e.from.row === e.to.row && e.to.row !== 'goal'), focus: full.focus };
+  return { rows, cols, edges: full.edges.filter((e) => e.from.row === e.to.row && e.to.row !== GOAL_ID), focus: full.focus };
 }
 
 function linksOf(map, open) {
-  if (open === 'merge') {
+  if (open === MERGE_ID) {
     const branches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
     const incoming = map.lanes.filter((l) => l.branches.some((b) => branches.has(b))).map((l) => `<li>${icon('branch')}<span>${esc(l.id)} · ${esc(l.title)}</span></li>`);
     return { incoming, outgoing: [`<li>${icon('flag')}<span>${esc(map.goal)}</span></li>`] };
   }
-  const lane = map.lanes.find((l) => l.id === open);
+  const lanes = [...map.lanes, ...map.side];
+  const lane = lanes.find((l) => l.id === open);
   const incoming = lane.steps.flatMap((s) => s.deps.map((d) => `<li>${icon('dep')}<span><b>${esc(d.task)} · ${esc(d.title)}</b> ${icon('arrowRight', 'inl')}${esc(s.title)}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`));
-  const outgoing = map.lanes.filter((l) => l.id !== open).flatMap((l) => l.steps.flatMap((s) => s.deps.filter((d) => d.task === open).map((d) => `<li>${icon('arrowRight')}<span>${esc(d.title)} ${icon('arrowRight', 'inl')}<b>${esc(l.id)} · ${esc(s.title)}</b>${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`)));
+  const outgoing = lanes.filter((l) => l.id !== open).flatMap((l) => l.steps.flatMap((s) => s.deps.filter((d) => d.task === open).map((d) => `<li>${icon('arrowRight')}<span>${esc(d.title)} ${icon('arrowRight', 'inl')}<b>${esc(l.id)} · ${esc(s.title)}</b>${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`)));
   const mergeBranches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
   if (lane.branches.some((b) => mergeBranches.has(b))) outgoing.push(`<li>${icon('merge')}<span>${esc(t('detail.toMerge'))}</span></li>`);
   return { incoming, outgoing };
 }
 
 function renderDetail(map, open) {
-  const lane = open === 'merge' ? null : map.lanes.find((l) => l.id === open);
+  const lane = open === MERGE_ID ? null : [...map.lanes, ...map.side].find((l) => l.id === open);
   if (lane && (!tlState.step || !lane.steps.some((st) => st.id === tlState.step))) tlState.step = defaultStep(lane);
   const raw = lane ? (current?.tasks || []).find((x) => x.id === lane.id) : null;
   const title = lane ? `<span class="mono muted">${esc(lane.id)}</span> ${esc(lane.fullTitle)}` : `${icon('merge')} ${esc(t('card.merge'))}`;
@@ -634,11 +636,6 @@ function bindPan() {
 
 // ---------- Map area ----------
 
-function sideTasks(map) {
-  if (!map.side.length) return '';
-  return `<div class="side-row"><span class="muted">${esc(t('map.side'))}</span>${map.side.map((l) => `<span class="chip" title="${esc(l.fullTitle)}">${esc(l.id)} · ${esc(l.title)}${l.status ? ` · ${esc(l.status)}` : ''}</span>`).join('')}</div>`;
-}
-
 function openFromHash() {
   const m = location.hash.match(/^#t-([^/]+)(?:\/([\w.-]+))?$/);
   if (!m) return null;
@@ -650,6 +647,7 @@ function renderMapArea(epic) {
   const map = buildLanes(epic);
   const ov = buildOverview(epic);
   for (const n of ov.nodes) n.docs = (epic.docs || []).filter((d) => d.task === n.id).length;
+  if (tlState.open === 'merge' && !ov.nodes.some((n) => n.kind === 'task' && n.id === 'merge')) tlState.open = MERGE_ID;
   if (tlState.open && !ov.nodes.some((n) => n.id === tlState.open && n.kind !== 'goal')) tlState.open = null;
   const open = tlState.open || defaultOpen(map);
   const here = map.here.length ? map.here.map((h) => `${esc(h.task)} · ${esc(h.title)}`).join('; ') : esc(t('map.noActive'));
@@ -657,8 +655,7 @@ function renderMapArea(epic) {
   const keep = prev && tlState.focused === open ? prev.scrollLeft : null;
   $('#map').innerHTML = `<p class="here"><span class="chip active-chip">${icon('target')}${esc(t('map.here'))}</span>${here}</p>`
     + renderOverview(ov, open)
-    + (open ? renderDetail(map, open) : '')
-    + sideTasks(map);
+    + (open ? renderDetail(map, open) : '');
   if (!open) return;
   bindPan();
   if (keep !== null) $('#tl-scroll').scrollLeft = keep;

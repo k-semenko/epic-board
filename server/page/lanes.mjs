@@ -1,5 +1,7 @@
 // Pure model of the epic map, shared by the page and the tests: no DOM here.
 const STATES = new Set(['done', 'active', 'waiting', 'blocked', 'todo']);
+export const MERGE_ID = '@merge';
+export const GOAL_ID = '@goal';
 
 const shortTitle = (title) => String(title || '').replace(/^\[[^\]]*\]\s*/, '');
 
@@ -85,20 +87,20 @@ export function layoutMap(map) {
   let tail = null;
   if (map.merge.length) {
     const start = Math.max(-1, ...(merged.length ? merged : rows).map(lastCol)) + 1;
-    const mergeRow = { kind: 'merge', id: 'merge', title: 'merge', cells: map.merge.map((m, i) => ({ ...m, id: `m${m.n}`, title: m.text, state: m.waiting ? 'waiting' : 'todo', col: start + i })) };
+    const mergeRow = { kind: 'merge', id: MERGE_ID, title: 'merge', cells: map.merge.map((m, i) => ({ ...m, id: `m${m.n}`, title: m.text, state: m.waiting ? 'waiting' : 'todo', col: start + i })) };
     mergeRow.cells.forEach((cell, i) => {
-      if (i > 0) edges.push({ from: { row: 'merge', col: mergeRow.cells[i - 1].col }, to: { row: 'merge', col: cell.col }, label: null });
+      if (i > 0) edges.push({ from: { row: MERGE_ID, col: mergeRow.cells[i - 1].col }, to: { row: MERGE_ID, col: cell.col }, label: null });
     });
-    for (const r of merged) edges.push({ from: { row: r.id, col: lastCol(r) }, to: { row: 'merge', col: start }, label: null });
+    for (const r of merged) edges.push({ from: { row: r.id, col: lastCol(r) }, to: { row: MERGE_ID, col: start }, label: null });
     rows.push(mergeRow);
-    tail = { row: 'merge', col: lastCol(mergeRow) };
+    tail = { row: MERGE_ID, col: lastCol(mergeRow) };
   }
 
   const goalCol = Math.max(-1, ...rows.map(lastCol)) + 1;
-  if (tail) edges.push({ from: tail, to: { row: 'goal', col: goalCol }, label: null });
+  if (tail) edges.push({ from: tail, to: { row: GOAL_ID, col: goalCol }, label: null });
   // Without a merge chain every lane leads to the goal; with one, arcs from other lanes only add noise.
-  if (!tail) for (const r of rows) if (r.cells.length) edges.push({ from: { row: r.id, col: lastCol(r) }, to: { row: 'goal', col: goalCol }, label: null });
-  rows.push({ kind: 'goal', id: 'goal', title: 'goal', cells: [{ id: 'goal', title: map.goal, state: 'goal', col: goalCol, deps: [] }] });
+  if (!tail) for (const r of rows) if (r.cells.length) edges.push({ from: { row: r.id, col: lastCol(r) }, to: { row: GOAL_ID, col: goalCol }, label: null });
+  rows.push({ kind: 'goal', id: GOAL_ID, title: 'goal', cells: [{ id: GOAL_ID, title: map.goal, state: 'goal', col: goalCol, deps: [] }] });
 
   const active = rows.flatMap((r) => r.cells.filter((c) => c.state === 'active').map((c) => ({ row: r.id, col: c.col })));
   return { rows, edges, cols: goalCol + 1, goalCol, focus: active[0] ?? null };
@@ -133,7 +135,7 @@ export function buildOverview(epic) {
   }
 
   const facts = epic.facts || {};
-  const nodes = lanes.map((l) => {
+  const taskNode = (l, col) => {
     const branchFacts = l.branches.map((b) => facts[b]).filter(Boolean);
     return {
       id: l.id,
@@ -141,14 +143,15 @@ export function buildOverview(epic) {
       title: l.title,
       fullTitle: l.fullTitle,
       status: l.status,
-      col: col.get(l.id),
+      col,
       progress: { done: l.steps.filter((s) => s.state === 'done').length, total: l.steps.length },
       current: l.steps.filter((s) => s.state === 'active').map((s) => s.title),
       waiting: (epic.waiting || []).filter((w) => w.task === l.id && !w.doneAt).length,
       unpushed: branchFacts.some((f) => f.unpushed > 0),
       dirty: branchFacts.some((f) => f.dirty === true),
     };
-  });
+  };
+  const nodes = lanes.map((l) => taskNode(l, col.get(l.id)));
   const edges = [...links.values()].filter((e) => col.has(e.from));
 
   const mergeBranches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
@@ -158,31 +161,32 @@ export function buildOverview(epic) {
   if (map.merge.length) {
     const start = Math.max(-1, ...nodes.filter((n) => merged.includes(n.id)).map((n) => n.col), merged.length ? -1 : lastTaskCol) + 1;
     nodes.push({
-      id: 'merge', kind: 'merge', title: 'merge', col: start,
+      id: MERGE_ID, kind: 'merge', title: 'merge', col: start,
       progress: { done: 0, total: map.merge.length },
       current: map.merge.filter((m) => m.waiting).map((m) => m.text),
       waiting: map.merge.filter((m) => m.waiting).length,
     });
-    for (const id of merged) edges.push({ from: id, to: 'merge', labels: [] });
-    goalFrom.push('merge');
+    for (const id of merged) edges.push({ from: id, to: MERGE_ID, labels: [] });
+    goalFrom.push(MERGE_ID);
   }
   const feeds = new Set(edges.map((e) => e.from));
   goalFrom = goalFrom.concat(nodes.filter((n) => n.kind === 'task' && !feeds.has(n.id)).map((n) => n.id));
   const goalCol = Math.max(-1, ...nodes.map((n) => n.col)) + 1;
-  nodes.push({ id: 'goal', kind: 'goal', title: map.goal, col: goalCol });
-  for (const id of goalFrom) edges.push({ from: id, to: 'goal', labels: [] });
+  nodes.push({ id: GOAL_ID, kind: 'goal', title: map.goal, col: goalCol });
+  for (const id of goalFrom) edges.push({ from: id, to: GOAL_ID, labels: [] });
+  for (const [i, lane] of map.side.entries()) nodes.push({ ...taskNode(lane, goalCol + i + 1), side: true });
 
   const perCol = new Map();
   for (const n of nodes) {
     n.row = perCol.get(n.col) ?? 0;
     perCol.set(n.col, n.row + 1);
   }
-  return { nodes, edges, cols: goalCol + 1, rows: Math.max(...perCol.values()) };
+  return { nodes, edges, cols: goalCol + map.side.length + 1, rows: Math.max(...perCol.values()) };
 }
 
 // The map always shows one task opened: where the work is now, otherwise the first one.
 export function defaultOpen(map) {
-  return map.here[0]?.task ?? map.lanes[0]?.id ?? null;
+  return map.here[0]?.task ?? map.lanes[0]?.id ?? map.side[0]?.id ?? null;
 }
 
 // The step shown under the timeline: where work is, otherwise the next unfinished one.

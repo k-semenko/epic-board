@@ -66,21 +66,136 @@ test('layout: edges inside lanes, across lanes with label, into merge and goal',
   const edges = layout.edges.map(key);
   assert.ok(edges.includes('WEB-8:1>WEB-8:2'));
   assert.ok(edges.includes('API-7:0>WEB-8:2|draft schema'));
-  assert.ok(edges.includes('WEB-8:3>merge:4'));
-  assert.ok(edges.includes('merge:6>goal:7'));
-  assert.ok(!edges.some((e) => e.endsWith('>goal:7') && !e.startsWith('merge:')), 'only the merge chain is drawn into the goal; lane-wide arcs were noise');
+  assert.ok(edges.includes('WEB-8:3>@merge:4'));
+  assert.ok(edges.includes('@merge:6>@goal:7'));
+  assert.ok(!edges.some((e) => e.endsWith('>@goal:7') && !e.startsWith('@merge:')), 'only the merge chain is drawn into the goal; lane-wide arcs were noise');
 });
 
 test('layout: active cell is reported for scrolling into view', () => {
   assert.deepEqual(layoutMap(buildLanes(sampleEpic())).focus, { row: 'WEB-8', col: 2 });
 });
 
-test('overview: one card per task, columns by task dependencies, then merge and goal', () => {
+for (const taskId of ['goal', 'merge']) {
+  test(`layout: task id ${taskId} keeps its step chain separate from service rows`, () => {
+    const epic = {
+      title: 'Certificate rollout', goal: 'Staging accepts the certificate',
+      tasks: [{
+        id: taskId, title: 'Staging certificate', role: 'main',
+        branches: [{ repo: 'ops', name: 'feat/certificate' }],
+        steps: [
+          { id: 'issue', title: 'Issue certificate', state: 'done' },
+          { id: 'check', title: 'Check certificate', state: 'active', after: [`${taskId}/issue`] },
+        ],
+      }],
+      mergeOrder: [{ id: 'release', text: 'Release certificate', branch: 'ops:feat/certificate' }],
+    };
+    const layout = layoutMap(buildLanes(epic));
+    assert.deepEqual(layout.rows.map((r) => [r.id, r.kind]), [[taskId, 'lane'], ['@merge', 'merge'], ['@goal', 'goal']]);
+    assert.equal(new Set(layout.rows.map((r) => r.id)).size, layout.rows.length);
+    assert.deepEqual(layout.rows.find((r) => r.kind === 'lane').cells.map((c) => [c.id, c.col]), [['issue', 0], ['check', 1]]);
+    assert.deepEqual(layout.rows.find((r) => r.kind === 'goal').cells.map((c) => [c.id, c.col]), [['@goal', 3]]);
+    assert.deepEqual(layout.edges, [
+      { from: { row: taskId, col: 0 }, to: { row: taskId, col: 1 }, label: null },
+      { from: { row: taskId, col: 1 }, to: { row: '@merge', col: 2 }, label: null },
+      { from: { row: '@merge', col: 2 }, to: { row: '@goal', col: 3 }, label: null },
+    ]);
+    assert.deepEqual(layout.focus, { row: taskId, col: 1 });
+  });
+}
+
+test('overview: side cards follow the goal without moving the task chain', () => {
   const o = buildOverview(sampleEpic());
-  const node = (id) => o.nodes.find((n) => n.id === id);
-  assert.deepEqual(['API-7', 'WEB-8', 'merge', 'goal'].map((id) => node(id).col), [0, 1, 2, 3]);
-  assert.equal(node('OPS-3'), undefined, 'side tasks stay off the overview');
-  assert.equal(o.cols, 4);
+  assert.deepEqual(o.nodes.map((n) => [n.id, n.col, n.row]), [
+    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0], ['OPS-3', 4, 0],
+  ]);
+  assert.equal(o.cols, 5);
+  assert.equal(o.rows, 1);
+});
+
+test('overview: multiple side cards keep their order and have no dependency, merge or goal arrows', () => {
+  const epic = sampleEpic();
+  const side = epic.tasks.find((t) => t.id === 'OPS-3');
+  side.steps = [{ id: 'cert', title: 'Issue staging certificate', state: 'todo', after: ['API-7/meta'] }];
+  side.branches = [{ repo: 'ops', name: 'feat/staging-certificate' }];
+  epic.tasks[1].steps[3].after = ['WEB-8/s3', 'OPS-3/cert'];
+  epic.tasks.push({
+    id: 'DOC-4', title: '[docs] Staging guide', role: 'side',
+    steps: [{ id: 'guide', title: 'Write staging guide', state: 'todo', after: ['OPS-3/cert', 'WEB-8/s4'] }],
+  });
+  epic.mergeOrder.push({ id: 'm4', text: 'Staging certificate', branch: 'ops:feat/staging-certificate' });
+  const o = buildOverview(epic);
+  const sideIds = new Set(['OPS-3', 'DOC-4']);
+  assert.ok(o.edges.every((e) => !sideIds.has(e.from) && !sideIds.has(e.to)));
+  assert.deepEqual(o.edges.map((e) => `${e.from}>${e.to}`).sort(), ['@merge>@goal', 'API-7>WEB-8', 'WEB-8>@merge']);
+  assert.deepEqual(o.nodes.map((n) => [n.id, n.col, n.row]), [
+    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0], ['OPS-3', 4, 0], ['DOC-4', 5, 0],
+  ]);
+  assert.equal(o.cols, 6);
+  assert.equal(o.rows, 1);
+});
+
+test('overview: side task ids goal and merge stay distinct from service nodes', () => {
+  const epic = sampleEpic();
+  epic.tasks = epic.tasks.filter((t) => t.role !== 'side');
+  epic.tasks.push(
+    {
+      id: 'goal', title: '[ops] Staging certificate', role: 'side',
+      steps: [{ id: 'cert', title: 'Issue certificate', state: 'active', after: ['API-7/meta'] }],
+      branches: [{ repo: 'ops', name: 'feat/certificate' }],
+    },
+    {
+      id: 'merge', title: '[docs] Certificate guide', role: 'side',
+      steps: [{ id: 'guide', title: 'Write certificate guide', state: 'todo', after: ['goal/cert'] }],
+      branches: [{ repo: 'docs', name: 'feat/certificate-guide' }],
+    },
+  );
+  epic.tasks[1].steps[3].after = ['WEB-8/s3', 'goal/cert', 'merge/guide'];
+  epic.mergeOrder.push(
+    { id: 'certificate', text: 'Release certificate', branch: 'ops:feat/certificate' },
+    { id: 'guide', text: 'Publish certificate guide', branch: 'docs:feat/certificate-guide' },
+  );
+  const o = buildOverview(epic);
+  assert.equal(new Set(o.nodes.map((n) => n.id)).size, o.nodes.length, 'every task and service node has a unique id');
+  assert.equal(o.nodes.find((n) => n.kind === 'goal').id, '@goal');
+  assert.equal(o.nodes.find((n) => n.kind === 'merge').id, '@merge');
+  assert.deepEqual(o.nodes.filter((n) => n.side).map((n) => [n.id, n.kind]), [['goal', 'task'], ['merge', 'task']]);
+  assert.ok(o.edges.every((e) => !['goal', 'merge'].includes(e.from) && !['goal', 'merge'].includes(e.to)));
+  assert.deepEqual(o.edges.map((e) => `${e.from}>${e.to}`).sort(), ['@merge>@goal', 'API-7>WEB-8', 'WEB-8>@merge']);
+  assert.deepEqual(o.nodes.map((n) => [n.id, n.col, n.row]), [
+    ['API-7', 0, 0], ['WEB-8', 1, 0], ['@merge', 2, 0], ['@goal', 3, 0], ['goal', 4, 0], ['merge', 5, 0],
+  ]);
+  assert.equal(o.cols, 6);
+});
+
+test('overview: side cards carry task metadata and count only unresolved waiting items', () => {
+  const epic = sampleEpic();
+  const side = epic.tasks.find((t) => t.id === 'OPS-3');
+  side.status = 'Testing';
+  side.steps = [
+    { id: 'cert', title: 'Issue staging certificate', state: 'done' },
+    { id: 'check', title: 'Check certificate', state: 'active' },
+    { id: 'deploy', title: 'Deploy certificate', state: 'todo' },
+  ];
+  side.branches = [{ repo: 'ops', name: 'feat/certificate' }, { repo: 'tools', name: 'feat/certificate-check' }];
+  epic.facts['ops:feat/certificate'] = { unpushed: 2, dirty: false };
+  epic.facts['tools:feat/certificate-check'] = { unpushed: 0, dirty: true };
+  epic.waiting.push(
+    { id: 'approve-cert', task: 'OPS-3', title: 'Approve certificate' },
+    { id: 'check-cert', task: 'OPS-3', title: 'Check certificate' },
+    { id: 'issued-cert', task: 'OPS-3', title: 'Issue certificate', doneAt: '2026-10-16T10:00:00Z' },
+  );
+  const card = buildOverview(epic).nodes.find((n) => n.id === 'OPS-3');
+  assert.ok(card, 'the side task has an overview card');
+  assert.equal(card.kind, 'task');
+  assert.equal(card.side, true);
+  assert.equal(card.title, 'Staging certificates');
+  assert.equal(card.fullTitle, '[ops] Staging certificates');
+  assert.equal(card.status, 'Testing');
+  assert.deepEqual(card.progress, { done: 1, total: 3 });
+  assert.deepEqual(card.current, ['Check certificate']);
+  assert.equal(card.waiting, 2);
+  assert.equal(card.unpushed, true);
+  assert.equal(card.dirty, true);
 });
 
 test('overview: card carries progress, current step, waiting count and branch flags', () => {
@@ -99,9 +214,9 @@ test('overview: step links collapse into one labelled arrow per task pair', () =
   epic.tasks[1].steps[3].label = 'nightly results';
   const edges = buildOverview(epic).edges.map((e) => `${e.from}>${e.to}|${e.labels.join(',')}`);
   assert.ok(edges.includes('API-7>WEB-8|draft schema,nightly results'));
-  assert.ok(edges.includes('WEB-8>merge|'));
-  assert.ok(edges.includes('merge>goal|'));
-  assert.ok(!edges.some((e) => e.startsWith('API-7>goal')), 'a task feeding another task does not also point at the goal');
+  assert.ok(edges.includes('WEB-8>@merge|'));
+  assert.ok(edges.includes('@merge>@goal|'));
+  assert.ok(!edges.some((e) => e.startsWith('API-7>@goal')), 'a task feeding another task does not also point at the goal');
 });
 
 test('overview: cards of one column stack in rows', () => {
@@ -122,11 +237,24 @@ test('done waiting items count nowhere', () => {
 });
 
 test('default opened task: the one with the active step, else the first lane', () => {
-  assert.equal(defaultOpen(buildLanes(sampleEpic())), 'WEB-8');
   const epic = sampleEpic();
-  epic.tasks[1].steps[2].state = 'todo';
+  const side = epic.tasks.pop();
+  side.steps = [{ id: 'cert', title: 'Issue certificate', state: 'active' }];
+  epic.tasks.unshift(side);
+  assert.equal(defaultOpen(buildLanes(epic)), 'WEB-8');
+  epic.tasks.find((t) => t.id === 'WEB-8').steps[2].state = 'todo';
   assert.equal(defaultOpen(buildLanes(epic)), 'API-7');
   assert.equal(defaultOpen(buildLanes({ tasks: [] })), null);
+});
+
+test('default opened task: the first side task when no main tasks exist', () => {
+  const epic = {
+    tasks: [
+      { id: 'OPS-3', title: 'Staging certificates', role: 'side', steps: [] },
+      { id: 'DOC-4', title: 'Staging guide', role: 'side', steps: [{ id: 'guide', title: 'Write guide', state: 'active' }] },
+    ],
+  };
+  assert.equal(defaultOpen(buildLanes(epic)), 'OPS-3');
 });
 
 test('default step of a task: active, else the first unfinished, else the last', () => {
