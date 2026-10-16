@@ -28,7 +28,7 @@
     </div>
   </header>
   <p id="export-note" class="export-note" hidden></p>
-  <section class="waiting-section" data-section="waiting"><h2><span data-i18n="sec.waiting">Needs decision</span> <span id="waiting-count" class="waiting-counts"></span></h2><ul id="waiting" class="list"></ul><div id="waiting-announcement" class="sr-only" role="status" aria-live="polite"></div></section>
+  <section class="waiting-section" data-section="waiting"><h2><span data-i18n="sec.waiting">Needs decision</span> <span id="waiting-count" class="waiting-counts"></span></h2><ul id="waiting" class="list"></ul><div id="waiting-pagination"></div><div id="waiting-announcement" class="sr-only" role="status" aria-live="polite"></div></section>
   <section class="map-section" data-section="map"><div class="section-head"><h2 data-i18n="sec.map">Map</h2>
     <div class="map-tools">
       <button type="button" data-fullscreen><span data-icon="expand"></span><span data-i18n="map.full">Full screen</span></button>
@@ -36,8 +36,8 @@
     <div class="map-frame" id="map-frame"><div id="map" class="map"></div></div></section>
   <section data-section="branches"><h2 data-i18n="sec.branches">Branches and merge requests</h2><div class="scroll"><table id="branches"></table></div></section>
   <section data-section="sessions"><h2 data-i18n="sec.sessions">Sessions</h2><ul id="sessions" class="list"></ul></section>
-  <section data-section="decisions"><h2 data-i18n="sec.decisions">Decisions</h2><ul id="decisions" class="list"></ul></section>
-  <section data-section="history"><h2 data-i18n="sec.history">History</h2><ul id="history" class="list history"></ul></section>
+  <section data-section="decisions"><h2 data-i18n="sec.decisions">Decisions</h2><ul id="decisions" class="list"></ul><div id="decisions-pagination"></div></section>
+  <section data-section="history"><h2 data-i18n="sec.history">History</h2><ul id="history" class="list history"></ul><div id="history-pagination"></div></section>
 </main>
 <div id="popover" class="popover" role="dialog" hidden></div>
 <script src="/vendor/marked.min.js"></script>

@@ -8,6 +8,95 @@ const question = (extra = {}) => ({ id: 'q', title: 'Choose storage', kind: 'dec
 const choice = { type: 'single', options: [{ id: 'repo', text: 'Repository', recommended: true, hint: 'Tracked' }, { id: 'board', text: 'Board' }] };
 const round = { revision: 1, version: 'v1', request: { title: 'Original question', input: choice, checklist: [{ id: 'c', text: 'Original prerequisite' }] }, response: { submissionId: 's', at: '2026-10-16T12:00:00Z', by: 'human', selected: ['repo'], checked: ['c'], comment: 'Keep history' }, review: { outcome: 'accepted', at: '2026-10-16T12:01:00Z', by: 'agent', text: 'Recorded in plan' } };
 
+function disclosure(html) {
+  const parts = html.match(/^<li\b[^>]*>\s*<details class="wait-disclosure"([^>]*)>\s*<summary class="wait-summary">([\s\S]*?)<\/summary>\s*<div class="wait-card-body">([\s\S]*)<\/div>\s*<\/details>\s*<\/li>$/);
+  assert.ok(parts, 'the decision card contains one native disclosure with a summary and body');
+  return { attributes: parts[1], summary: parts[2], body: parts[3] };
+}
+
+test('decision cards are collapsed by default for every status and in read-only exports', () => {
+  for (const status of ['open', 'answered', 'closed']) {
+    for (const readOnly of [false, true]) {
+      const card = disclosure(waiting.renderWaitingCard(question({ status }), { readOnly }));
+      assert.doesNotMatch(card.attributes, /\bopen\b/);
+    }
+  }
+});
+
+test('expanded explicitly opens the native disclosure in live and read-only cards', () => {
+  for (const readOnly of [false, true]) {
+    const item = question({ input: choice });
+    const expanded = disclosure(waiting.renderWaitingCard(item, { expanded: true, readOnly }));
+    const collapsed = disclosure(waiting.renderWaitingCard(item, { expanded: false, readOnly }));
+    assert.match(expanded.attributes, /\bopen\b/);
+    assert.doesNotMatch(collapsed.attributes, /\bopen\b/);
+    assert.equal(expanded.body, collapsed.body);
+    assert.match(expanded.body, readOnly ? /Repository/ : /data-wait-form="q"/);
+  }
+});
+
+test('summary shows the title, action type, kind and status while the expanded body retains controls and history', () => {
+  const item = question({
+    input: choice, details: 'Read storage plan', task: 'API-7', refs: ['step:API-7/meta'],
+    revision: 2, version: 'v2', rounds: [round], checklist: [{ id: 'c', text: 'Read plan' }],
+  });
+  const drafts = new waiting.DecisionDrafts('disclosure', null);
+  drafts.update(item, { selected: ['repo'], checked: ['c'], comment: 'Keep draft' });
+  const options = { draft: drafts.get(item) };
+  const card = disclosure(waiting.renderWaitingCard(item, { ...options, expanded: true }));
+  assert.match(card.summary, /<h3 id="waiting-title-q">Choose storage<\/h3>/);
+  assert.match(card.summary, /class="wait-card-top"/);
+  assert.match(card.summary, /Single choice · decision/);
+  assert.match(card.summary, /class="wait-status">Waiting for you<\/span>/);
+  assert.doesNotMatch(card.summary, /Read storage plan|API-7|Repository|Keep draft|<form|<input|<textarea/);
+  for (const markup of [/class="wait-details md"/, /class="wait-meta"/, /class="wait-refs"/, /data-wait-form="q"/, /data-version="v2"/, /name="selected" value="repo" checked/, /name="checked" value="c" checked/, /Keep draft/, /class="wait-history"/, /Original question/]) {
+    assert.match(card.body, markup);
+  }
+  const collapsed = disclosure(waiting.renderWaitingCard(item, options));
+  assert.doesNotMatch(collapsed.attributes, /\bopen\b/);
+  assert.equal(collapsed.body, card.body);
+});
+
+function draftHistoryFixture() {
+  const drafts = new waiting.DecisionDrafts('disclosure-parts', null);
+  drafts.update(question({ input: choice }), { selected: ['repo'], checked: [], comment: 'Previous local answer' });
+  const item = question({ input: choice, revision: 2, version: 'v2', rounds: [round] });
+  return { item, draft: drafts.refresh(item) };
+}
+
+test('card, comment, previous drafts and revision history have distinct disclosure identifiers', () => {
+  const { item, draft } = draftHistoryFixture();
+  const html = waiting.renderWaitingCard(item, { draft, expanded: true });
+  const parts = [...html.matchAll(/<details\b[^>]*data-wait-part="([^"]+)"[^>]*>/g)].map((match) => match[1]);
+  assert.deepEqual(parts.sort(), ['card', 'comment', 'drafts', 'history']);
+  assert.match(html, /<details class="wait-disclosure" open data-wait-part="card">/);
+  assert.match(html, /<details class="wait-comment"[^>]*data-wait-part="comment"/);
+  assert.match(html, /<details class="wait-history"[^>]*data-wait-part="drafts"/);
+  assert.match(html, /<details class="wait-history"[^>]*data-wait-part="history"/);
+});
+
+test('revealHistory opens both previous drafts and revision history while normal renders keep them closed', () => {
+  const { item, draft } = draftHistoryFixture();
+  const historyTags = (html) => [...html.matchAll(/<details class="wait-history"([^>]*)>/g)].map((match) => match[1]);
+  for (const options of [{}, { revealHistory: false }]) {
+    const tags = historyTags(waiting.renderWaitingCard(item, { draft, expanded: true, ...options }));
+    assert.equal(tags.length, 2);
+    for (const attributes of tags) assert.doesNotMatch(attributes, /\bopen\b/);
+  }
+  const html = waiting.renderWaitingCard(item, { draft, expanded: true, revealHistory: true });
+  const revealed = historyTags(html);
+  assert.equal(revealed.length, 2);
+  for (const attributes of revealed) assert.match(attributes, /\bopen\b/);
+  assert.match(html, /Previous local answer/);
+  assert.match(html, /Original question/);
+  assert.doesNotMatch(html, /<details class="wait-comment" open/);
+  const exported = waiting.renderWaitingCard(item, { draft, expanded: true, revealHistory: true, readOnly: true });
+  const exportedHistory = historyTags(exported);
+  assert.equal(exportedHistory.length, 1);
+  assert.match(exportedHistory[0], /\bopen\b/);
+  assert.doesNotMatch(exported, /Previous local answer|<form/);
+});
+
 test('renders native choice controls without selecting a recommendation and keeps checklist separate', () => {
   const html = waiting.renderWaitingCard(question({ input: choice, checklist: [{ id: 'c', text: 'Read plan' }] }));
   assert.match(html, /<fieldset[^>]*>[\s\S]*<legend>Choose one option<\/legend>/);

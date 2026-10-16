@@ -5,6 +5,7 @@ import { renderMarkdown } from './markdown.mjs';
 import { t, getLang, setLang, locale } from './i18n.mjs';
 import { bindSectionSettings } from './section-settings.mjs';
 import { DecisionDrafts, renderWaitingCard, waitingCounts, waitingSearchText } from './waiting.mjs';
+import { paginate, renderPagination } from './pagination.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -25,7 +26,10 @@ const EXPORT = typeof window !== 'undefined' ? window.__EPIC_EXPORT__ || null : 
 function exportApi(path, method) {
   if (method !== 'GET') throw new Error(t('export.readOnly'));
   if (path === '/api/settings') return EXPORT.settings || {};
-  if (/\/history/.test(path)) return EXPORT.history.slice(0, Number(new URLSearchParams(path.split('?')[1]).get('limit')) || 20);
+  if (/\/history/.test(path)) {
+    const limit = new URLSearchParams(path.split('?')[1]).get('limit');
+    return limit === 'all' ? EXPORT.history : EXPORT.history.slice(0, Number(limit) || 20);
+  }
   if (/\/docs-text$/.test(path)) return EXPORT.docs || [];
   const doc = path.match(/\/docs\/([^/]+)$/);
   if (doc) {
@@ -189,6 +193,10 @@ function taskInfo(epic, id) {
 
 let current = null;
 let currentHistory = [];
+const pageSizes = { waiting: 5, decisions: 5, history: 5 };
+const sectionPages = { waiting: 1, decisions: 1, history: 1 };
+const waitingExpansion = new Map();
+let savingPageSizes = false;
 
 const stateText = (state) => t(`state.${state}`);
 const stateIcon = (state) => icon(STATE_ICON[state] || 'circle', `st-${state}`);
@@ -823,24 +831,53 @@ function refChip(epic, ref) {
   return `<button type="button" class="ref" ${attrs}>${icon(ic)}<span>${esc(label)}</span></button>`;
 }
 
-function renderWaiting(epic) {
+function sortedWaiting(epic) {
+  const rank = { open: 0, answered: 1, closed: 2 };
+  return [...(epic.waiting || [])].sort((a, b) => (rank[a.status] ?? (a.doneAt ? 2 : 0)) - (rank[b.status] ?? (b.doneAt ? 2 : 0)) || String(a.since).localeCompare(String(b.since)));
+}
+
+function captureWaitingExpansion() {
+  for (const card of $('#waiting').querySelectorAll('[data-sid]')) {
+    waitingExpansion.set(card.dataset.sid, new Map([...card.querySelectorAll('details[data-wait-part]')].map((el) => [el.dataset.waitPart, el.open])));
+  }
+}
+
+function pageItems(block, items) {
+  const data = paginate(items, sectionPages[block], pageSizes[block]);
+  sectionPages[block] = data.page;
+  $(`#${block}-pagination`).innerHTML = renderPagination(block, data, pageSizes[block], { readOnly: Boolean(EXPORT), saving: savingPageSizes });
+  return data.items;
+}
+
+function renderWaiting(epic, revealId, revealHistory = false) {
   const root = $('#waiting');
   const active = document.activeElement;
   const activeForm = active?.closest('[data-wait-form]');
   const focus = activeForm ? { id: activeForm.dataset.waitForm, name: active.name, value: active.value, start: active.selectionStart, end: active.selectionEnd } : null;
-  const expanded = [...root.querySelectorAll('details[open]')].map((el) => ({ id: el.closest('[data-sid]').dataset.sid, cls: el.className }));
-  const rank = { open: 0, answered: 1, closed: 2 };
-  const waiting = [...(epic.waiting || [])].sort((a, b) => (rank[a.status] ?? (a.doneAt ? 2 : 0)) - (rank[b.status] ?? (b.doneAt ? 2 : 0)) || String(a.since).localeCompare(String(b.since)));
-  root.innerHTML = waiting.map((item) => renderWaitingCard(item, {
+  captureWaitingExpansion();
+  if (revealId) {
+    const expanded = waitingExpansion.get(revealId) || new Map();
+    expanded.set('card', true);
+    if (revealHistory) {
+      expanded.set('history', true);
+      expanded.set('drafts', true);
+    }
+    waitingExpansion.set(revealId, expanded);
+  }
+  const waiting = sortedWaiting(epic);
+  root.innerHTML = pageItems('waiting', waiting).map((item) => renderWaitingCard(item, {
     readOnly: Boolean(EXPORT),
+    expanded: waitingExpansion.get(`w-${item.id}`)?.get('card'),
+    revealHistory: revealHistory && revealId === `w-${item.id}`,
     draft: EXPORT ? undefined : item.status === 'open' ? decisionDrafts.get(item) : decisionDrafts.peek(item.id),
     renderDetails: (text) => renderMd(text).html,
     refChip: (ref) => refChip(epic, ref),
   })).join('') || `<li class="muted">${esc(t('none.waiting'))}</li>`;
-  for (const { id, cls } of expanded) {
-    const card = [...root.querySelectorAll('[data-sid]')].find((el) => el.dataset.sid === id);
-    const details = [...(card?.querySelectorAll('details') || [])].find((el) => el.className === cls);
-    if (details) details.open = true;
+  for (const card of root.querySelectorAll('[data-sid]')) {
+    for (const details of card.querySelectorAll('details[data-wait-part]')) {
+      const expanded = waitingExpansion.get(card.dataset.sid);
+      if (expanded?.has(details.dataset.waitPart)) details.open = expanded.get(details.dataset.waitPart);
+    }
   }
   if (focus) {
     const form = [...root.querySelectorAll('[data-wait-form]')].find((el) => el.dataset.waitForm === focus.id);
@@ -852,6 +889,93 @@ function renderWaiting(epic) {
   }
   const counts = waitingCounts(waiting);
   $('#waiting-count').innerHTML = ['open', 'answered', 'closed'].map((status) => `<span>${esc(t(`w.status.${status}`))} <b>${counts[status]}</b></span>`).join('');
+}
+
+function renderDecisions(epic) {
+  $('#decisions').innerHTML = pageItems('decisions', [...(epic.decisions || [])].reverse()).map((d) => `<li data-sid="d-${esc(d.id)}"><span class="mono muted">${esc(String(d.at).slice(0, 10))}</span>${d.task ? `<span class="chip">${esc(d.task)}</span>` : ''}<span>${esc(d.text)}</span>${d.by ? `<span class="muted">${esc(d.by)}</span>` : ''}</li>`).join('') || `<li class="muted">${esc(t('none.decisions'))}</li>`;
+}
+
+function renderHistory(history) {
+  $('#history').innerHTML = pageItems('history', historyEntries(history)).map(({ event: h, target, description: d }) => {
+    const value = d.change === 'add' ? `<span class="hv-new">${esc(d.after ?? '')}</span>`
+      : d.change === 'remove' ? `<span class="hv-old">${esc(d.before ?? '')}</span>`
+      : `<span class="hv-old">${esc(d.before ?? '—')}</span>${icon('arrowRight', 'inl')}<span class="hv-new">${esc(d.after ?? '—')}</span>`;
+    const by = ['agent', 'cli', 'refresh', 'button', 'hook'].includes(h.by) ? t(`by.${h.by}`) : cap(h.by);
+    return `<li data-sid="${target}"><div class="h-line"><span class="h-time muted">${agoTag(h.at)}</span><span class="chip">${esc(by)}</span><span class="h-where">${esc(cap(d.where))}</span></div>
+      <div class="h-change"><span class="h-what muted">${esc(cap(d.what))}:</span> ${value}</div>${h.why ? `<div class="h-why muted">${esc(cap(h.why))}</div>` : ''}</li>`;
+  }).join('') || `<li class="muted">${esc(t('none.history'))}</li>`;
+}
+
+function renderSection(block) {
+  if (block === 'waiting') renderWaiting(current);
+  if (block === 'decisions') renderDecisions(current);
+  if (block === 'history') renderHistory(currentHistory);
+}
+
+function changeSectionPage(block, page) {
+  if (!Object.hasOwn(sectionPages, block)) return;
+  sectionPages[block] = page;
+  renderSection(block);
+}
+
+function applyPageSettings(settings) {
+  for (const block of Object.keys(pageSizes)) {
+    const value = settings.epicPageSizes?.[block];
+    const size = [5, 10, 15].includes(value) ? value : 5;
+    if (pageSizes[block] === size) continue;
+    pageSizes[block] = size;
+    sectionPages[block] = 1;
+    if (current) renderSection(block);
+  }
+}
+
+function refreshPagers() {
+  if (!current) return;
+  for (const [block, items] of Object.entries({ waiting: sortedWaiting(current), decisions: current.decisions || [], history: historyEntries(currentHistory) })) pageItems(block, items);
+}
+
+function bindPagination(saveSettings) {
+  $('#epic').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-page]');
+    if (!button || button.disabled) return;
+    const block = button.closest('[data-page-block]').dataset.pageBlock;
+    changeSectionPage(block, Number(button.dataset.page));
+    const list = $(`#${block}`);
+    list.tabIndex = -1;
+    list.focus({ preventScroll: true });
+    list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('#epic').addEventListener('change', async (event) => {
+    const select = event.target.closest('[data-page-size]');
+    if (!select || EXPORT || savingPageSizes) return;
+    const block = select.dataset.pageSize;
+    const size = Number(select.value);
+    if (![5, 10, 15].includes(size)) return;
+    savingPageSizes = true;
+    refreshPagers();
+    try {
+      await saveSettings({ epicPageSizes: { [block]: size } });
+    } catch (error) {
+      alertBox(error.message);
+    } finally {
+      savingPageSizes = false;
+      refreshPagers();
+      $(`[data-page-size="${block}"]`)?.focus({ preventScroll: true });
+    }
+  });
+}
+
+function revealPaginatedTarget(sid, revealHistory = false) {
+  if (!current) return;
+  const lists = { waiting: sortedWaiting(current).map((item) => `w-${item.id}`), decisions: [...(current.decisions || [])].reverse().map((item) => `d-${item.id}`), history: historyEntries(currentHistory).map((item) => item.target) };
+  for (const [block, ids] of Object.entries(lists)) {
+    const index = ids.indexOf(sid);
+    if (index < 0) continue;
+    sectionPages[block] = Math.floor(index / pageSizes[block]) + 1;
+    if (block === 'waiting') renderWaiting(current, sid, revealHistory);
+    else renderSection(block);
+    return;
+  }
 }
 
 function bindDecisionForms(id) {
@@ -888,12 +1012,12 @@ function bindDecisionForms(id) {
       const epic = await result;
       if (!epic) return;
       current = epic;
-      renderWaiting(epic);
+      revealPaginatedTarget(`w-${item.id}`);
       $('#waiting-announcement').textContent = t('w.saved');
       await renderEpic(id).catch((error) => alertBox(error.message));
     } catch (error) {
       if (error.status === 409) await renderEpic(id).catch(() => {});
-      renderWaiting(current);
+      revealPaginatedTarget(`w-${item.id}`);
       const card = [...root.querySelectorAll('[data-sid]')].find((el) => el.dataset.sid === `w-${item.id}`);
       const message = card?.querySelector('[data-wait-error]');
       if (message) {
@@ -962,7 +1086,7 @@ function branchRows(epic) {
 }
 
 async function renderEpic(id) {
-  const [epic, history] = await Promise.all([api(`/api/epics/${enc(id)}`), api(`/api/epics/${enc(id)}/history?limit=200`).catch(() => [])]);
+  const [epic, history] = await Promise.all([api(`/api/epics/${enc(id)}`), api(`/api/epics/${enc(id)}/history?limit=all`).catch(() => [])]);
   currentHistory = history;
   current = epic;
   document.title = `${epic.id} · ${epic.title}`;
@@ -973,18 +1097,11 @@ async function renderEpic(id) {
   renderMapArea(epic);
   renderWaiting(epic);
   $('#branches').innerHTML = branchRows(epic);
-  $('#decisions').innerHTML = [...(epic.decisions || [])].reverse().slice(0, 10).map((d) => `<li data-sid="d-${esc(d.id)}"><span class="mono muted">${esc(String(d.at).slice(0, 10))}</span>${d.task ? `<span class="chip">${esc(d.task)}</span>` : ''}<span>${esc(d.text)}</span>${d.by ? `<span class="muted">${esc(d.by)}</span>` : ''}</li>`).join('') || `<li class="muted">${esc(t('none.decisions'))}</li>`;
+  renderDecisions(epic);
   $('#sessions').innerHTML = [...(epic.sessions || [])].sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt))).map((x) => `<li class="session" data-sid="s-${esc(x.id)}">
       <div class="session-head">${agentBadge(x.agent)}<code class="muted">${esc(x.id.slice(0, 8))}</code>${x.task ? `<span class="chip">${esc(x.task)}</span>` : ''}<span class="muted session-time">${icon('clock')}<span class="phrase">${agoText(x.lastAt)}</span></span></div>
       <dl class="session-body"><dt>${esc(t('session.doing'))}</dt><dd>${esc(x.doing ?? '—')}</dd><dt>${esc(t('session.next'))}</dt><dd>${esc(x.next ?? '—')}</dd></dl></li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
-  $('#history').innerHTML = historyEntries(history).map(({ event: h, target, description: d }) => {
-    const value = d.change === 'add' ? `<span class="hv-new">${esc(d.after ?? '')}</span>`
-      : d.change === 'remove' ? `<span class="hv-old">${esc(d.before ?? '')}</span>`
-      : `<span class="hv-old">${esc(d.before ?? '—')}</span>${icon('arrowRight', 'inl')}<span class="hv-new">${esc(d.after ?? '—')}</span>`;
-    const by = ['agent', 'cli', 'refresh', 'button', 'hook'].includes(h.by) ? t(`by.${h.by}`) : cap(h.by);
-    return `<li data-sid="${target}"><div class="h-line"><span class="h-time muted">${agoTag(h.at)}</span><span class="chip">${esc(by)}</span><span class="h-where">${esc(cap(d.where))}</span></div>
-      <div class="h-change"><span class="h-what muted">${esc(cap(d.what))}:</span> ${value}</div>${h.why ? `<div class="h-why muted">${esc(cap(h.why))}</div>` : ''}</li>`;
-  }).join('') || `<li class="muted">${esc(t('none.history'))}</li>`;
+  renderHistory(history);
   buildSearchIndex(epic, history);
 }
 
@@ -1017,7 +1134,8 @@ function buildSearchIndex(epic, history) {
   }).catch(() => {});
 }
 
-function flash(sid) {
+function flash(sid, revealHistory = false) {
+  revealPaginatedTarget(sid, revealHistory);
   const el = document.querySelector(`[data-sid="${CSS.escape(sid)}"]`);
   if (!el) return;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1068,7 +1186,7 @@ function bindSearch() {
         return;
       }
       if (it.open) toggleDetail(it.open);
-      requestAnimationFrame(() => (it.target ? flash(it.target) : $('#map-frame')?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
+      requestAnimationFrame(() => (it.target ? flash(it.target, true) : $('#map-frame')?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
       return;
     }
     if (!e.target.closest('.top-search')) $('#search-results').hidden = true;
@@ -1215,7 +1333,8 @@ async function bootEpic() {
   bindSearch();
   bindDocs();
   if (!EXPORT) bindDecisionForms(id);
-  const sectionSettings = bindSectionSettings({ api, onError: alertBox, readOnly: Boolean(EXPORT) });
+  const sectionSettings = bindSectionSettings({ api, onError: alertBox, onSettings: applyPageSettings, readOnly: Boolean(EXPORT) });
+  bindPagination(sectionSettings.save);
   await Promise.all([renderEpic(id), sectionSettings.reload().catch((err) => alertBox(err.message))]);
   $('#refresh-all').addEventListener('click', () => refreshModal(current));
   document.addEventListener('click', (e) => {

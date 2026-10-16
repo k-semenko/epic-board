@@ -49,11 +49,11 @@ function requestMarkup(request, renderDetails, refChip) {
     ${optionsList(request)}${request.checklist?.length ? `<div class="wait-label">${esc(t('w.prerequisites'))}</div><ul>${request.checklist.map((item) => `<li>${esc(item.text)}</li>`).join('')}</ul>` : ''}`;
 }
 
-function historyMarkup(item, currentRound, renderDetails, refChip) {
+function historyMarkup(item, currentRound, renderDetails, refChip, revealHistory) {
   const previous = (item.rounds || []).filter((round) => round !== currentRound);
   const legacy = item.legacyClosure;
   if (!previous.length && !legacy) return '';
-  return `<details class="wait-history"><summary>${esc(t('w.history'))} · ${previous.length + (legacy ? 1 : 0)}</summary>
+  return `<details class="wait-history"${revealHistory ? ' open' : ''} data-wait-part="history"><summary>${esc(t('w.history'))} · ${previous.length + (legacy ? 1 : 0)}</summary>
     ${previous.map((round) => `<section class="wait-history-round"><div class="wait-label">${esc(t('w.revision', { n: round.revision }))}</div>${requestMarkup(round.request, renderDetails, refChip)}${responseMarkup(round.request, round.response)}${reviewMarkup(round.review)}</section>`).join('')}
     ${legacy ? `<section class="wait-history-round"><div class="wait-label">${esc(t('w.legacy'))} · ${date(legacy.doneAt)}</div>${requestMarkup(legacy.request, renderDetails, refChip)}${legacy.resolution ? `<p>${esc(legacy.resolution)}</p>` : ''}${legacy.checked?.length ? `<ul>${legacy.checked.map((id) => `<li>${esc(legacy.request.checklist?.find((c) => c.id === id)?.text || id)}</li>`).join('')}</ul>` : ''}</section>` : ''}</details>`;
 }
@@ -74,30 +74,32 @@ function formMarkup(item, draft, stale) {
     <fieldset${stale || draft?.busy ? ' disabled' : ''}>
     ${input.type !== 'confirm' ? `<fieldset><legend>${esc(t(input.type === 'single' ? 'w.chooseSingle' : 'w.chooseMulti'))}</legend><div class="wait-options">${(input.options || []).map((option) => `<label class="wait-option"><input type="${input.type === 'single' ? 'radio' : 'checkbox'}" name="selected" value="${esc(option.id)}"${selected.includes(option.id) && !stale ? ' checked' : ''}><span><span>${esc(option.text)}</span>${option.hint ? `<small>${esc(option.hint)}</small>` : ''}${option.recommended ? `<small>${esc(t('w.recommended'))}</small>` : ''}</span></label>`).join('')}</div></fieldset>` : ''}
     ${item.checklist?.length ? `<fieldset class="wait-prerequisites"><legend>${esc(t('w.prerequisites'))}</legend>${item.checklist.map((condition) => `<label class="wait-option"><input type="checkbox" name="checked" value="${esc(condition.id)}"${checked.includes(condition.id) && !stale ? ' checked' : ''}><span>${esc(condition.text)}</span></label>`).join('')}</fieldset>` : ''}
-    <details class="wait-comment"${comment && !stale ? ' open' : ''}><summary>${esc(t('w.addComment'))}</summary><textarea name="comment" rows="2" aria-label="${esc(t('w.comment'))}" placeholder="${esc(t('w.optional'))}">${esc(stale ? '' : comment)}</textarea></details>
+    <details class="wait-comment"${comment && !stale ? ' open' : ''} data-wait-part="comment"><summary>${esc(t('w.addComment'))}</summary><textarea name="comment" rows="2" aria-label="${esc(t('w.comment'))}" placeholder="${esc(t('w.optional'))}">${esc(stale ? '' : comment)}</textarea></details>
     <div class="wait-actions"><button class="primary" type="submit">${esc(t(draft?.busy ? 'w.submitting' : 'w.submit'))}</button></div></fieldset>
     <p class="wait-error" data-wait-error role="alert"${draft?.error ? '' : ' hidden'}>${esc(draft?.error || '')}</p></form>`;
 }
 
-export function renderWaitingCard(item, { draft, readOnly = false, renderDetails = esc, refChip = (ref) => `<span class="ref">${esc(ref)}</span>` } = {}) {
+export function renderWaitingCard(item, { draft, readOnly = false, expanded = false, revealHistory = false, renderDetails = esc, refChip = (ref) => `<span class="ref">${esc(ref)}</span>` } = {}) {
   const status = statusOf(item);
   const currentRound = status !== 'open' ? (item.rounds || []).findLast((round) => round.revision === item.revision) : null;
   const stale = Boolean(draft && draft.version !== item.version);
   const type = item.input?.type || 'confirm';
   const oldDrafts = [...(draft?.previous || []), ...(stale ? [draft] : [])];
   return `<li class="wait decision-card" data-status="${esc(status)}" data-sid="w-${esc(item.id)}" id="waiting-${esc(item.id)}" aria-labelledby="waiting-title-${esc(item.id)}">
-    <div class="wait-card-top"><span class="wait-type">${esc(t(`w.type.${type}`))} · ${esc(t(`w.kind.${item.kind || 'other'}`))}</span><span class="wait-status">${esc(t(status === 'open' && item.revisionReason ? 'w.clarification' : `w.status.${status}`))}</span></div>
-    <h3 id="waiting-title-${esc(item.id)}">${esc(item.title)}</h3>${item.details ? `<div class="wait-details md">${renderDetails(item.details)}</div>` : ''}
+    <details class="wait-disclosure"${expanded ? ' open' : ''} data-wait-part="card">
+    <summary class="wait-summary"><h3 id="waiting-title-${esc(item.id)}">${esc(item.title)}</h3>
+    <div class="wait-card-top"><span class="wait-type">${esc(t(`w.type.${type}`))} · ${esc(t(`w.kind.${item.kind || 'other'}`))}</span><span class="wait-status">${esc(t(status === 'open' && item.revisionReason ? 'w.clarification' : `w.status.${status}`))}</span></div></summary>
+    <div class="wait-card-body">${item.details ? `<div class="wait-details md">${renderDetails(item.details)}</div>` : ''}
     <div class="wait-meta"><span class="mono">${esc(item.id)}</span><span>${esc(t('w.revision', { n: item.revision || 1 }))}</span>${item.since ? date(item.since) : ''}${item.task ? refChip(`task:${item.task}`) : ''}</div>
     ${item.refs?.length ? `<div class="wait-refs">${item.refs.map(refChip).join('')}</div>` : ''}
     ${item.revisionReason ? `<div class="wait-outcome revised"><div class="wait-label">${esc(t('w.revisionReason'))}</div><p>${esc(item.revisionReason)}</p></div>` : ''}
     ${stale && !readOnly ? `<div class="wait-conflict" role="status"><p>${esc(t('w.stale'))}</p><button type="button" data-wait-refresh="${esc(item.id)}">${esc(t('w.readCurrent'))}</button></div>` : ''}
-    ${oldDrafts.length && !readOnly ? `<details class="wait-history"${stale ? ' open' : ''}><summary>${esc(t('w.previousDraft'))}</summary>${oldDrafts.map(draftMarkup).join('')}</details>` : ''}
+    ${oldDrafts.length && !readOnly ? `<details class="wait-history"${stale || revealHistory ? ' open' : ''} data-wait-part="drafts"><summary>${esc(t('w.previousDraft'))}</summary>${oldDrafts.map(draftMarkup).join('')}</details>` : ''}
     ${status === 'open' ? (readOnly ? `${optionsList(item)}${item.checklist?.length ? `<div class="wait-label">${esc(t('w.prerequisites'))}</div><ul>${item.checklist.map((c) => `<li>${esc(c.text)}</li>`).join('')}</ul>` : ''}` : formMarkup(item, draft, stale)) : ''}
     ${currentRound ? responseMarkup(currentRound.request, currentRound.response) : ''}
     ${status === 'answered' ? `<p class="wait-next">${esc(t('w.manualHandoff'))}</p>` : ''}
     ${status === 'closed' && currentRound ? reviewMarkup(currentRound.review || { outcome: 'accepted', at: item.doneAt, text: item.resolution }) : ''}
-    ${historyMarkup(item, currentRound, renderDetails, refChip)}</li>`;
+    ${historyMarkup(item, currentRound, renderDetails, refChip, revealHistory)}</div></details></li>`;
 }
 
 export class DecisionDrafts {

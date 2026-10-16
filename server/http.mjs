@@ -106,7 +106,10 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       const tail = parts.slice(3).join('/');
       if (m === 'GET' && tail === '') return send(res, 200, store.readEpic(id));
       if (m === 'GET' && tail === 'rev') return send(res, 200, { updatedAt: store.readEpic(id).updatedAt });
-      if (m === 'GET' && tail === 'history') return send(res, 200, store.readHistory(id, { limit: Math.min(Number(url.searchParams.get('limit')) || 20, 500) }));
+      if (m === 'GET' && tail === 'history') {
+        const limit = url.searchParams.get('limit');
+        return send(res, 200, store.readHistory(id, { limit: limit === 'all' ? Infinity : Math.min(Number(limit) || 20, 500) }));
+      }
       if (tail === 'docs' && m === 'POST') {
         const body = await readBody(req);
         const fields = { task: body.task || undefined, step: body.step || undefined, kind: body.kind, title: body.title, path: body.path };

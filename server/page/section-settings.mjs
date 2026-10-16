@@ -13,13 +13,40 @@ export function applySectionOrder(value) {
   }
 }
 
-export function bindSectionSettings({ api, onError, readOnly = false }) {
-  const reload = async () => {
-    const settings = await api('/api/settings');
+export function bindSectionSettings({ api, onError, onSettings = () => {}, readOnly = false }) {
+  let acceptedSettings = {};
+  let epoch = 0;
+  let latestRead = 0;
+  let pendingSaves = 0;
+  let saveQueue = Promise.resolve();
+  const currentOrder = () => normalizeSectionOrder(acceptedSettings.epicSectionOrder);
+  const applySettings = (settings) => {
+    acceptedSettings = settings;
     applySectionOrder(settings.epicSectionOrder);
-    return normalizeSectionOrder(settings.epicSectionOrder);
+    onSettings(settings);
+    return settings;
+  };
+  const reload = async () => {
+    if (pendingSaves) return currentOrder();
+    const startedEpoch = epoch;
+    const read = ++latestRead;
+    const isCurrent = () => startedEpoch === epoch && read === latestRead && !pendingSaves;
+    try {
+      const settings = await api('/api/settings');
+      if (isCurrent()) applySettings(settings);
+    } catch (error) {
+      if (isCurrent()) throw error;
+    }
+    return currentOrder();
   };
   if (readOnly) return { reload };
+  const save = (body) => {
+    epoch++;
+    pendingSaves++;
+    const saving = saveQueue.then(async () => applySettings(await api('/api/settings', { method: 'PUT', body })));
+    saveQueue = saving.catch(() => {});
+    return saving.finally(() => { pendingSaves--; });
+  };
 
   const toggle = document.querySelector('#settings-toggle');
   const menu = document.querySelector('#settings-menu');
@@ -116,8 +143,7 @@ export function bindSectionSettings({ api, onError, readOnly = false }) {
     for (const button of dialog.querySelectorAll('button')) button.disabled = true;
     dialog.querySelector('[data-order-save] span').textContent = t('settings.saving');
     try {
-      const settings = await api('/api/settings', { method: 'PUT', body: { epicSectionOrder: draft } });
-      applySectionOrder(settings.epicSectionOrder);
+      await save({ epicSectionOrder: draft });
       dialog.close();
     } catch (err) {
       error.textContent = err.message;
@@ -170,5 +196,5 @@ export function bindSectionSettings({ api, onError, readOnly = false }) {
   dialog.addEventListener('pointercancel', clearDrag);
   dialog.addEventListener('lostpointercapture', clearDrag);
   dialog.addEventListener('close', clearDrag);
-  return { reload };
+  return { reload, save };
 }

@@ -88,7 +88,7 @@ export function describeEvent(e) {
 
 export function historyEntries(history) {
   return history.map((event, index) => ({ event, target: `h-${index}` }))
-    .filter(({ event }) => !/^waiting\[[^\]]+\]\.version$/.test(event.path)).slice(0, 20)
+    .filter(({ event }) => !/^waiting\[[^\]]+\]\.version$/.test(event.path))
     .map((entry) => {
       const description = describeEvent(entry.event);
       return { ...entry, description, searchText: [description.where, description.what, description.before, description.after].filter(Boolean).join(' · ') };

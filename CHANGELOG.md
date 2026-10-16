@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Independent pagination for waiting items, decisions and history, with shared 5/10/15 page-size settings saved across restarts and included in exports.
 - Shared epic page block order, configured from the header with drag and drop or keyboard controls and preserved in HTML exports.
 
 ### Changed
@@ -21,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Browse off-chain cards without changing the opened task or step; select a task only when its card is activated.
 - Reserve horizontal scrollbar space in the step timeline to keep the document and preview panels from shifting between tasks.
 - Open document viewing, editing and creation below the header without changing page spacing or hiding the page scrollbar.
+- Collapse waiting items to their title, status and action type by default; keep drafts while paging and reveal search results on their page.
 
 ## [0.5.1] - 2026-10-16
 

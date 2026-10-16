@@ -55,14 +55,23 @@ test('errors carry status and json', async () => {
 test('global settings can be saved without changing epic data or history', async () => {
   const defaults = await call('/api/settings');
   assert.equal(defaults.status, 200);
-  assert.deepEqual(await defaults.json(), { epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'] });
+  assert.deepEqual(await defaults.json(), {
+    epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
+    epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
+  });
   const before = await (await call('/api/epics/5')).json();
   const history = await (await call('/api/epics/5/history')).json();
   const settings = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
+  const expected = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 } };
   const saved = await call('/api/settings', { method: 'PUT', body: settings });
   assert.equal(saved.status, 200);
-  assert.deepEqual(await saved.json(), settings);
-  assert.deepEqual(await (await call('/api/settings')).json(), settings);
+  assert.deepEqual(await saved.json(), expected);
+  assert.deepEqual(await (await call('/api/settings')).json(), expected);
+  const resized = await call('/api/settings', { method: 'PUT', body: { epicPageSizes: { waiting: 10, history: 15 } } });
+  const resizedSettings = { ...settings, epicPageSizes: { waiting: 10, decisions: 5, history: 15 } };
+  assert.equal(resized.status, 200);
+  assert.deepEqual(await resized.json(), resizedSettings);
+  assert.deepEqual(await (await call('/api/settings')).json(), resizedSettings);
   assert.deepEqual(await (await call('/api/epics/5')).json(), before);
   assert.deepEqual(await (await call('/api/epics/5/history')).json(), history);
 });
@@ -76,6 +85,10 @@ test('invalid settings requests return 400 and preserve the saved order', async 
     { epicSectionOrder: ['map', 'map', 'branches', 'sessions', 'decisions', 'history'] },
     { epicSectionOrder: ['other', 'waiting', 'branches', 'sessions', 'decisions', 'history'] },
     { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'], port: 1234 },
+    { epicPageSizes: {} },
+    { epicPageSizes: { waiting: '10' } },
+    { epicPageSizes: { waiting: 20 } },
+    { epicPageSizes: { map: 10 } },
   ];
   for (const body of invalid) {
     const response = await call('/api/settings', { method: 'PUT', body });
