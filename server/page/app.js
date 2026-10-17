@@ -351,7 +351,7 @@ function renderOverview(ov, open) {
     return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
   const chainTitle = ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : '';
-  return `<div class="overview${ov.side.length ? ' has-side' : ''}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapZoomControl()}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
+  return `<div class="overview${ov.side.length ? ' has-side' : ''}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapZoomControl()}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" data-h="${height}" style="max-width:${width}px">
     <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
     ${edges}${cards}</svg></div></section>${renderSideStack(ov.side, open)}</div>`;
 }
@@ -368,15 +368,21 @@ function narrowFlow(steps) {
 }
 
 const TL = { colW: 200, nodeW: 168, nodeH: 84, rowH: 100, pad: 24 };
-const tlState = { focused: null, open: null, step: null, allDocs: false, side: null, sideBusy: false, mapScale: 1 };
+const tlState = { focused: null, focusedStep: null, open: null, step: null, allDocs: false, side: null, sideBusy: false, mapScale: 1 };
 
 function nodeX(col) { return TL.pad + col * TL.colW; }
 function rowY(i) { return i * TL.rowH + (TL.rowH - TL.nodeH) / 2; }
 
+function timelineSize(layout) {
+  return {
+    width: TL.pad * 2 + layout.cols * TL.colW - (TL.colW - TL.nodeW),
+    height: layout.rows.length * TL.rowH,
+  };
+}
+
 // The steps are drawn from data: columns come from layoutMap, so a new step needs no drawing.
 function renderTimeline(layout) {
-  const width = TL.pad * 2 + layout.cols * TL.colW - (TL.colW - TL.nodeW);
-  const height = layout.rows.length * TL.rowH;
+  const { width, height } = timelineSize(layout);
   const edges = layout.edges.map((e) => {
     const x1 = nodeX(e.from.col) + TL.nodeW;
     const x2 = nodeX(e.to.col);
@@ -831,6 +837,26 @@ function measureOverviewFit(svg) {
   return fit;
 }
 
+// 100% shows the whole chain. A chain taller than the block shrinks; zoom still multiplies that fit.
+function fitChainWidth(fitWidth, naturalW, naturalH, availH) {
+  if (!fitWidth || !naturalW || !naturalH || !availH) return fitWidth || 0;
+  return Math.min(fitWidth, availH * naturalW / naturalH);
+}
+
+function chainAvailHeight(svg) {
+  const overview = svg.closest?.('.overview');
+  const styleOf = globalThis.getComputedStyle;
+  if (!overview || typeof styleOf !== 'function') return 0;
+  const box = styleOf(overview);
+  if (!box || box.height === 'auto') return 0;
+  const head = overview.querySelector?.('.ov-head');
+  const headBox = head ? styleOf(head) : null;
+  const headH = head ? head.offsetHeight + (Number.parseFloat(headBox.marginTop) || 0) + (Number.parseFloat(headBox.marginBottom) || 0) : 0;
+  const scrollBox = svg.parentElement ? styleOf(svg.parentElement) : null;
+  const scrollPad = scrollBox ? (Number.parseFloat(scrollBox.paddingTop) || 0) + (Number.parseFloat(scrollBox.paddingBottom) || 0) : 0;
+  return Math.max(0, overview.clientHeight - (Number.parseFloat(box.paddingTop) || 0) - (Number.parseFloat(box.paddingBottom) || 0) - headH - scrollPad);
+}
+
 function applyOverviewScale() {
   const scale = tlState.mapScale || 1;
   const label = $('.map-zoom-scale');
@@ -839,17 +865,25 @@ function applyOverviewScale() {
   if (reset) reset.disabled = Math.round(scale * 100) === 100;
   const svg = $('.ov-svg');
   if (!svg) return;
-  if (scale === 1) {
+  const fit = measureOverviewFit(svg);
+  if (!fit) {
+    if (scale === 1) {
+      svg.style.width = '';
+      svg.style.maxWidth = '';
+      svg.style.minWidth = '';
+    }
+    return;
+  }
+  const fitted = fitChainWidth(fit, Number(svg.dataset?.w) || 0, Number(svg.dataset?.h) || 0, chainAvailHeight(svg));
+  if (scale === 1 && fitted >= fit - 1) {
     svg.style.width = '';
     svg.style.maxWidth = '';
     svg.style.minWidth = '';
     return;
   }
-  const fit = measureOverviewFit(svg);
-  if (!fit) return;
   svg.style.minWidth = '0';
   svg.style.maxWidth = 'none';
-  svg.style.width = `${fit * scale}px`;
+  svg.style.width = `${fitted * scale}px`;
 }
 
 // The point under the cursor stays put while the chain grows or shrinks around it.
@@ -949,10 +983,37 @@ function bindMapTools() {
   globalThis.window?.addEventListener?.('resize', () => applyOverviewScale());
 }
 
+// Center the open step. A step near either end stays pinned there instead of scrolling past the strip.
+function placeInView(offset, size, view, total) {
+  const max = Math.max(0, total - view);
+  return Math.min(max, Math.max(0, offset + size / 2 - view / 2));
+}
+
+function stepAnchor(layout, stepId) {
+  if (!stepId) return null;
+  for (let row = 0; row < layout.rows.length; row++) {
+    const cell = layout.rows[row].cells.find((c) => c.id === stepId);
+    if (cell) return { x: nodeX(cell.col), y: rowY(row) };
+  }
+  return null;
+}
+
 function focusTimeline(layout) {
   const scroller = $('#tl-scroll');
-  if (!scroller || !layout.focus) return;
-  scroller.scrollLeft = nodeX(layout.focus.col) + TL.nodeW / 2 - scroller.clientWidth / 2;
+  const anchor = stepAnchor(layout, tlState.step);
+  if (!scroller || !anchor) return;
+  const size = timelineSize(layout);
+  const apply = () => {
+    const viewW = scroller.clientWidth || 0;
+    if (!viewW) return false;
+    const totalW = Math.max(scroller.scrollWidth || 0, size.width);
+    const totalH = Math.max(scroller.scrollHeight || 0, size.height);
+    scroller.scrollLeft = placeInView(anchor.x, TL.nodeW, viewW, totalW);
+    const viewH = scroller.clientHeight || 0;
+    if (viewH) scroller.scrollTop = placeInView(anchor.y, TL.nodeH, viewH, totalH);
+    return true;
+  };
+  if (!apply()) globalThis.requestAnimationFrame?.(() => apply());
 }
 
 // The inner scroller takes what it can; whatever is left moves the outer one.
@@ -1039,7 +1100,8 @@ function renderMapArea(epic) {
   const open = tlState.open || defaultOpen(map);
   const here = map.here.length ? map.here.map((h) => `${esc(h.task)} · ${esc(h.title)}`).join('; ') : esc(t('map.noActive'));
   const prev = $('#tl-scroll');
-  const keep = prev && tlState.focused === open ? prev.scrollLeft : null;
+  const stepBefore = tlState.step;
+  const keep = prev && tlState.focused === open && tlState.focusedStep === stepBefore ? prev.scrollLeft : null;
   // Rebuilding the chain drops its scroll; opening a task must not jump back to the first cards.
   const held = { overview: readBoxScroll('.overview'), chain: readBoxScroll('.ov-scroll'), page: pageScroll() };
   $('#map').innerHTML = `<p class="here"><span class="chip active-chip">${icon('target')}${esc(t('map.here'))}</span>${here}</p>`
@@ -1051,9 +1113,10 @@ function renderMapArea(epic) {
   bindOverviewPan();
   if (!open) return;
   bindPan();
-  if (keep !== null) $('#tl-scroll').scrollLeft = keep;
+  if (keep !== null && tlState.step === stepBefore) $('#tl-scroll').scrollLeft = keep;
   else {
     tlState.focused = open;
+    tlState.focusedStep = tlState.step;
     focusTimeline(detailLayout(map, open));
   }
 }

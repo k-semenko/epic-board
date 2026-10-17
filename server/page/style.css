@@ -242,11 +242,10 @@ button.ov-card:focus-visible { outline: 2px solid var(--accent); outline-offset:
 svg.i.inl { color: var(--muted); margin: 0 .3em; }
 /* Grid children default to min-width:auto; a long step chain must scroll inside, not widen the page. */
 .map > *, .detail > *, .detail-links > * { min-width: 0; }
-/* The outer ring was clipped by the SVG card box and showed up as glowing corners. */
-.ov-svg:has(.ov-card.selected) .ov-card:not(.selected),
+/* The outer ring was clipped by the SVG card box and showed up as glowing corners.
+   The upper chain stays fully lit: it is one chain, not a single chosen card. */
 .tl-svg:has(.tl-node.selected) .tl-node:not(.selected),
 .side-deck:has(.ov-card.selected) .ov-card:not(.selected) { opacity: .5; }
-.ov-svg:has(.ov-card.selected) .ov-card:not(.selected):hover,
 .tl-svg:has(.tl-node.selected) .tl-node:not(.selected):hover,
 .side-deck:has(.ov-card.selected) .ov-card:not(.selected):hover { opacity: .82; }
 .ov-card, .tl-node { transition: opacity .16s ease, border-color .16s ease; }

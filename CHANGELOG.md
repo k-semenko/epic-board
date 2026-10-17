@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Show the whole task chain at full strength in the overview, and fit it inside that block at 100%.
+- Scroll the step strip so the open step sits in the middle. The first and last steps stay at the ends of the strip.
 - Widen the page column to 1300px. The header uses the same limit.
 - Name the board EpicBoard in the header and the document title, and ship a light and dark favicon with matching theme-color.
 - Open an epic from anywhere on its card. The title is no longer the only hit target.

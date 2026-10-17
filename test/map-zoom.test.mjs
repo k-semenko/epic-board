@@ -4,12 +4,13 @@ import vm from 'node:vm';
 import { bundleScript } from '../server/export.mjs';
 import { sampleEpic } from './fixtures/sample-epic.mjs';
 
-function mapApp() {
+function mapApp({ timeline = false } = {}) {
   const listeners = new Map();
   let html = '';
   let overview = box();
   let chain = box();
   const frame = box();
+  const steps = timeline ? box() : null;
   const scrolls = [];
   const svg = {
     dataset: { w: '800' },
@@ -56,7 +57,7 @@ function mapApp() {
       if (selector === '.map-zoom-scale') return label;
       if (selector === '[data-map-zoom-reset]') return reset;
       if (selector === '#map-frame') return frame;
-      if (selector === '#tl-scroll') return null;
+      if (selector === '#tl-scroll') return steps;
       return null;
     },
   };
@@ -64,7 +65,7 @@ function mapApp() {
   const bootstrap = bundle.lastIndexOf('\nif (EXPORT || location.pathname');
   assert.ok(bootstrap > 0, 'app bootstrap is available');
   const script = `${bundle.slice(0, bootstrap)}
-    globalThis.app = { nextMapScale, formatMapScale, tlState, renderMapArea, zoomOverview, resetOverviewScale, bindMapTools };
+    globalThis.app = { nextMapScale, formatMapScale, fitChainWidth, placeInView, tlState, renderMapArea, zoomOverview, resetOverviewScale, bindMapTools };
     current = epic;
   })();`;
   const context = vm.createContext({
@@ -77,7 +78,7 @@ function mapApp() {
   });
   vm.runInContext(script, context);
   return {
-    app: context.app, scrolls, listeners, svg, label, reset,
+    app: context.app, scrolls, listeners, svg, label, reset, timeline: steps,
     get html() { return html; },
     get overview() { return overview; },
     get chain() { return chain; },
@@ -229,4 +230,37 @@ test('a click on a task card does not let the browser scroll the focused card in
   };
   for (const handler of harness.listeners.get('mousedown')) handler(info);
   assert.equal(info.defaultPrevented, false);
+});
+
+test('100% fit keeps a chain inside the block when it is taller than the width fit', () => {
+  const { app } = mapApp();
+  const tall = app.fitChainWidth(960, 576, 484, 330);
+  assert.equal(tall, 330 * 576 / 484);
+  assert.ok(tall < 960);
+  assert.equal(app.fitChainWidth(400, 1208, 326, 400), 400);
+  assert.equal(app.fitChainWidth(400, 0, 326, 400), 400);
+  assert.equal(app.fitChainWidth(0, 800, 200, 100), 0);
+});
+
+test('the open step scrolls to the middle, and the last step stays at the end', () => {
+  const harness = mapApp({ timeline: true });
+  const view = 400;
+  const total = 816;
+  const nodeX = (col) => 24 + col * 200;
+  harness.timeline.clientWidth = view;
+  harness.app.renderMapArea(sampleEpic());
+  assert.equal(harness.app.tlState.step, 's3');
+  assert.equal(harness.timeline.scrollLeft, harness.app.placeInView(nodeX(2), 168, view, total));
+  assert.ok(harness.timeline.scrollLeft > 0);
+
+  harness.timeline.scrollLeft = 0;
+  harness.app.renderMapArea(sampleEpic());
+  assert.equal(harness.timeline.scrollLeft, 0);
+
+  harness.app.tlState.step = 's4';
+  harness.app.renderMapArea(sampleEpic());
+  const end = harness.app.placeInView(nodeX(3), 168, view, total);
+  assert.equal(end, total - view);
+  assert.equal(harness.timeline.scrollLeft, end);
+  assert.equal(harness.app.placeInView(nodeX(0), 168, view, total), 0);
 });
