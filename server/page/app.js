@@ -128,7 +128,15 @@ function renderEpicList() {
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(e);
   }
-  $('#epics').innerHTML = [...groups].map(([label, list]) => `<section class="day"><h2 class="day-head">${esc(label)}</h2><ul class="cards">${list.map((e) => `<li><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong></a><span class="muted">${esc(e.goal)}</span><span class="meta">${e.waiting ? `<span class="warn">${icon('clock')}${esc(t('index.waiting', { n: e.waiting }))}</span>` : `<span class="muted">${icon('check')}${esc(t('index.nothing'))}</span>`}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></li>`).join('')}</ul></section>`).join('');
+  $('#epics').innerHTML = [...groups].map(([label, list]) => `<section class="day"><h2 class="day-head">${esc(label)}</h2><ul class="cards">${list.map(epicCard).join('')}</ul></section>`).join('');
+}
+
+// The whole card is the link. Padding sits on the anchor, so the goal and the meta row open the epic too.
+function epicCard(e) {
+  const waiting = e.waiting
+    ? `<span class="warn">${icon('clock')}${esc(t('index.waiting', { n: e.waiting }))}</span>`
+    : `<span class="muted">${icon('check')}${esc(t('index.nothing'))}</span>`;
+  return `<li><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a></li>`;
 }
 
 async function renderIndex() {

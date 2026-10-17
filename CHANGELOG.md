@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Open an epic from anywhere on its card. The title is no longer the only hit target.
 - Keep agents on the CLI when the user pastes a board link: the skill maps page links to epic, task and step ids and leaves the page and its API to the user.
 - Move answer review and stage-document rules from the main skill into `reference/waiting.md` and `reference/docs.md`.
 - Give the task-chain overview a fixed 40px height so the block stays put and the chain scrolls inside it.
