@@ -5,7 +5,7 @@ description: Local board for multi-repository work (an "epic"): tasks from any t
 
 # epic-board
 
-CLI: `node "${CLAUDE_PLUGIN_ROOT}/cli/epic.mjs" <command>` (below: `epic.mjs`). Full reference: `reference/cli.md`, data model: `reference/schema.md`. The board is local storage: it never calls a tracker; you write what you know into it.
+CLI: `node "${CLAUDE_PLUGIN_ROOT}/cli/epic.mjs" <command>` (below: `epic.mjs`). Full reference: `reference/cli.md`, data model: `reference/schema.md`, answer review: `reference/waiting.md`, stage documents: `reference/docs.md`. The board is local storage: it never calls a tracker; you write what you know into it.
 
 ## Only the CLI
 
@@ -63,16 +63,7 @@ A pending item must be actionable without reading the chat:
 - `--input confirm|single|multi` — confirmation by default, one option or several options. Choice inputs need two or more stable `--option id=text` flags. `--recommend id` marks advice without selecting for the human.
 - `--check` (repeatable) — all-required conditions for submitting any answer; separate from selectable options.
 
-The human submits an answer on the page; it becomes `answered` and remains unresolved. Review answers only after the user asks in chat, for example “Check agreed decisions”. SessionStart, PreCompact and brief are informational: never start or schedule review from a page submission or hook.
-
-1. Read `wait <epic> show <id> --json`; inspect the current question, version and latest round response (including selected option labels, checklist and comment). Re-read relevant task/branch context.
-2. If the answer is sufficient, record how it was used: `wait <epic> resolve <id> --version <current-version> --submission-id <current-response-id> --resolution "<concrete outcome>"`.
-3. If clarification is required, use `wait <epic> revise <id> --version <current-version> --reason "<what needs clarification and why>" [request flags from add]`. This creates an open revision and preserves past answers. Reopening a closed item also uses revise with a reason.
-4. For a separate question, create a new ID with `--ref waiting:<original-id>`; resolve the original separately when appropriate.
-
-All mutations require the current version. On conflict, read again and assess the new state before acting. `wait submit` records a human answer only when explicitly authorized; use `--confirmed` for confirm or `--selected a,b` for choices, plus all `--checked` IDs, a stable `--submission-id` and optional `--comment`. Retrying a lost response uses the same ID and payload. Never invent a human answer to close a request.
-
-Supplied checklist/option flags in revise replace their entire arrays. `wait remove <id> --version <current-version>` deletes only open requests with no submitted history. Legacy `done`/`undo` direct callers to resolve/revise. Closing a request does not complete its task or grant permission for push, publication or merge. The separate `decide` journal is updated only when needed; responses are not duplicated automatically.
+The human answers on the page; the item becomes `answered` and stays unresolved. Review answers only when the user asks in chat (“Check agreed decisions”, `/epic-board:review-answers`), never on your own from a hook or a page submission; then follow `reference/waiting.md`. Never invent a human answer to close a request.
 
 ## Do not write
 
@@ -80,12 +71,7 @@ Retellings of the conversation, logs, guesses, unverified claims. Branch and MR 
 
 ## Stage documents
 
-Specs, plans, execution logs, reviews and notes show up on the board next to their task and step.
-
-- Other tools decide where their own files go; do not change that. Let them write and link the file: `doc link <epic> <task>/<step> --kind spec|plan|log|review|note --title … --path <file>`. The file must live in a registered repository or worktree.
-- `docs-mode board`: `doc new <epic> <task>/<step> --kind … --title …` prints a path; write the file there and keep editing it in place.
-- `doc import` makes a one-off copy onto the board; `doc list`, `doc remove`.
-- The user can edit a document on the page; re-read the file before your own edit.
+Specs, plans, logs, reviews and notes attach to a task or step. Before any `doc` or `docs-mode` command, read `reference/docs.md`.
 
 ## Reports and export
 

@@ -60,7 +60,7 @@ server/http ──┘          │                <id>.history.ndjson
 
 ## Plugin
 
-- `.claude-plugin/` holds the manifests, `skills/epic-board/` holds the instructions for the agent, and `hooks/` holds the hooks.
+- `.claude-plugin/` holds the manifests, `skills/epic-board/` holds the instructions for the agent, `skills/review-answers/` the user-run answer review, and `hooks/` holds the hooks.
 - `SessionStart` prints a short brief after compaction or resume, or a hint to bind the session inside a registered repository. It also syncs the service.
 - `PreCompact` asks the summary to point at the board instead of retelling it.
 - Answer review starts only after a user request in chat. Hooks and briefs display pending human/agent work and never launch review automatically.
