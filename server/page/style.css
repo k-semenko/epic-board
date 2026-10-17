@@ -171,7 +171,7 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .hint { margin: 6px 0 0; font-size: 13px; }
 
 /* Overview: whole tasks as cards; the opened card shows its steps below. */
-.overview { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; overflow-anchor: none; }
+.overview { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; height: 40px; overflow: auto; overflow-anchor: none; }
 .overview.has-side { display: grid; grid-template-columns: minmax(0, 1fr) 252px; gap: 22px; align-items: start; }
 .overview-main { min-width: 0; }
 .ov-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: -6px 0 8px; background: var(--surface); }
@@ -447,8 +447,7 @@ button.doc-open .chip svg.i { display: none; }
   .map-frame.map-full { height: auto; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
   #map { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
   #map > .here { flex: none; margin: 0; }
-  #map > .overview { flex: 0 1 auto; max-height: 46%; min-height: 0; overflow: auto; }
-  #map > .overview.has-side { max-height: 55%; }
+  #map > .overview { flex: 0 0 40px; height: 40px; overflow: auto; }
   #map > .detail { flex: 1; min-height: 0; margin: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }
   #map > .detail-merge { grid-template-rows: auto auto auto minmax(0, 1fr); }
   .detail .tl-scroll { max-height: none; }
