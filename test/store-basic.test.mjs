@@ -9,7 +9,7 @@ const store = await import('../server/store.mjs');
 
 test('create, read, list, history', () => {
   const epic = store.createEpic({ id: 'E-1', title: 'Meta', goal: 'Отбор' }, { by: 'cli' });
-  assert.equal(epic.schema, 2);
+  assert.equal(epic.schema, 3);
   assert.deepEqual(epic.tasks, []);
   assert.equal(store.readEpic('E-1').title, 'Meta');
   assert.equal(store.listEpics().length, 1);

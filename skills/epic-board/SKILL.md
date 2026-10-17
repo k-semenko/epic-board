@@ -5,7 +5,23 @@ description: Local board for multi-repository work (an "epic"): tasks from any t
 
 # epic-board
 
-CLI: `node "${CLAUDE_PLUGIN_ROOT}/cli/epic.mjs" <command>` (below: `epic.mjs`). Full reference: `reference/cli.md`, data model: `reference/schema.md`. The board is local storage: it never calls a tracker; you write what you know into it.
+CLI: `node "${CLAUDE_PLUGIN_ROOT}/cli/epic.mjs" <command>` (below: `epic.mjs`). Full reference: `reference/cli.md`, data model: `reference/schema.md`, answer review: `reference/waiting.md`, stage documents: `reference/docs.md`. The board is local storage: it never calls a tracker; you write what you know into it.
+
+## Only the CLI
+
+You read and write the board only through `epic.mjs`. The page and its HTTP API are for the user: do not fetch, open or call them with any tool, even when the user pastes a link, says "open", or the CLI fails. On a CLI error, read the message and `epic.mjs help`, fix the command, or tell the user.
+
+A link is an address; turn it into CLI arguments (ids are URL-encoded):
+
+| Link | Means | Start with |
+|---|---|---|
+| `<host>/` | all epics | `list` |
+| `<host>/e/<epic>` | the epic | `show <epic>` |
+| `<host>/e/<epic>#t-<task>` | task `<task>` | `show <epic> --json` |
+| `<host>/e/<epic>#t-<task>/<step>` | step `<task>/<step>` | `show <epic> --json` |
+| `<host>/api/epics/<epic>/…` | the epic | `show <epic>` |
+
+An id from the link that is not in `show --json` is a question for the user. Pending items are listed in `show <epic>` (there is no `wait list`); `wait <epic> show <id> --json` gives one in full. When the user wants to look at the board, give them `epic.mjs url <epic>`.
 
 ## First run on a machine
 
@@ -43,10 +59,11 @@ A pending item must be actionable without reading the chat:
 
 - `--title` — the question or action in one line.
 - `--details` — Markdown: what exactly to decide or do, why it blocks, the options and their cost.
-- `--ref` (repeatable) — what it touches on the board: `task:<id>`, `step:<task>/<step>`, `branch:<repo>:<branch>`, `doc:<id>`, `decision:<id>`, or an `https://` link.
-- `--check` (repeatable) — what must be true before it counts as done; the page will not accept "done" until every point is ticked.
+- `--ref` (repeatable) — what it touches on the board: `task:<id>`, `step:<task>/<step>`, `branch:<repo>:<branch>`, `doc:<id>`, `decision:<id>`, `waiting:<id>`, or an `https://` link.
+- `--input confirm|single|multi` — confirmation by default, one option or several options. Choice inputs need two or more stable `--option id=text` flags. `--recommend id` marks advice without selecting for the human.
+- `--check` (repeatable) — all-required conditions for submitting any answer; separate from selectable options.
 
-The user confirms on the page. Mark it yourself only when the user told you it is done: `wait <epic> done <id> --checked c1,c2 --resolution "<what was decided>"`. `undo` reopens, `remove` deletes a mistaken item.
+The human answers on the page; the item becomes `answered` and stays unresolved. Review answers only when the user asks in chat (“Check agreed decisions”, `/epic-board:review-answers`), never on your own from a hook or a page submission; then follow `reference/waiting.md`. Never invent a human answer to close a request.
 
 ## Do not write
 
@@ -54,18 +71,9 @@ Retellings of the conversation, logs, guesses, unverified claims. Branch and MR 
 
 ## Stage documents
 
-Specs, plans, execution logs, reviews and notes show up on the board next to their task and step.
-
-- Other tools decide where their own files go; do not change that. Let them write and link the file: `doc link <epic> <task>/<step> --kind spec|plan|log|review|note --title … --path <file>`. The file must live in a registered repository or worktree.
-- `docs-mode board`: `doc new <epic> <task>/<step> --kind … --title …` prints a path; write the file there and keep editing it in place.
-- `doc import` makes a one-off copy onto the board; `doc list`, `doc remove`.
-- The user can edit a document on the page; re-read the file before your own edit.
+Specs, plans, logs, reviews and notes attach to a task or step. Before any `doc` or `docs-mode` command, read `reference/docs.md`.
 
 ## Reports and export
 
 - `report <epic> --task <id>` — a Markdown summary of a task to paste into its tracker. Posting it anywhere is the user's call.
 - `export <epic> --out <file>.html` — one self-contained read-only HTML file to hand to a person.
-
-## The page
-
-`epic.mjs url <epic>`. Open it in the built-in browser panel when the user wants to look.

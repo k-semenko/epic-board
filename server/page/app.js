@@ -1,8 +1,12 @@
-import { buildLanes, layoutMap, buildOverview, defaultOpen, defaultStep } from './lanes.mjs';
+import { buildLanes, layoutMap, buildOverview, sideStack, cycleSide, defaultOpen, defaultStep, MERGE_ID, GOAL_ID } from './lanes.mjs';
 import { icon, STATE_ICON, agentBadge, logo } from './icons.mjs';
-import { describeEvent } from './history.mjs';
+import { describeEvent, historyEntries } from './history.mjs';
 import { renderMarkdown } from './markdown.mjs';
 import { t, getLang, setLang, locale } from './i18n.mjs';
+import { bindSectionSettings } from './section-settings.mjs';
+import { DecisionDrafts, renderWaitingCard, waitingCounts, waitingSearchText } from './waiting.mjs';
+import { paginate, renderPagination } from './pagination.mjs';
+import { createDocEditor } from './doc-editor.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -22,7 +26,11 @@ const EXPORT = typeof window !== 'undefined' ? window.__EPIC_EXPORT__ || null : 
 
 function exportApi(path, method) {
   if (method !== 'GET') throw new Error(t('export.readOnly'));
-  if (/\/history/.test(path)) return EXPORT.history.slice(0, Number(new URLSearchParams(path.split('?')[1]).get('limit')) || 20);
+  if (path === '/api/settings') return EXPORT.settings || {};
+  if (/\/history/.test(path)) {
+    const limit = new URLSearchParams(path.split('?')[1]).get('limit');
+    return limit === 'all' ? EXPORT.history : EXPORT.history.slice(0, Number(limit) || 20);
+  }
   if (/\/docs-text$/.test(path)) return EXPORT.docs || [];
   const doc = path.match(/\/docs\/([^/]+)$/);
   if (doc) {
@@ -56,7 +64,11 @@ async function api(path, { method = 'GET', body } = {}) {
   const res = await fetch(path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
   const type = res.headers.get('content-type') || '';
   const data = type.includes('json') ? await res.json() : await res.text();
-  if (!res.ok) throw new Error(data.detail || data.error || res.statusText);
+  if (!res.ok) {
+    const error = new Error(data.detail || data.error || res.statusText);
+    error.status = res.status;
+    throw error;
+  }
   return data;
 }
 
@@ -116,7 +128,15 @@ function renderEpicList() {
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(e);
   }
-  $('#epics').innerHTML = [...groups].map(([label, list]) => `<section class="day"><h2 class="day-head">${esc(label)}</h2><ul class="cards">${list.map((e) => `<li><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong></a><span class="muted">${esc(e.goal)}</span><span class="meta">${e.waiting ? `<span class="warn">${icon('clock')}${esc(t('index.waiting', { n: e.waiting }))}</span>` : `<span class="muted">${icon('check')}${esc(t('index.nothing'))}</span>`}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></li>`).join('')}</ul></section>`).join('');
+  $('#epics').innerHTML = [...groups].map(([label, list]) => `<section class="day"><h2 class="day-head">${esc(label)}</h2><ul class="cards">${list.map(epicCard).join('')}</ul></section>`).join('');
+}
+
+// The whole card is the link. Padding sits on the anchor, so the goal and the meta row open the epic too.
+function epicCard(e) {
+  const waiting = e.waiting
+    ? `<span class="warn">${icon('clock')}${esc(t('index.waiting', { n: e.waiting }))}</span>`
+    : `<span class="muted">${icon('check')}${esc(t('index.nothing'))}</span>`;
+  return `<li><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a></li>`;
 }
 
 async function renderIndex() {
@@ -182,13 +202,17 @@ function taskInfo(epic, id) {
 
 let current = null;
 let currentHistory = [];
+const pageSizes = { waiting: 5, decisions: 5, history: 5 };
+const sectionPages = { waiting: 1, decisions: 1, history: 1 };
+const waitingExpansion = new Map();
+let savingPageSizes = false;
 
 const stateText = (state) => t(`state.${state}`);
 const stateIcon = (state) => icon(STATE_ICON[state] || 'circle', `st-${state}`);
 
 // ---------- Overview: one card per task ----------
 
-const OV = { w: 232, h: 140, gapX: 84, gapY: 18, pad: 14 };
+const OV = { w: 280, h: 160, gapX: 84, gapY: 18, pad: 14 };
 const ovX = (col) => OV.pad + col * (OV.w + OV.gapX);
 const ovY = (row) => OV.pad + row * (OV.h + OV.gapY);
 
@@ -214,7 +238,7 @@ function cardBody(n) {
   return `<div class="ov-top"><span class="mono">${esc(n.id)}</span>${n.status ? `<span class="chip">${esc(n.status)}</span>` : ''}</div>
     <div class="ov-title" title="${esc(n.fullTitle)}">${esc(n.title)}</div>
     <div class="ov-progress"><span class="bar"><i style="width:${pct}%"></i></span><span class="mono">${n.progress.done}/${n.progress.total}</span></div>
-    ${now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
+    ${n.side ? '' : now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
 }
 
 function cardState(n) {
@@ -222,6 +246,86 @@ function cardState(n) {
   if (n.current.length) return 'active';
   if (n.progress.total && n.progress.done === n.progress.total) return 'done';
   return 'todo';
+}
+
+function renderSideStack(side, open) {
+  const { front, back } = sideStack(side, tlState.side, open);
+  if (!front) return '';
+  tlState.side = front.id;
+  const cards = [front, ...back].map((n, i) => {
+    const selected = open === n.id;
+    const body = `${cardBody(n)}<span class="side-action">${icon(selected ? 'check' : 'arrowRight')}${esc(t(selected ? 'map.stepsOpen' : 'map.openSteps'))}</span>`;
+    const card = i === 0
+      ? `<button type="button" class="ov-card k-task ${cardState(n)}${selected ? ' selected' : ''}" data-open="${esc(n.id)}" aria-expanded="${selected}" aria-controls="detail">${body}</button><button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>`
+      : `<div class="ov-card k-task ${cardState(n)}" aria-hidden="true">${body}</div><button type="button" class="side-pick" data-side-pick="${esc(n.id)}" aria-label="${esc(t('map.showTask', { id: n.id }))}: ${esc(n.fullTitle)}" title="${esc(n.fullTitle)}"></button>`;
+    return `<div class="side-layer${i === 0 ? ' side-current' : ''}" data-side-id="${esc(n.id)}" style="--depth:${Math.min(i, 2)}"${i > 2 ? ' hidden' : ''}>${card}</div>`;
+  }).join('');
+  const position = side.findIndex((n) => n.id === front.id) + 1;
+  const controls = side.length > 1 ? `<div class="side-controls"><button type="button" class="icon-btn" data-side-turn="-1" aria-label="${esc(t('map.previousTask'))}" title="${esc(t('map.previousTask'))}">${icon('arrowUp')}</button><span class="mono" role="status" aria-live="polite">${esc(t('map.sidePosition', { n: position, total: side.length }))}</span><button type="button" class="icon-btn" data-side-turn="1" aria-label="${esc(t('map.nextTask'))}" title="${esc(t('map.nextTask'))}">${icon('arrowDown')}</button></div>` : '';
+  return `<section class="overview-side" aria-label="${esc(t('map.side'))}"><h3 class="ov-section-title">${icon('layers')}<span>${esc(t('map.side'))}</span><span class="mono">${side.length}</span></h3>
+    <div class="side-carousel" role="group" aria-roledescription="${esc(t('map.carousel'))}" aria-label="${esc(t('map.side'))}"><div class="side-deck${back.length ? '' : ' side-single'}">${cards}</div>${controls}</div>
+  </section>`;
+}
+
+async function rotateSide(direction, target) {
+  if (tlState.sideBusy) return;
+  const side = buildOverview(current).side;
+  for (const n of side) n.docs = (current.docs || []).filter((d) => d.task === n.id).length;
+  const next = target || cycleSide(side, tlState.side, direction);
+  if (!next || next === tlState.side) return;
+  const deck = $('.side-deck');
+  const cards = [...deck.querySelectorAll('[data-side-id]')];
+  const outgoing = cards.find((el) => el.dataset.sideId === tlState.side);
+  const incoming = cards.find((el) => el.dataset.sideId === next);
+  const active = document.activeElement;
+  const focus = active.closest('.side-carousel') ? active.dataset.sideTurn || 'front' : null;
+  tlState.sideBusy = true;
+  deck.setAttribute('aria-busy', 'true');
+  try {
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      incoming.hidden = false;
+      incoming.style.zIndex = direction < 0 ? '5' : '3';
+      outgoing.style.zIndex = direction < 0 ? '4' : '5';
+      const full = { transform: 'translateY(0) scale(1)', opacity: 1 };
+      const behind = { transform: 'translateY(-22px) scale(.96)', opacity: 1 };
+      const below = { transform: 'translateY(190px) scale(.94)', opacity: 0 };
+      const options = { duration: 300, easing: 'cubic-bezier(.22,.68,.3,1)', fill: 'forwards' };
+      await Promise.all([
+        outgoing.animate([full, direction < 0 ? behind : below], options).finished.catch(() => {}),
+        incoming.animate([direction < 0 ? below : { transform: getComputedStyle(incoming).transform, opacity: 1 }, full], options).finished.catch(() => {}),
+      ]);
+    }
+    if (!deck.isConnected) return;
+    if (target) toggleDetail(next);
+    else {
+      tlState.side = next;
+      deck.closest('.overview-side').outerHTML = renderSideStack(side, tlState.open || defaultOpen(buildLanes(current)));
+    }
+    if (focus === 'front') $('.side-current [data-open]')?.focus({ preventScroll: true });
+    else if (focus) $(`[data-side-turn="${focus}"]`)?.focus({ preventScroll: true });
+  } finally {
+    tlState.sideBusy = false;
+    deck.removeAttribute('aria-busy');
+  }
+}
+
+function bindSideCarousel() {
+  let lastWheel = 0;
+  let wheelAmount = 0;
+  let wheelUsed = false;
+  document.addEventListener('wheel', (e) => {
+    const carousel = e.target.closest('.side-carousel');
+    if (!carousel?.querySelector('[data-side-turn]') || e.ctrlKey || e.metaKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.preventDefault();
+    const now = performance.now();
+    if (now - lastWheel > 180) { wheelAmount = 0; wheelUsed = false; }
+    lastWheel = now;
+    if (wheelUsed) return;
+    wheelAmount += e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 200 : 1);
+    if (Math.abs(wheelAmount) < 40) return;
+    wheelUsed = true;
+    void rotateSide(wheelAmount > 0 ? 1 : -1);
+  }, { passive: false });
 }
 
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
@@ -246,17 +350,18 @@ function renderOverview(ov, open) {
     const info = n.kind === 'task' ? `<button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>` : '';
     return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
-  return `<div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
+  const chainTitle = ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : '';
+  const canLocate = [...ov.nodes, ...ov.side].some((n) => n.kind === 'task' && (n.current.length || n.id === open));
+  return `<div class="overview${ov.side.length ? ' has-side' : ''}${mapHeightClass()}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapHeightControl(Boolean(ov.side.length))}${mapZoomControl()}${mapLocateControl(canLocate)}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" data-h="${height}" style="max-width:${width}px">
     <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
-    ${edges}${cards}</svg></div>`;
+    ${edges}${cards}</svg></div></section>${renderSideStack(ov.side, open)}</div>`;
 }
 
 // ---------- Detail: the steps of one task ----------
 
 function stepChip(step) {
-  const deps = step.deps.map((d) => `<span class="dep">${icon('dep')}${esc(t('step.after', { task: d.task, title: d.title }))}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span>`).join('');
-  const tip = [stateText(step.state), step.note].filter(Boolean).join(' — ');
-  return `<li class="step ${esc(step.state)}" title="${esc(tip)}"><span class="step-title">${stateIcon(step.state)}${esc(step.title)}</span>${deps}</li>`;
+  const tip = [stateText(step.state), step.title, step.note].filter(Boolean).join(' — ');
+  return `<li class="step ${esc(step.state)}" title="${esc(tip)}"><span class="step-title">${stateIcon(step.state)}${esc(step.title)}</span></li>`;
 }
 
 function narrowFlow(steps) {
@@ -264,15 +369,21 @@ function narrowFlow(steps) {
 }
 
 const TL = { colW: 200, nodeW: 168, nodeH: 84, rowH: 100, pad: 24 };
-const tlState = { focused: null, open: null, step: null, allDocs: false };
+const tlState = { focused: null, focusedStep: null, open: null, step: null, allDocs: false, side: null, sideBusy: false, mapScale: 1 };
 
 function nodeX(col) { return TL.pad + col * TL.colW; }
 function rowY(i) { return i * TL.rowH + (TL.rowH - TL.nodeH) / 2; }
 
+function timelineSize(layout) {
+  return {
+    width: TL.pad * 2 + layout.cols * TL.colW - (TL.colW - TL.nodeW),
+    height: layout.rows.length * TL.rowH,
+  };
+}
+
 // The steps are drawn from data: columns come from layoutMap, so a new step needs no drawing.
 function renderTimeline(layout) {
-  const width = TL.pad * 2 + layout.cols * TL.colW - (TL.colW - TL.nodeW);
-  const height = layout.rows.length * TL.rowH;
+  const { width, height } = timelineSize(layout);
   const edges = layout.edges.map((e) => {
     const x1 = nodeX(e.from.col) + TL.nodeW;
     const x2 = nodeX(e.to.col);
@@ -280,12 +391,11 @@ function renderTimeline(layout) {
     return `<path class="tl-edge" d="M${x1},${y} L${x2 - 2},${y}" marker-end="url(#tl-arrow)"/>`;
   }).join('');
   const nodes = layout.rows.map((r, i) => r.cells.map((c) => {
-    const tip = [stateText(c.state), c.note, c.branch].filter(Boolean).join(' — ');
+    const tip = [stateText(c.state), c.title, c.note, c.branch].filter(Boolean).join(' — ');
     const n = r.kind === 'merge' ? `<span class="n">${c.n}</span>` : '';
-    const note = c.note ? `<span class="tl-note">${esc(c.note)}</span>` : c.branch ? `<span class="tl-note mono">${esc(c.branch)}</span>` : '';
     const docCount = (current?.docs || []).filter((d) => d.task === r.id && d.step === c.id).length;
     const badge = docCount ? `<span class="tl-docs" title="${esc(t('step.docCount', { n: docCount }))}">${icon('file')}${docCount}</span>` : '';
-    return `<foreignObject x="${nodeX(c.col)}" y="${rowY(i)}" width="${TL.nodeW}" height="${TL.nodeH}"><div xmlns="http://www.w3.org/1999/xhtml" class="tl-node ${esc(c.state)}${docCount ? ' has-docs' : ''}${r.kind === 'lane' && c.id === tlState.step ? ' selected' : ''}"${r.kind === 'lane' ? ` data-step="${esc(c.id)}"` : ''} data-sid="st-${esc(r.id)}-${esc(c.id)}" title="${esc(tip)}"><span class="tl-title">${stateIcon(c.state)}${n}${esc(c.title)}</span>${note}${badge}</div></foreignObject>`;
+    return `<foreignObject x="${nodeX(c.col)}" y="${rowY(i)}" width="${TL.nodeW}" height="${TL.nodeH}"><div xmlns="http://www.w3.org/1999/xhtml" class="tl-node ${esc(c.state)}${docCount ? ' has-docs' : ''}${r.kind === 'lane' && c.id === tlState.step ? ' selected' : ''}"${r.kind === 'lane' ? ` data-step="${esc(c.id)}"` : ''} data-sid="st-${esc(r.id)}-${esc(c.id)}" title="${esc(tip)}"><span class="tl-title">${stateIcon(c.state)}${n}${esc(c.title)}</span>${badge}</div></foreignObject>`;
   }).join('')).join('');
   return `<div class="tl" id="tl"><div class="tl-scroll" id="tl-scroll"><svg class="tl-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
       <defs><marker id="tl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
@@ -294,42 +404,45 @@ function renderTimeline(layout) {
 
 // One row only: other lanes are left out, so cross-task links become the lists beside the steps.
 function detailLayout(map, open) {
-  const single = open === 'merge'
+  const single = open === MERGE_ID
     ? { lanes: [], merge: map.merge, goal: map.goal, here: [] }
-    : { lanes: map.lanes.filter((l) => l.id === open), merge: [], goal: map.goal, here: [] };
+    : { lanes: [...map.lanes, ...map.side].filter((l) => l.id === open), merge: [], goal: map.goal, here: [] };
   const full = layoutMap(single);
   const rows = full.rows.filter((r) => r.kind !== 'goal');
   const cols = Math.max(0, ...rows.flatMap((r) => r.cells.map((c) => c.col + 1)));
-  return { rows, cols, edges: full.edges.filter((e) => e.from.row === e.to.row && e.to.row !== 'goal'), focus: full.focus };
+  return { rows, cols, edges: full.edges.filter((e) => e.from.row === e.to.row && e.to.row !== GOAL_ID), focus: full.focus };
 }
 
 function linksOf(map, open) {
-  if (open === 'merge') {
+  if (open === MERGE_ID) {
     const branches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
     const incoming = map.lanes.filter((l) => l.branches.some((b) => branches.has(b))).map((l) => `<li>${icon('branch')}<span>${esc(l.id)} · ${esc(l.title)}</span></li>`);
     return { incoming, outgoing: [`<li>${icon('flag')}<span>${esc(map.goal)}</span></li>`] };
   }
-  const lane = map.lanes.find((l) => l.id === open);
+  const lanes = [...map.lanes, ...map.side];
+  const lane = lanes.find((l) => l.id === open);
   const incoming = lane.steps.flatMap((s) => s.deps.map((d) => `<li>${icon('dep')}<span><b>${esc(d.task)} · ${esc(d.title)}</b> ${icon('arrowRight', 'inl')}${esc(s.title)}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`));
-  const outgoing = map.lanes.filter((l) => l.id !== open).flatMap((l) => l.steps.flatMap((s) => s.deps.filter((d) => d.task === open).map((d) => `<li>${icon('arrowRight')}<span>${esc(d.title)} ${icon('arrowRight', 'inl')}<b>${esc(l.id)} · ${esc(s.title)}</b>${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`)));
+  const outgoing = lanes.filter((l) => l.id !== open).flatMap((l) => l.steps.flatMap((s) => s.deps.filter((d) => d.task === open).map((d) => `<li>${icon('arrowRight')}<span>${esc(d.title)} ${icon('arrowRight', 'inl')}<b>${esc(l.id)} · ${esc(s.title)}</b>${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`)));
   const mergeBranches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
   if (lane.branches.some((b) => mergeBranches.has(b))) outgoing.push(`<li>${icon('merge')}<span>${esc(t('detail.toMerge'))}</span></li>`);
   return { incoming, outgoing };
 }
 
 function renderDetail(map, open) {
-  const lane = open === 'merge' ? null : map.lanes.find((l) => l.id === open);
+  const lane = open === MERGE_ID ? null : [...map.lanes, ...map.side].find((l) => l.id === open);
   if (lane && (!tlState.step || !lane.steps.some((st) => st.id === tlState.step))) tlState.step = defaultStep(lane);
   const raw = lane ? (current?.tasks || []).find((x) => x.id === lane.id) : null;
   const title = lane ? `<span class="mono muted">${esc(lane.id)}</span> ${esc(lane.fullTitle)}` : `${icon('merge')} ${esc(t('card.merge'))}`;
+  const heading = `<h3>${title}</h3>`;
   const { incoming, outgoing } = linksOf(map, open);
   const list = (items, empty) => (items.length ? `<ul class="links">${items.join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
+  const links = `<div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>`;
   const steps = lane ? lane.steps : map.merge.map((m) => ({ id: `m${m.n}`, title: `${m.n}. ${m.text}`, state: m.waiting ? 'waiting' : 'todo', note: m.branch, deps: [] }));
-  return `<section class="detail" id="detail" aria-label="${esc(t('detail.aria'))}">
-    <header class="detail-head"><h3>${title}</h3>${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
-    <div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>
+  return `<section class="detail${lane ? '' : ' detail-merge'}" id="detail" aria-label="${esc(t('detail.aria'))}">
+    <header class="detail-head">${heading}${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
+    ${lane ? '' : links}
     ${renderTimeline(detailLayout(map, open))}
-    ${lane ? stepSplit(lane) : ''}
+    ${lane ? stepSplit(lane, links) : ''}
     <div class="lanes-narrow">${narrowFlow(steps)}</div>
   </section>`;
 }
@@ -355,34 +468,29 @@ function docsBlock(lane, step, all) {
   return `<div class="docs-block"><div class="docs-head"><h4>${esc(t(all ? 'docs.taskTitle' : 'docs.stepTitle'))} · ${docs.length}</h4><div class="docs-tools">${toggle}<button type="button" class="live-only" data-doc-add="${esc(lane.id)}">${icon('plus')}${esc(t('docs.add'))}</button></div></div><div class="docs-scroll">${rows || `<p class="muted">${esc(t(all ? 'docs.taskNone' : 'docs.stepNone'))}</p>`}</div></div>`;
 }
 
-function stepInfo(lane, stepId) {
+function stepInfo(lane, stepId, links) {
   const step = lane.steps.find((st) => st.id === stepId);
-  if (!step) return `<div class="step-info"><p class="muted">${esc(t('step.none'))}</p></div>`;
+  if (!step) return `<div class="step-info"><p class="muted">${esc(t('step.none'))}</p>${links}</div>`;
   const raw = (current?.tasks || []).find((x) => x.id === lane.id)?.steps?.find((st) => st.id === stepId) || {};
-  const deps = step.deps.map((d) => `<li>${icon('dep')}<span>${esc(d.task)} · ${esc(d.title)}${d.label ? ` <em>${esc(d.label)}</em>` : ''}</span></li>`).join('');
   const prefix = `tasks[${lane.id}].steps[${stepId}]`;
   const changes = currentHistory.filter((h) => String(h.path).startsWith(prefix)).slice(0, 6).map((h) => {
     const d = describeEvent(h);
     const value = d.change === 'add' ? t('step.added') : `${cap(d.what)}: ${d.before ?? '—'} → ${d.after ?? '—'}`;
     return `<li><span class="muted">${agoTag(h.at)}</span><span>${esc(value)}</span></li>`;
   }).join('');
-  const docCount = (current?.docs || []).filter((d) => d.task === lane.id && d.step === stepId).length;
   return `<div class="step-info">
     <div class="step-info-head">${stateIcon(step.state)}<span class="chip">${esc(cap(stateText(step.state)))}</span><span class="mono muted">${esc(lane.id)}/${esc(step.id)}</span></div>
     <h4 class="step-info-title">${esc(step.title)}</h4>
     ${step.note ? `<p class="step-info-note">${esc(step.note)}</p>` : `<p class="muted">${esc(t('step.noDescription'))}</p>`}
-    <dl class="step-info-meta">
-      <dt>${esc(t('step.dependsOn'))}</dt><dd>${deps ? `<ul class="links">${deps}</ul>` : esc(t('step.prev'))}</dd>
-      <dt>${esc(t('step.docs'))}</dt><dd>${docCount}</dd>
-      ${raw.label ? `<dt>${esc(t('step.label'))}</dt><dd>${esc(raw.label)}</dd>` : ''}
-    </dl>
+    ${links}
+    ${raw.label ? `<dl class="step-info-meta"><dt>${esc(t('step.label'))}</dt><dd>${esc(raw.label)}</dd></dl>` : ''}
     ${changes ? `<h5>${esc(t('step.changes'))}</h5><ul class="step-changes">${changes}</ul>` : ''}
   </div>`;
 }
 
-function stepSplit(lane) {
+function stepSplit(lane, links) {
   if (!tlState.step || !lane.steps.some((st) => st.id === tlState.step)) tlState.step = defaultStep(lane);
-  return `<div class="step-split">${docsBlock(lane, tlState.step, tlState.allDocs)}${stepInfo(lane, tlState.step)}</div>`;
+  return `<div class="step-split">${docsBlock(lane, tlState.step, tlState.allDocs)}${stepInfo(lane, tlState.step, links)}</div>`;
 }
 
 // One renderer for the whole page: vendored marked + DOMPurify when present, the built-in one otherwise.
@@ -410,7 +518,42 @@ function renderMd(text) {
   return renderMarkdown(text);
 }
 
-const docState = { id: null, text: '', mtimeMs: 0, mode: 'view', dirty: false };
+const docState = { id: null, text: '', draft: null, mtimeMs: 0, mode: 'view', dirty: false, ready: false, saving: false };
+let docEditor = null;
+let docRequest = 0;
+
+function disposeDocEditor() {
+  const editor = docEditor;
+  docEditor = null;
+  docState.ready = false;
+  docState.saving = false;
+  editor?.destroy();
+}
+
+function updateDocButtons() {
+  const save = $('[data-doc-save]');
+  if (save) save.disabled = !docState.ready || docState.saving || !docState.dirty;
+  for (const selector of ['[data-doc-cancel]', '[data-doc-restore]']) {
+    const control = $(selector);
+    if (control) control.disabled = docState.saving;
+  }
+}
+
+function setDocExtra(html) {
+  const extra = $('#doc-extra');
+  extra.innerHTML = html;
+  extra.hidden = !html;
+  updateDocButtons();
+}
+
+function docError(error) {
+  setDocExtra(`<p class="doc-error" role="alert">${icon('alert')}${esc(error.message)} <button type="button" data-doc-reload>${icon('refresh')}${esc(t('doc.reload'))}</button></p>`);
+}
+
+function positionDocPanel(panel) {
+  const bottom = $('.topbar')?.getBoundingClientRect().bottom || 0;
+  panel.style.top = `${Math.max(0, Math.ceil(bottom)) + 8}px`;
+}
 
 function docPanel() {
   let panel = $('#doc-panel');
@@ -420,11 +563,21 @@ function docPanel() {
     panel.className = 'doc-panel';
     panel.hidden = true;
     document.body.appendChild(panel);
+    const header = $('.topbar');
+    if (header) new ResizeObserver(() => positionDocPanel(panel)).observe(header);
+    window.addEventListener('resize', () => positionDocPanel(panel));
   }
   return panel;
 }
 
+function showDocPanel(panel) {
+  if ($('#map-frame')?.classList.contains('map-full')) setFull(false);
+  positionDocPanel(panel);
+  panel.hidden = false;
+}
+
 function renderDocPanel(doc, extra = '') {
+  disposeDocEditor();
   const panel = docPanel();
   const { html, toc } = renderMd(docState.text);
   const tocHtml = toc.length ? `<nav class="doc-toc"><h5>${esc(t('doc.toc'))}</h5>${toc.map((x) => `<a href="#${esc(x.id)}" class="lvl${x.level}" data-toc="${esc(x.id)}">${esc(x.text)}</a>`).join('')}</nav>` : '';
@@ -434,62 +587,112 @@ function renderDocPanel(doc, extra = '') {
       <div class="doc-actions">
         ${docState.mode === 'edit'
           ? `<button type="button" data-doc-save>${icon('save')}${esc(t('doc.save'))}</button><button type="button" data-doc-cancel>${esc(t('cancel'))}</button>`
-          : `<button type="button" class="live-only" data-doc-edit>${icon('edit')}${esc(t('doc.edit'))}</button><button type="button" class="live-only" data-doc-versions>${icon('versions')}${esc(t('doc.versions'))}</button>`}
+          : `<button type="button" class="live-only" data-doc-edit>${icon('edit')}${esc(t('doc.edit'))}</button>`}
+        <button type="button" class="live-only" data-doc-versions>${icon('versions')}${esc(t('doc.versions'))}</button>
         <button type="button" class="icon-btn" data-doc-close aria-label="${esc(t('close'))}">${icon('close')}</button>
       </div>
       <p class="doc-meta muted">${esc(where)} · ${esc(t(doc.owned ? 'doc.owned' : 'doc.linked'))} · <span class="mono">${esc(doc.path || '')}</span></p>
-    </header>${extra}`;
+    </header><div class="doc-extra" id="doc-extra"${extra ? '' : ' hidden'}>${extra}</div>`;
   const body = docState.mode === 'edit'
-    ? `<div class="doc-edit"><textarea id="doc-text" spellcheck="false">${esc(docState.text)}</textarea><div class="doc-preview md" id="doc-preview">${html}</div></div>`
+    ? `<div class="doc-edit" id="doc-editor"></div>`
     : `<div class="doc-body">${tocHtml}<article class="md">${html}</article></div>`;
   panel.innerHTML = head + body;
-  panel.hidden = false;
-  document.body.classList.add('doc-open');
+  showDocPanel(panel);
+  if (docState.mode === 'edit') {
+    let editor;
+    editor = createDocEditor({
+      container: $('#doc-editor'), text: docState.draft ?? docState.text, lang: getLang(), title: t('doc.editor'),
+      onChange(text) {
+        if (docEditor !== editor) return;
+        docState.draft = text;
+        docState.dirty = text !== docState.text;
+        updateDocButtons();
+      },
+      onSave: () => saveDoc(),
+      onError(error) { if (docEditor === editor) docError(error); },
+    });
+    docEditor = editor;
+    editor.ready.then(() => {
+      if (docEditor !== editor) return;
+      docState.ready = true;
+      updateDocButtons();
+    }).catch(() => {});
+    updateDocButtons();
+  }
 }
 
-async function openDoc(id, mode = 'view') {
+async function openDoc(id, mode = EXPORT ? 'view' : 'edit') {
+  const request = ++docRequest;
   const r = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}`);
-  Object.assign(docState, { id, text: r.text, mtimeMs: r.mtimeMs, mode, dirty: false, doc: r.doc });
+  if (request !== docRequest) return;
+  if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedClose'))) return;
+  Object.assign(docState, { id, text: r.text, draft: r.text, mtimeMs: r.mtimeMs, mode, dirty: false, saving: false, doc: r.doc });
   renderDocPanel(r.doc);
 }
 
 function closeDoc() {
+  docRequest++;
   if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedClose'))) return;
+  disposeDocEditor();
   docPanel().hidden = true;
-  document.body.classList.remove('doc-open');
   docState.id = null;
 }
 
 async function saveDoc() {
-  const text = $('#doc-text').value;
+  const editor = docEditor;
+  const id = docState.id;
+  if (!editor || docState.saving) return;
+  docState.saving = true;
+  updateDocButtons();
   try {
-    const r = await api(`/api/epics/${enc(current.id)}/docs/${enc(docState.id)}`, { method: 'PUT', body: { text, mtimeMs: docState.mtimeMs } });
-    Object.assign(docState, { text, mtimeMs: r.mtimeMs, mode: 'view', dirty: false });
-    renderDocPanel(docState.doc);
+    const text = await editor.getMarkdown();
+    if (docEditor !== editor || docState.id !== id || text === docState.text) return;
+    const r = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}`, { method: 'PUT', body: { text, mtimeMs: docState.mtimeMs } });
+    if (docEditor !== editor || docState.id !== id) return;
+    Object.assign(docState, { text, mtimeMs: r.mtimeMs });
+    const draft = await editor.getMarkdown();
+    if (docEditor !== editor || docState.id !== id) return;
+    Object.assign(docState, { draft, dirty: draft !== text });
+    setDocExtra('');
   } catch (e) {
-    renderDocPanel(docState.doc, `<p class="doc-error">${icon('alert')}${esc(e.message)} <button type="button" data-doc-reload>${icon('refresh')}${esc(t('doc.reload'))}</button></p>`);
-    $('#doc-text').value = text;
+    if (docEditor === editor && docState.id === id) docError(e);
+  } finally {
+    if (docEditor === editor && docState.id === id) {
+      docState.saving = false;
+      updateDocButtons();
+    }
   }
 }
 
 async function showVersions() {
-  const list = await api(`/api/epics/${enc(current.id)}/docs/${enc(docState.id)}/versions`);
+  const id = docState.id;
+  const list = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}/versions`);
+  if (docState.id !== id) return;
   const rows = list.length
     ? list.map((v) => `<li><button type="button" data-doc-version="${esc(v.id)}">${icon('versions')}${esc(new Date(v.at).toLocaleString(locale()))}</button></li>`).join('')
     : `<li class="muted">${esc(t('doc.noVersions'))}</li>`;
-  renderDocPanel(docState.doc, `<div class="doc-versions"><h5>${esc(t('doc.versions'))}</h5><ul>${rows}</ul></div>`);
+  setDocExtra(`<div class="doc-versions"><h5>${esc(t('doc.versions'))}</h5><ul>${rows}</ul></div>`);
 }
 
 async function showVersion(versionId) {
-  const { text } = await api(`/api/epics/${enc(current.id)}/docs/${enc(docState.id)}/versions/${enc(versionId)}`);
+  const id = docState.id;
+  const { text } = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}/versions/${enc(versionId)}`);
+  if (docState.id !== id) return;
   const { html } = renderMd(text);
-  renderDocPanel(docState.doc, `<div class="doc-versions"><h5>${esc(t('doc.versionOf', { t: versionId.slice(0, 16).replace('T', ' ') }))}</h5>
+  setDocExtra(`<div class="doc-versions"><h5>${esc(t('doc.versionOf', { t: versionId.slice(0, 16).replace('T', ' ') }))}</h5>
     <button type="button" data-doc-restore="${esc(versionId)}">${icon('undo')}${esc(t('doc.restore'))}</button><article class="md doc-version-view">${html}</article></div>`);
   docState.versionText = text;
 }
 
 function addDocForm(taskId) {
-  const lane = buildLanes(current).lanes.find((l) => l.id === taskId);
+  docRequest++;
+  if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedClose'))) return;
+  disposeDocEditor();
+  docState.id = null;
+  docState.mode = 'view';
+  docState.dirty = false;
+  const map = buildLanes(current);
+  const lane = [...map.lanes, ...map.side].find((l) => l.id === taskId);
   const panel = docPanel();
   const mode = current.docsMode === 'linked' ? 'doc.mode.linked' : current.docsMode === 'board' ? 'doc.mode.board' : 'doc.mode.none';
   panel.innerHTML = `<header class="doc-head"><div class="doc-head-title"><h3>${esc(t('doc.new', { task: taskId }))}</h3></div><div class="doc-actions"><button type="button" class="icon-btn" data-doc-close aria-label="${esc(t('close'))}">${icon('close')}</button></div></header>
@@ -505,8 +708,7 @@ function addDocForm(taskId) {
       <p class="muted">${esc(t(mode))}</p>
       <div class="doc-actions"><button type="submit">${icon('plus')}${esc(t('doc.create'))}</button></div>
     </form>`;
-  panel.hidden = false;
-  document.body.classList.add('doc-open');
+  showDocPanel(panel);
   if (current.docsMode === 'linked') panel.querySelector('input[value="link"]').checked = true;
   const syncPath = () => {
     $('#df-path-row').hidden = panel.querySelector('input[name="df-mode"]:checked').value !== 'link';
@@ -520,7 +722,7 @@ function addDocForm(taskId) {
       const doc = await api(`/api/epics/${enc(current.id)}/docs`, { method: 'POST', body: { mode: how, task: taskId, step: $('#df-step').value || undefined, kind: $('#df-kind').value, title: $('#df-title').value.trim(), path: $('#df-path').value.trim() || undefined } });
       current = await api(`/api/epics/${enc(current.id)}`);
       renderMapArea(current);
-      await openDoc(doc.id, how === 'new' ? 'edit' : 'view');
+      await openDoc(doc.id);
     } catch (err) {
       alertBox(err.message);
     }
@@ -536,22 +738,28 @@ function bindDocs() {
     if (add) return void addDocForm(add.dataset.docAdd);
     if (el.closest('[data-doc-close]')) return closeDoc();
     if (el.closest('[data-doc-edit]')) {
+      docRequest++;
       docState.mode = 'edit';
+      docState.draft = docState.text;
       return renderDocPanel(docState.doc);
     }
     if (el.closest('[data-doc-cancel]')) {
+      docRequest++;
       if (docState.dirty && !window.confirm(t('doc.unsavedCancel'))) return;
       docState.mode = 'view';
       docState.dirty = false;
+      docState.draft = docState.text;
       return renderDocPanel(docState.doc);
     }
     if (el.closest('[data-doc-save]')) return void saveDoc();
-    if (el.closest('[data-doc-reload]')) return void openDoc(docState.id, 'view');
+    if (el.closest('[data-doc-reload]')) return void openDoc(docState.id);
     if (el.closest('[data-doc-versions]')) return void showVersions().catch((err) => alertBox(err.message));
     const ver = el.closest('[data-doc-version]');
     if (ver) return void showVersion(ver.dataset.docVersion).catch((err) => alertBox(err.message));
     if (el.closest('[data-doc-restore]')) {
-      Object.assign(docState, { mode: 'edit', dirty: true, text: docState.versionText });
+      docRequest++;
+      if (docState.mode === 'edit' && docState.dirty && !window.confirm(t('doc.unsavedCancel'))) return;
+      Object.assign(docState, { mode: 'edit', dirty: docState.versionText !== docState.text, draft: docState.versionText });
       return renderDocPanel(docState.doc);
     }
     const toc = el.closest('[data-toc]');
@@ -559,11 +767,6 @@ function bindDocs() {
       e.preventDefault();
       document.getElementById(toc.dataset.toc)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-  });
-  document.addEventListener('input', (e) => {
-    if (e.target.id !== 'doc-text') return;
-    docState.dirty = true;
-    $('#doc-preview').innerHTML = renderMd(e.target.value).html;
   });
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 's' && docState.mode === 'edit' && !$('#doc-panel').hidden) {
@@ -588,6 +791,12 @@ function setFull(on) {
   if (tools) on ? frame.prepend(tools) : $('.map-section .section-head').appendChild(tools);
   if (on && frame.requestFullscreen && !document.fullscreenElement) frame.requestFullscreen().catch(() => {});
   if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  // Full screen changes the width the chain fits into, so the same scale has to be measured again.
+  fitLargeMap();
+  globalThis.requestAnimationFrame?.(() => {
+    applyOverviewScale();
+    fitLargeMap();
+  });
 }
 
 document.addEventListener('keydown', (e) => {
@@ -597,53 +806,332 @@ document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement && $('#map-frame')?.classList.contains('map-full')) setFull(false);
 });
 
-// The map is always drawn at 100%; enlarging is left to the browser's own zoom.
+// 100% is a card at its drawn size. The block is only a window, so a long chain scrolls.
+const MAP_SCALE_MIN = 0.5;
+const MAP_SCALE_MAX = 2.5;
+
+function clampMapScale(scale) {
+  return Math.min(MAP_SCALE_MAX, Math.max(MAP_SCALE_MIN, scale));
+}
+
+function nextMapScale(scale, deltaY) {
+  return clampMapScale(scale * Math.exp(-deltaY * 0.0014));
+}
+
+function formatMapScale(scale) {
+  return `${Math.round(scale * 100)}%`;
+}
+
+let mapHeight = null;
+let saveSettings = async () => {};
+
+function mapHeightClass() {
+  return mapHeight ? ` map-h-${mapHeight}` : '';
+}
+
+// Until a height is saved, the pressed mode matches the height the layout already uses.
+function effectiveMapHeight(hasSide) {
+  return mapHeight || (hasSide ? 'm' : 's');
+}
+
+function mapHeightControl(hasSide) {
+  const current = effectiveMapHeight(hasSide);
+  const button = (id) => `<button type="button" data-map-height="${id}" aria-pressed="${current === id}" title="${esc(t(`map.height.${id}Tip`))}">${esc(t(`map.height.${id}`))}</button>`;
+  return `<div class="map-size" role="group" aria-label="${esc(t('map.height'))}">${['s', 'm', 'l'].map(button).join('')}</div>`;
+}
+
+function mapZoomControl() {
+  const scale = tlState.mapScale || 1;
+  const idle = Math.round(scale * 100) === 100;
+  return `<div class="map-zoom" role="group" aria-label="${esc(t('map.zoom'))}"><span class="map-zoom-scale">${formatMapScale(scale)}</span><button type="button" data-map-zoom-reset${idle ? ' disabled' : ''}>${esc(t('map.reset'))}</button></div>`;
+}
+
+function mapLocateControl(canLocate) {
+  return `<button type="button" class="icon-btn map-locate" data-map-locate aria-label="${esc(t('map.locate'))}" title="${esc(t('map.locate'))}"${canLocate ? '' : ' disabled'}>${icon('target')}</button>`;
+}
+
+function applyMapHeightClass() {
+  const ov = $('.overview');
+  if (!ov) return;
+  ov.classList.remove('map-h-s', 'map-h-m', 'map-h-l');
+  if (mapHeight) ov.classList.add(`map-h-${mapHeight}`);
+  const current = effectiveMapHeight(ov.classList.contains('has-side'));
+  for (const button of document.querySelectorAll('[data-map-height]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.mapHeight === current));
+  }
+  fitLargeMap();
+}
+
+// 128px is the old frame offset and misses the epic title, so the box would run past the screen.
+function fitLargeMap() {
+  const ov = $('.overview');
+  if (!ov?.getBoundingClientRect || !ov.style?.setProperty) return;
+  const full = $('#map-frame')?.classList.contains('map-full');
+  if (mapHeight !== 'l' || full) {
+    ov.style.removeProperty('--map-l-cut');
+    return;
+  }
+  const top = ov.getBoundingClientRect().top + (globalThis.scrollY || 0);
+  ov.style.setProperty('--map-l-cut', `${Math.max(0, Math.round(top + 12))}px`);
+}
+
+function scrollToActiveCard() {
+  const card = $('.ov-svg .ov-card.active') || $('.ov-svg .ov-card.selected');
+  const scroller = $('.ov-scroll');
+  if (!card || !scroller?.getBoundingClientRect) return;
+  const s = scroller.getBoundingClientRect();
+  const c = card.getBoundingClientRect();
+  const maxX = Math.max(0, (scroller.scrollWidth || 0) - (scroller.clientWidth || 0));
+  const maxY = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+  const left = (scroller.scrollLeft || 0) + (c.left + c.width / 2) - (s.left + s.width / 2);
+  const top = (scroller.scrollTop || 0) + (c.top + c.height / 2) - (s.top + s.height / 2);
+  const next = { left: Math.min(maxX, Math.max(0, left)), top: Math.min(maxY, Math.max(0, top)) };
+  const reduce = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  if (!reduce && scroller.scrollTo) scroller.scrollTo({ ...next, behavior: 'smooth' });
+  else {
+    scroller.scrollLeft = next.left;
+    scroller.scrollTop = next.top;
+  }
+}
+
+async function saveMapHeight(mode) {
+  const previous = mapHeight;
+  mapHeight = mode;
+  applyMapHeightClass();
+  try {
+    await saveSettings({ mapHeight: mode });
+  } catch (error) {
+    mapHeight = previous;
+    applyMapHeightClass();
+    alertBox(error.message);
+  }
+}
+
+function applyOverviewScale() {
+  const scale = tlState.mapScale || 1;
+  const label = $('.map-zoom-scale');
+  if (label) label.textContent = formatMapScale(scale);
+  const reset = $('[data-map-zoom-reset]');
+  if (reset) reset.disabled = Math.round(scale * 100) === 100;
+  const svg = $('.ov-svg');
+  if (!svg) return;
+  const natural = Number(svg.dataset?.w) || 0;
+  if (!natural) {
+    if (scale === 1) {
+      svg.style.width = '';
+      svg.style.maxWidth = '';
+      svg.style.minWidth = '';
+    }
+    return;
+  }
+  svg.style.minWidth = '0';
+  svg.style.maxWidth = 'none';
+  svg.style.width = `${natural * scale}px`;
+}
+
+// The point under the cursor stays put while the chain grows or shrinks around it.
+function keepZoomPoint(svg, clientX, clientY, px, py) {
+  const rect = svg.getBoundingClientRect();
+  let dx = rect.left + px * rect.width - clientX;
+  let dy = rect.top + py * rect.height - clientY;
+  let node = svg.parentElement;
+  while (node && node !== document.body && (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5)) {
+    const left = node.scrollLeft || 0;
+    const top = node.scrollTop || 0;
+    if ((node.scrollWidth || 0) > (node.clientWidth || 0) + 1) node.scrollLeft = left + dx;
+    if ((node.scrollHeight || 0) > (node.clientHeight || 0) + 1) node.scrollTop = top + dy;
+    dx -= (node.scrollLeft || 0) - left;
+    dy -= (node.scrollTop || 0) - top;
+    node = node.parentElement;
+  }
+}
+
+function zoomOverview(deltaY, clientX, clientY) {
+  const svg = $('.ov-svg');
+  const next = nextMapScale(tlState.mapScale || 1, deltaY);
+  if (!svg?.getBoundingClientRect || next === tlState.mapScale) {
+    tlState.mapScale = next;
+    applyOverviewScale();
+    return;
+  }
+  const before = svg.getBoundingClientRect();
+  const px = before.width ? (clientX - before.left) / before.width : 0.5;
+  const py = before.height ? (clientY - before.top) / before.height : 0.5;
+  tlState.mapScale = next;
+  applyOverviewScale();
+  keepZoomPoint(svg, clientX, clientY, px, py);
+}
+
+function resetOverviewScale() {
+  const svg = $('.ov-svg');
+  const before = svg?.getBoundingClientRect?.();
+  tlState.mapScale = 1;
+  applyOverviewScale();
+  if (svg && before?.width) keepZoomPoint(svg, before.left + before.width / 2, before.top + before.height / 2, 0.5, 0.5);
+}
+
+function readBoxScroll(sel) {
+  const el = $(sel);
+  return { x: el?.scrollLeft || 0, y: el?.scrollTop || 0 };
+}
+
+function writeBoxScroll(sel, saved) {
+  const el = $(sel);
+  if (!el || !saved) return;
+  el.scrollLeft = saved.x;
+  el.scrollTop = saved.y;
+}
+
+function pageScroll() {
+  const frame = $('#map-frame');
+  return {
+    x: globalThis.window?.scrollX || 0,
+    y: globalThis.window?.scrollY || 0,
+    frameX: frame?.scrollLeft || 0,
+    frameY: frame?.scrollTop || 0,
+  };
+}
+
+function restorePageScroll(saved) {
+  if (!saved) return;
+  globalThis.window?.scrollTo?.(saved.x, saved.y);
+  const frame = $('#map-frame');
+  if (!frame) return;
+  frame.scrollLeft = saved.frameX;
+  frame.scrollTop = saved.frameY;
+}
+
+function holdMapScroll(saved) {
+  writeBoxScroll('.overview', saved.overview);
+  writeBoxScroll('.ov-scroll', saved.chain);
+  restorePageScroll(saved.page);
+}
+
 function bindMapTools() {
   document.addEventListener('click', (e) => {
     if (e.target.closest('.map-tools [data-fullscreen]')) setFull(!$('#map-frame').classList.contains('map-full'));
+    if (e.target.closest('[data-map-zoom-reset]')) resetOverviewScale();
+    if (e.target.closest('[data-map-locate]')) scrollToActiveCard();
+    const height = e.target.closest('[data-map-height]');
+    if (height && !EXPORT && ['s', 'm', 'l'].includes(height.dataset.mapHeight) && height.dataset.mapHeight !== mapHeight) {
+      void saveMapHeight(height.dataset.mapHeight);
+    }
   });
+  document.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.target.closest?.('.overview-main')) return;
+    e.preventDefault();
+    const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? (globalThis.window?.innerHeight || 800) : 1);
+    zoomOverview(delta, e.clientX, e.clientY);
+  }, { passive: false });
+  // A click focuses the card inside the SVG and the browser scrolls that focus into view, which throws the chain off.
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || e.target.closest?.('[data-info]')) return;
+    if (e.target.closest?.('#map [data-open]')) e.preventDefault();
+  });
+  globalThis.window?.addEventListener?.('resize', () => {
+    applyOverviewScale();
+    fitLargeMap();
+  });
+}
+
+// Center the open step. A step near either end stays pinned there instead of scrolling past the strip.
+function placeInView(offset, size, view, total) {
+  const max = Math.max(0, total - view);
+  return Math.min(max, Math.max(0, offset + size / 2 - view / 2));
+}
+
+function stepAnchor(layout, stepId) {
+  if (!stepId) return null;
+  for (let row = 0; row < layout.rows.length; row++) {
+    const cell = layout.rows[row].cells.find((c) => c.id === stepId);
+    if (cell) return { x: nodeX(cell.col), y: rowY(row) };
+  }
+  return null;
 }
 
 function focusTimeline(layout) {
   const scroller = $('#tl-scroll');
-  if (!scroller || !layout.focus) return;
-  scroller.scrollLeft = nodeX(layout.focus.col) + TL.nodeW / 2 - scroller.clientWidth / 2;
+  const anchor = stepAnchor(layout, tlState.step);
+  if (!scroller || !anchor) return;
+  const size = timelineSize(layout);
+  const apply = () => {
+    const viewW = scroller.clientWidth || 0;
+    if (!viewW) return false;
+    const totalW = Math.max(scroller.scrollWidth || 0, size.width);
+    const totalH = Math.max(scroller.scrollHeight || 0, size.height);
+    scroller.scrollLeft = placeInView(anchor.x, TL.nodeW, viewW, totalW);
+    const viewH = scroller.clientHeight || 0;
+    if (viewH) scroller.scrollTop = placeInView(anchor.y, TL.nodeH, viewH, totalH);
+    return true;
+  };
+  if (!apply()) globalThis.requestAnimationFrame?.(() => apply());
 }
 
-// Drag to pan the steps of the opened task: a long task is wider than the screen by design.
-function bindPan() {
-  const scroller = $('#tl-scroll');
+// The inner scroller takes what it can; whatever is left moves the outer one.
+function panScroll(el, axis, from, delta) {
+  if (!el) return delta;
+  const horizontal = axis === 'x';
+  const max = Math.max(0, (el[horizontal ? 'scrollWidth' : 'scrollHeight'] || 0) - (el[horizontal ? 'clientWidth' : 'clientHeight'] || 0));
+  const next = Math.min(max, Math.max(0, from - delta));
+  el[horizontal ? 'scrollLeft' : 'scrollTop'] = next;
+  return delta - (from - next);
+}
+
+// A few pixels of travel starts a pan. A shorter press stays a click.
+function bindHandPan(scroller, apply, moved = (dx, dy) => Math.hypot(dx, dy) > 4) {
   if (!scroller || scroller.dataset.bound) return;
   scroller.dataset.bound = '1';
   let drag = null;
-  // Panning starts only after the pointer travels a few pixels, so a click still selects a step.
   scroller.addEventListener('pointerdown', (e) => {
-    if (e.button === 0) drag = { x: e.clientX, left: scroller.scrollLeft, id: e.pointerId, moving: false };
+    if (e.button !== 0) return;
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId, moving: false, origin: apply() };
   });
   scroller.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    if (!drag.moving && Math.abs(e.clientX - drag.x) > 4) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (!drag.moving && moved(dx, dy)) {
       drag.moving = true;
-      scroller.setPointerCapture(drag.id);
+      scroller.setPointerCapture?.(drag.id);
       scroller.classList.add('dragging');
     }
-    if (drag.moving) scroller.scrollLeft = drag.left - (e.clientX - drag.x);
+    if (drag.moving) apply(drag.origin, dx, dy);
   });
-  const stop = () => {
-    if (drag?.moving) scroller.dataset.dragEnd = String(Date.now());
+  const stop = (e) => {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    if (drag.moving) scroller.dataset.dragEnd = String(Date.now());
     drag = null;
     scroller.classList.remove('dragging');
   };
   scroller.addEventListener('pointerup', stop);
   scroller.addEventListener('pointercancel', stop);
+  scroller.addEventListener('click', (e) => {
+    if (Date.now() - Number(scroller.dataset.dragEnd || 0) > 200) return;
+    e.preventDefault();
+    e.stopPropagation();
+  });
+}
+
+// Drag to pan the steps of the opened task: a long task is wider than the screen by design.
+function bindPan() {
+  const scroller = $('#tl-scroll');
+  bindHandPan(scroller, (origin, dx) => {
+    if (!origin) return { left: scroller.scrollLeft };
+    scroller.scrollLeft = origin.left - dx;
+  }, (dx) => Math.abs(dx) > 4);
+}
+
+// The off-chain column is outside this scroller, so a drag never moves it.
+function bindOverviewPan() {
+  const scroller = $('.ov-scroll');
+  bindHandPan(scroller, (origin, dx, dy) => {
+    if (!origin) return { left: scroller.scrollLeft, top: scroller.scrollTop };
+    panScroll(scroller, 'x', origin.left, dx);
+    panScroll(scroller, 'y', origin.top, dy);
+  });
 }
 
 // ---------- Map area ----------
-
-function sideTasks(map) {
-  if (!map.side.length) return '';
-  return `<div class="side-row"><span class="muted">${esc(t('map.side'))}</span>${map.side.map((l) => `<span class="chip" title="${esc(l.fullTitle)}">${esc(l.id)} · ${esc(l.title)}${l.status ? ` · ${esc(l.status)}` : ''}</span>`).join('')}</div>`;
-}
 
 function openFromHash() {
   const m = location.hash.match(/^#t-([^/]+)(?:\/([\w.-]+))?$/);
@@ -655,30 +1143,43 @@ function openFromHash() {
 function renderMapArea(epic) {
   const map = buildLanes(epic);
   const ov = buildOverview(epic);
-  for (const n of ov.nodes) n.docs = (epic.docs || []).filter((d) => d.task === n.id).length;
-  if (tlState.open && !ov.nodes.some((n) => n.id === tlState.open && n.kind !== 'goal')) tlState.open = null;
+  const allNodes = [...ov.nodes, ...ov.side];
+  for (const n of allNodes) n.docs = (epic.docs || []).filter((d) => d.task === n.id).length;
+  if (tlState.open === 'merge' && !allNodes.some((n) => n.kind === 'task' && n.id === 'merge')) tlState.open = MERGE_ID;
+  if (tlState.open && !allNodes.some((n) => n.id === tlState.open && n.kind !== 'goal')) tlState.open = null;
   const open = tlState.open || defaultOpen(map);
-  const here = map.here.length ? map.here.map((h) => `${esc(h.task)} · ${esc(h.title)}`).join('; ') : esc(t('map.noActive'));
   const prev = $('#tl-scroll');
-  const keep = prev && tlState.focused === open ? prev.scrollLeft : null;
-  $('#map').innerHTML = `<p class="here"><span class="chip active-chip">${icon('target')}${esc(t('map.here'))}</span>${here}</p>`
-    + renderOverview(ov, open)
-    + (open ? renderDetail(map, open) : '')
-    + sideTasks(map);
+  const stepBefore = tlState.step;
+  const keep = prev && tlState.focused === open && tlState.focusedStep === stepBefore ? prev.scrollLeft : null;
+  // Rebuilding the chain drops its scroll; opening a task must not jump back to the first cards.
+  const held = { overview: readBoxScroll('.overview'), chain: readBoxScroll('.ov-scroll'), page: pageScroll() };
+  $('#map').innerHTML = renderOverview(ov, open)
+    + (open ? renderDetail(map, open) : '');
+  applyOverviewScale();
+  fitLargeMap();
+  holdMapScroll(held);
+  globalThis.requestAnimationFrame?.(() => {
+    fitLargeMap();
+    holdMapScroll(held);
+  });
+  bindOverviewPan();
   if (!open) return;
   bindPan();
-  if (keep !== null) $('#tl-scroll').scrollLeft = keep;
+  if (keep !== null && tlState.step === stepBefore) $('#tl-scroll').scrollLeft = keep;
   else {
     tlState.focused = open;
+    tlState.focusedStep = tlState.step;
     focusTimeline(detailLayout(map, open));
   }
 }
 
-function toggleDetail(id) {
-  if (tlState.open !== id) tlState.step = null;
+function toggleDetail(id, focusStack = false) {
+  if ((tlState.open || defaultOpen(buildLanes(current))) !== id) tlState.step = null;
   tlState.open = id;
-  history.replaceState(null, '', `#t-${enc(id)}`);
+  if ((current.tasks || []).some((task) => task.id === id && task.role === 'side')) tlState.side = id;
+  history.replaceState(null, '', `#t-${enc(id)}${tlState.step ? `/${enc(tlState.step)}` : ''}`);
   renderMapArea(current);
+  if (focusStack) $('.side-current [data-open]')?.focus({ preventScroll: true });
 }
 
 function selectStep(stepId) {
@@ -689,8 +1190,7 @@ function selectStep(stepId) {
 
 // ---------- Needs decision ----------
 
-const WAIT_KINDS = ['decision', 'approval', 'review', 'action', 'other'];
-const waitKind = (kind) => t(`w.kind.${WAIT_KINDS.includes(kind) ? kind : 'other'}`);
+let decisionDrafts = null;
 
 // A link from a pending item to something already on the board: a chip that jumps there.
 function refChip(epic, ref) {
@@ -720,6 +1220,9 @@ function refChip(epic, ref) {
   } else if (kind === 'doc') {
     const doc = (epic.docs || []).find((d) => d.id === value);
     if (doc) [label, attrs, ic] = [`${kindText(doc.kind)} · ${doc.title}`, `data-doc="${esc(doc.id)}"`, 'file'];
+  } else if (kind === 'waiting') {
+    const item = (epic.waiting || []).find((x) => x.id === value);
+    if (item) [label, attrs, ic] = [item.title, `data-jump-sid="w-${esc(item.id)}"`, 'clock'];
   } else if (kind === 'decision') {
     const d = (epic.decisions || []).find((x) => x.id === value);
     if (d) [label, attrs, ic] = [`${t('w.ref.decision')}: ${d.text.length > 40 ? `${d.text.slice(0, 39)}…` : d.text}`, `data-jump-sid="d-${esc(d.id)}"`, 'flag'];
@@ -728,26 +1231,215 @@ function refChip(epic, ref) {
   return `<button type="button" class="ref" ${attrs}>${icon(ic)}<span>${esc(label)}</span></button>`;
 }
 
-function waitingItem(epic, w) {
-  const task = w.task ? `<button type="button" class="ref ref-task" data-jump-task="${esc(w.task)}">${esc(w.task)}</button>` : '';
-  if (w.doneAt) {
-    return `<li class="wait done" data-sid="w-${esc(w.id)}"><div class="wait-row"><span class="chip">${esc(waitKind(w.kind))}</span><span class="wait-text"><span class="wt">${esc(w.title)}</span><span class="wait-meta">${icon('check', 'st-done')}${phrase('w.doneAt', { t: agoText(w.doneAt) })}${task}</span>${w.resolution ? `<span class="wait-resolution">${esc(w.resolution)}</span>` : ''}</span><button type="button" class="live-only" data-undo="${esc(w.id)}">${icon('undo')}${esc(t('w.undo'))}</button></div></li>`;
-  }
-  const details = w.details ? `<div class="wait-details md">${renderMd(w.details).html}</div>` : '';
-  const refs = (w.refs || []).length ? `<div class="wait-refs"><span class="muted">${esc(t('w.links'))}:</span>${w.refs.map((r) => refChip(epic, r)).join('')}</div>` : '';
-  const checklist = (w.checklist || []).length ? `<ul class="wait-checklist">${w.checklist.map((c) => `<li>${icon('circle', 'st-todo')}<span>${esc(c.text)}</span></li>`).join('')}</ul>` : '';
-  return `<li class="wait" data-sid="w-${esc(w.id)}">
-    <div class="wait-row"><span class="chip">${esc(waitKind(w.kind))}</span><span class="wait-text"><span class="wt">${esc(w.title)}</span><span class="wait-meta">${task}${phrase('w.since', { t: agoTag(w.since) })}${(w.checklist || []).length ? `<span>${icon('list')}${esc(t('w.checklist', { n: w.checklist.length }))}</span>` : ''}</span></span><button type="button" class="live-only primary" data-done="${esc(w.id)}">${icon('check')}${esc(t('w.done'))}</button></div>
-    ${details}${refs}${checklist}
-  </li>`;
+function sortedWaiting(epic) {
+  const rank = { open: 0, answered: 1, closed: 2 };
+  return [...(epic.waiting || [])].sort((a, b) => (rank[a.status] ?? (a.doneAt ? 2 : 0)) - (rank[b.status] ?? (b.doneAt ? 2 : 0)) || String(a.since).localeCompare(String(b.since)));
 }
 
-function renderWaiting(epic) {
-  const waiting = [...(epic.waiting || [])].sort((a, b) => Boolean(a.doneAt) - Boolean(b.doneAt) || String(a.since).localeCompare(String(b.since)));
-  $('#waiting').innerHTML = waiting.map((w) => waitingItem(epic, w)).join('') || `<li class="muted">${esc(t('none.waiting'))}</li>`;
-  const open = waiting.filter((w) => !w.doneAt).length;
-  const count = $('#waiting-count');
-  if (count) count.textContent = open ? String(open) : '';
+function captureWaitingExpansion() {
+  for (const card of $('#waiting').querySelectorAll('[data-sid]')) {
+    waitingExpansion.set(card.dataset.sid, new Map([...card.querySelectorAll('details[data-wait-part]')].map((el) => [el.dataset.waitPart, el.open])));
+  }
+}
+
+function pageItems(block, items) {
+  const data = paginate(items, sectionPages[block], pageSizes[block]);
+  sectionPages[block] = data.page;
+  $(`#${block}-pagination`).innerHTML = renderPagination(block, data, pageSizes[block], { readOnly: Boolean(EXPORT), saving: savingPageSizes });
+  return data.items;
+}
+
+function renderWaiting(epic, revealId, revealHistory = false) {
+  const root = $('#waiting');
+  const active = document.activeElement;
+  const activeForm = active?.closest('[data-wait-form]');
+  const focus = activeForm ? { id: activeForm.dataset.waitForm, name: active.name, value: active.value, start: active.selectionStart, end: active.selectionEnd } : null;
+  captureWaitingExpansion();
+  if (revealId) {
+    const expanded = waitingExpansion.get(revealId) || new Map();
+    expanded.set('card', true);
+    if (revealHistory) {
+      expanded.set('history', true);
+      expanded.set('drafts', true);
+    }
+    waitingExpansion.set(revealId, expanded);
+  }
+  const waiting = sortedWaiting(epic);
+  root.innerHTML = pageItems('waiting', waiting).map((item) => renderWaitingCard(item, {
+    readOnly: Boolean(EXPORT),
+    expanded: waitingExpansion.get(`w-${item.id}`)?.get('card'),
+    revealHistory: revealHistory && revealId === `w-${item.id}`,
+    draft: EXPORT ? undefined : item.status === 'open' ? decisionDrafts.get(item) : decisionDrafts.peek(item.id),
+    renderDetails: (text) => renderMd(text).html,
+    refChip: (ref) => refChip(epic, ref),
+  })).join('') || `<li class="muted">${esc(t('none.waiting'))}</li>`;
+  for (const card of root.querySelectorAll('[data-sid]')) {
+    for (const details of card.querySelectorAll('details[data-wait-part]')) {
+      const expanded = waitingExpansion.get(card.dataset.sid);
+      if (expanded?.has(details.dataset.waitPart)) details.open = expanded.get(details.dataset.waitPart);
+    }
+  }
+  if (focus) {
+    const form = [...root.querySelectorAll('[data-wait-form]')].find((el) => el.dataset.waitForm === focus.id);
+    const input = [...(form?.elements || [])].find((el) => el.name === focus.name && (el.type === 'textarea' || el.value === focus.value));
+    if (input && !input.disabled && !input.closest('fieldset[disabled]')) {
+      input.focus({ preventScroll: true });
+      if (input.setSelectionRange && focus.start !== null) input.setSelectionRange(focus.start, focus.end);
+    }
+  }
+  const counts = waitingCounts(waiting);
+  $('#waiting-count').innerHTML = ['open', 'answered', 'closed'].map((status) => `<span>${esc(t(`w.status.${status}`))} <b>${counts[status]}</b></span>`).join('');
+}
+
+function renderDecisions(epic) {
+  $('#decisions').innerHTML = pageItems('decisions', [...(epic.decisions || [])].reverse()).map((d) => `<li data-sid="d-${esc(d.id)}"><span class="mono muted">${esc(String(d.at).slice(0, 10))}</span>${d.task ? `<span class="chip">${esc(d.task)}</span>` : ''}<span>${esc(d.text)}</span>${d.by ? `<span class="muted">${esc(d.by)}</span>` : ''}</li>`).join('') || `<li class="muted">${esc(t('none.decisions'))}</li>`;
+}
+
+function renderHistory(history) {
+  $('#history').innerHTML = pageItems('history', historyEntries(history)).map(({ event: h, target, description: d }) => {
+    const value = d.change === 'add' ? `<span class="hv-new">${esc(d.after ?? '')}</span>`
+      : d.change === 'remove' ? `<span class="hv-old">${esc(d.before ?? '')}</span>`
+      : `<span class="hv-old">${esc(d.before ?? '—')}</span>${icon('arrowRight', 'inl')}<span class="hv-new">${esc(d.after ?? '—')}</span>`;
+    const by = ['agent', 'cli', 'refresh', 'button', 'hook'].includes(h.by) ? t(`by.${h.by}`) : cap(h.by);
+    return `<li data-sid="${target}"><div class="h-line"><span class="h-time muted">${agoTag(h.at)}</span><span class="chip">${esc(by)}</span><span class="h-where">${esc(cap(d.where))}</span></div>
+      <div class="h-change"><span class="h-what muted">${esc(cap(d.what))}:</span> ${value}</div>${h.why ? `<div class="h-why muted">${esc(cap(h.why))}</div>` : ''}</li>`;
+  }).join('') || `<li class="muted">${esc(t('none.history'))}</li>`;
+}
+
+function renderSection(block) {
+  if (block === 'waiting') renderWaiting(current);
+  if (block === 'decisions') renderDecisions(current);
+  if (block === 'history') renderHistory(currentHistory);
+}
+
+function changeSectionPage(block, page) {
+  if (!Object.hasOwn(sectionPages, block)) return;
+  sectionPages[block] = page;
+  renderSection(block);
+}
+
+function applyPageSettings(settings) {
+  for (const block of Object.keys(pageSizes)) {
+    const value = settings.epicPageSizes?.[block];
+    const size = [5, 10, 15].includes(value) ? value : 5;
+    if (pageSizes[block] === size) continue;
+    pageSizes[block] = size;
+    sectionPages[block] = 1;
+    if (current) renderSection(block);
+  }
+  const next = ['s', 'm', 'l'].includes(settings?.mapHeight) ? settings.mapHeight : null;
+  if (next !== mapHeight) {
+    mapHeight = next;
+    applyMapHeightClass();
+  }
+}
+
+function refreshPagers() {
+  if (!current) return;
+  for (const [block, items] of Object.entries({ waiting: sortedWaiting(current), decisions: current.decisions || [], history: historyEntries(currentHistory) })) pageItems(block, items);
+}
+
+function bindPagination(saveSettings) {
+  $('#epic').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-page]');
+    if (!button || button.disabled) return;
+    const block = button.closest('[data-page-block]').dataset.pageBlock;
+    changeSectionPage(block, Number(button.dataset.page));
+    const list = $(`#${block}`);
+    list.tabIndex = -1;
+    list.focus({ preventScroll: true });
+  });
+  $('#epic').addEventListener('change', async (event) => {
+    const select = event.target.closest('[data-page-size]');
+    if (!select || EXPORT || savingPageSizes) return;
+    const block = select.dataset.pageSize;
+    const size = Number(select.value);
+    if (![5, 10, 15].includes(size)) return;
+    savingPageSizes = true;
+    refreshPagers();
+    try {
+      await saveSettings({ epicPageSizes: { [block]: size } });
+    } catch (error) {
+      alertBox(error.message);
+    } finally {
+      savingPageSizes = false;
+      refreshPagers();
+      $(`[data-page-size="${block}"]`)?.focus({ preventScroll: true });
+    }
+  });
+}
+
+function revealPaginatedTarget(sid, revealHistory = false) {
+  if (!current) return;
+  const lists = { waiting: sortedWaiting(current).map((item) => `w-${item.id}`), decisions: [...(current.decisions || [])].reverse().map((item) => `d-${item.id}`), history: historyEntries(currentHistory).map((item) => item.target) };
+  for (const [block, ids] of Object.entries(lists)) {
+    const index = ids.indexOf(sid);
+    if (index < 0) continue;
+    sectionPages[block] = Math.floor(index / pageSizes[block]) + 1;
+    if (block === 'waiting') renderWaiting(current, sid, revealHistory);
+    else renderSection(block);
+    return;
+  }
+}
+
+function bindDecisionForms(id) {
+  const root = $('#waiting');
+  const readForm = (form) => {
+    const item = current.waiting.find((w) => w.id === form.dataset.waitForm);
+    if (!item) return;
+    const data = new FormData(form);
+    decisionDrafts.update(item, { selected: data.getAll('selected'), checked: data.getAll('checked'), comment: String(data.get('comment') || '') });
+  };
+  root.addEventListener('input', (event) => {
+    const form = event.target.closest('[data-wait-form]');
+    if (form) {
+      readForm(form);
+      const error = form.querySelector('[data-wait-error]');
+      if (error) error.hidden = true;
+    }
+  });
+  root.addEventListener('change', (event) => {
+    const form = event.target.closest('[data-wait-form]');
+    if (form) readForm(form);
+  });
+  root.addEventListener('submit', async (event) => {
+    const form = event.target.closest('[data-wait-form]');
+    if (!form) return;
+    event.preventDefault();
+    if (EXPORT) return;
+    const item = current.waiting.find((w) => w.id === form.dataset.waitForm);
+    if (!item || decisionDrafts.get(item).busy) return;
+    readForm(form);
+    const result = decisionDrafts.submit(item, (body) => api(`/api/epics/${enc(id)}/waiting/${enc(item.id)}/submit`, { method: 'POST', body }));
+    renderWaiting(current);
+    try {
+      const epic = await result;
+      if (!epic) return;
+      current = epic;
+      revealPaginatedTarget(`w-${item.id}`);
+      $('#waiting-announcement').textContent = t('w.saved');
+      await renderEpic(id).catch((error) => alertBox(error.message));
+    } catch (error) {
+      if (error.status === 409) await renderEpic(id).catch(() => {});
+      revealPaginatedTarget(`w-${item.id}`);
+      const card = [...root.querySelectorAll('[data-sid]')].find((el) => el.dataset.sid === `w-${item.id}`);
+      const message = card?.querySelector('[data-wait-error]');
+      if (message) {
+        message.tabIndex = -1;
+        message.focus({ preventScroll: true });
+      }
+    }
+  });
+  root.addEventListener('click', (event) => {
+    const refresh = event.target.closest('[data-wait-refresh]');
+    if (!refresh || EXPORT) return;
+    const item = current.waiting.find((w) => w.id === refresh.dataset.waitRefresh);
+    if (!item || decisionDrafts.get(item).busy) return;
+    decisionDrafts.refresh(item);
+    renderWaiting(current);
+    const form = [...root.querySelectorAll('[data-wait-form]')].find((el) => el.dataset.waitForm === item.id);
+    (form?.querySelector('input, textarea, button'))?.focus();
+  });
 }
 
 function modalHost(id) {
@@ -761,30 +1453,8 @@ function modalHost(id) {
   return modal;
 }
 
-// "Done" is a confirmation: when the item carries a checklist, every point must be ticked first.
-function confirmModal(epic, itemId) {
-  const w = (epic.waiting || []).find((x) => x.id === itemId);
-  if (!w) return;
-  const modal = modalHost('confirm-modal');
-  const list = w.checklist || [];
-  modal.innerHTML = `<div class="modal" role="dialog" aria-label="${esc(t('w.confirmTitle'))}">
-      <header class="modal-head"><h3>${icon('check')}${esc(t('w.confirmTitle'))}</h3><span class="chip">${esc(waitKind(w.kind))}</span></header>
-      <h4 class="confirm-title">${esc(w.title)}</h4>
-      ${w.details ? `<div class="wait-details md">${renderMd(w.details).html}</div>` : ''}
-      ${list.length ? `<p class="muted">${esc(t('w.confirmHint'))}</p><ul class="confirm-list">${list.map((c) => `<li><label><input type="checkbox" data-check="${esc(c.id)}"> ${esc(c.text)}</label></li>`).join('')}</ul>` : ''}
-      <label class="confirm-note">${esc(t('w.resolution'))}<textarea id="confirm-resolution" rows="3"></textarea></label>
-      <footer class="modal-foot"><button type="button" data-modal-close>${esc(t('cancel'))}</button><button type="button" class="primary" data-confirm="${esc(w.id)}"${list.length ? ' disabled' : ''}>${icon('check')}${esc(t('w.confirm'))}</button></footer></div>`;
-  modal.hidden = false;
-  const sync = () => {
-    const boxes = [...modal.querySelectorAll('[data-check]')];
-    modal.querySelector('[data-confirm]').disabled = !boxes.every((b) => b.checked);
-  };
-  modal.querySelectorAll('[data-check]').forEach((b) => b.addEventListener('change', sync));
-  (modal.querySelector('[data-check]') || modal.querySelector('#confirm-resolution')).focus();
-}
-
 function jumpToTask(taskId, stepId) {
-  if (taskId !== (tlState.open || defaultOpen(buildLanes(current)))) toggleDetail(taskId);
+  toggleDetail(taskId);
   if (stepId) selectStep(stepId);
   requestAnimationFrame(() => (stepId ? flash(`st-${taskId}-${stepId}`) : $('#map-frame')?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
 }
@@ -797,20 +1467,28 @@ function branchRows(epic) {
     for (const b of task.branches || []) {
       const key = `${b.repo}:${b.name}`;
       const f = epic.facts?.[key];
-      const stale = !f?.fetchedAt || nowMs() - Date.parse(f.fetchedAt) > STALE_MS;
-      const mr = f?.mr && !f.mr.error
-        ? `${isHttp(f.mr.url) ? `<a href="${esc(f.mr.url)}" target="_blank" rel="noopener noreferrer">#${b.mr.iid}</a>` : `#${b.mr.iid}`} ${esc(f.mr.draft ? 'draft' : f.mr.state)} <span class="${f.mr.pipeline === 'success' ? 'ok' : f.mr.pipeline === 'failed' ? 'crit' : 'warn'}">${esc(f.mr.pipeline ?? '')}</span>${f.mr.shaMatchesHead ? '' : ` <span class="warn">${esc(t('br.wrongHead'))}</span>`}`
-        : f?.mr?.error ? `<span class="crit">${esc(f.mr.error)}</span>` : b.mr?.iid ? `#${b.mr.iid}` : '—';
+      const localUnavailable = f?.localUnavailable === true;
+      const stale = localUnavailable || Boolean(f?.error) || !f?.fetchedAt || nowMs() - Date.parse(f.fetchedAt) > STALE_MS;
+      const mrStale = Boolean(f?.mr?.error) || !f?.mr?.fetchedAt || nowMs() - Date.parse(f.mr.fetchedAt) > STALE_MS;
+      const headMatch = localUnavailable || f?.error ? null : f?.mr?.shaMatchesHead;
+      const comparison = headMatch === false ? ` <span class="warn">${esc(t('br.wrongHead'))}</span>` : headMatch == null ? ` <span class="muted">${esc(t('br.unknownHead'))}</span>` : '';
+      const mrChecked = f?.mr?.fetchedAt ? `<div class="${mrStale ? 'stale' : 'muted'}">${phrase('br.mrChecked', { t: agoTag(f.mr.fetchedAt) })}</div>` : '';
+      const mr = !b.mr?.iid ? '—' : f?.mr && !f.mr.error
+        ? `${isHttp(f.mr.url) ? `<a href="${esc(f.mr.url)}" target="_blank" rel="noopener noreferrer">#${b.mr.iid}</a>` : `#${b.mr.iid}`} ${esc(f.mr.draft ? 'draft' : f.mr.state)} <span class="${f.mr.pipeline === 'success' ? 'ok' : f.mr.pipeline === 'failed' ? 'crit' : 'warn'}">${esc(f.mr.pipeline ?? '')}</span>${comparison}${mrChecked}`
+        : f?.mr?.error ? `<span class="crit">${esc(f.mr.error)}</span>${mrChecked}` : b.mr?.iid ? `#${b.mr.iid}` : '—';
       const counts = f
         ? `<span class="nowrap" title="${esc(t('br.behind'))}">${icon('arrowDown')}${f.behind ?? '?'}</span> <span class="nowrap" title="${esc(t('br.ahead'))}">${icon('arrowUp')}${f.ahead ?? '?'}</span>${f.unpushed ? ` <span class="warn nowrap">${icon('branch')}${esc(t('unpushed', { n: f.unpushed }))}</span>` : ''}${f.dirty ? ` <span class="warn nowrap">${icon('alert')}${esc(t('dirty'))}</span>` : ''}`
         : '—';
+      const localStatus = localUnavailable
+        ? `<div class="muted">${esc(t('br.localUnavailable'))}${f.localReason ? ` · ${esc(f.localReason)}` : ''}</div>`
+        : f?.error ? `<div class="crit">${esc(f.error)}</div>` : b.worktree && f?.worktreeExists === false ? `<div class="muted">${esc(t('br.worktreeRemoved'))}</div>` : '';
       rows.push(`<tr data-sid="b-${esc(key)}">
         <td>${esc(b.repo)}<div class="muted">${esc(task.id)}</div></td>
         <td class="mono">${esc(b.name)}</td>
-        <td class="mono">${esc(f?.head ?? '—')}<div class="muted">${esc(f?.subject ?? '')}</div></td>
-        <td class="mono">${counts}</td>
+        <td class="mono${stale ? ' stale' : ''}">${esc(f?.head ?? '—')}<div class="muted">${esc(f?.subject ?? '')}</div></td>
+        <td class="mono${stale ? ' stale' : ''}">${counts}</td>
         <td>${mr}</td>
-        <td class="mono ${stale ? 'stale' : 'muted'}">${agoTag(f?.fetchedAt)}${f?.error ? `<div class="crit">${esc(f.error)}</div>` : ''}</td>
+        <td class="mono ${stale ? 'stale' : 'muted'}">${f?.fetchedAt ? phrase('br.gitChecked', { t: agoTag(f.fetchedAt) }) : esc(t('br.gitUnchecked'))}${localStatus}</td>
         <td><button type="button" class="live-only" data-refresh="${esc(key)}">${icon('refresh')}${esc(t('br.refresh'))}</button></td>
       </tr>`);
     }
@@ -820,10 +1498,10 @@ function branchRows(epic) {
 }
 
 async function renderEpic(id) {
-  const [epic, history] = await Promise.all([api(`/api/epics/${enc(id)}`), api(`/api/epics/${enc(id)}/history?limit=200`).catch(() => [])]);
+  const [epic, history] = await Promise.all([api(`/api/epics/${enc(id)}`), api(`/api/epics/${enc(id)}/history?limit=all`).catch(() => [])]);
   currentHistory = history;
   current = epic;
-  document.title = `${epic.id} · ${epic.title}`;
+  document.title = `${epic.id} · ${epic.title} · EpicBoard`;
   $('#title').innerHTML = `<span class="mono muted">${esc(epic.id)}</span> · ${esc(epic.title)}${epic.url ? ` ${external(epic.url, '')}` : ''}`;
   $('#goal').textContent = epic.goal || '';
   const stamps = Object.values(epic.facts || {}).map((f) => f.fetchedAt).filter(Boolean).sort();
@@ -831,19 +1509,11 @@ async function renderEpic(id) {
   renderMapArea(epic);
   renderWaiting(epic);
   $('#branches').innerHTML = branchRows(epic);
-  $('#decisions').innerHTML = [...(epic.decisions || [])].reverse().slice(0, 10).map((d) => `<li data-sid="d-${esc(d.id)}"><span class="mono muted">${esc(String(d.at).slice(0, 10))}</span>${d.task ? `<span class="chip">${esc(d.task)}</span>` : ''}<span>${esc(d.text)}</span>${d.by ? `<span class="muted">${esc(d.by)}</span>` : ''}</li>`).join('') || `<li class="muted">${esc(t('none.decisions'))}</li>`;
+  renderDecisions(epic);
   $('#sessions').innerHTML = [...(epic.sessions || [])].sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt))).map((x) => `<li class="session" data-sid="s-${esc(x.id)}">
       <div class="session-head">${agentBadge(x.agent)}<code class="muted">${esc(x.id.slice(0, 8))}</code>${x.task ? `<span class="chip">${esc(x.task)}</span>` : ''}<span class="muted session-time">${icon('clock')}<span class="phrase">${agoText(x.lastAt)}</span></span></div>
       <dl class="session-body"><dt>${esc(t('session.doing'))}</dt><dd>${esc(x.doing ?? '—')}</dd><dt>${esc(t('session.next'))}</dt><dd>${esc(x.next ?? '—')}</dd></dl></li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
-  $('#history').innerHTML = history.slice(0, 20).map((h, n) => {
-    const d = describeEvent(h);
-    const value = d.change === 'add' ? `<span class="hv-new">${esc(d.after ?? '')}</span>`
-      : d.change === 'remove' ? `<span class="hv-old">${esc(d.before ?? '')}</span>`
-      : `<span class="hv-old">${esc(d.before ?? '—')}</span>${icon('arrowRight', 'inl')}<span class="hv-new">${esc(d.after ?? '—')}</span>`;
-    const by = ['agent', 'cli', 'refresh', 'button', 'hook'].includes(h.by) ? t(`by.${h.by}`) : cap(h.by);
-    return `<li data-sid="h-${n}"><div class="h-line"><span class="h-time muted">${agoTag(h.at)}</span><span class="chip">${esc(by)}</span><span class="h-where">${esc(cap(d.where))}</span></div>
-      <div class="h-change"><span class="h-what muted">${esc(cap(d.what))}:</span> ${value}</div>${h.why ? `<div class="h-why muted">${esc(cap(h.why))}</div>` : ''}</li>`;
-  }).join('') || `<li class="muted">${esc(t('none.history'))}</li>`;
+  renderHistory(history);
   buildSearchIndex(epic, history);
 }
 
@@ -854,7 +1524,7 @@ let searchIndex = [];
 function buildSearchIndex(epic, history) {
   const items = [];
   const add = (section, text, target, extra = {}) => items.push({ section, text: String(text ?? ''), target, ...extra });
-  for (const w of epic.waiting || []) add(t('search.waiting'), [w.title, w.details, ...(w.checklist || []).map((c) => c.text), w.resolution].filter(Boolean).join(' · '), `w-${w.id}`);
+  for (const w of epic.waiting || []) add(t('search.waiting'), waitingSearchText(w), `w-${w.id}`);
   for (const task of epic.tasks || []) {
     add(t('search.task'), `${task.id} · ${task.title}`, null, { open: task.id });
     for (const st of task.steps || []) add(t('search.step', { id: task.id }), [st.title, st.note].filter(Boolean).join(' — '), `st-${task.id}-${st.id}`, { open: task.id });
@@ -866,10 +1536,7 @@ function buildSearchIndex(epic, history) {
   }
   for (const x of epic.sessions || []) add(t('search.session'), [x.agent, x.doing, x.next].filter(Boolean).join(' · '), `s-${x.id}`);
   for (const d of epic.decisions || []) add(t('search.decision'), d.text, `d-${d.id}`);
-  history.forEach((h, n) => {
-    const d = describeEvent(h);
-    add(t('search.history'), [d.where, d.what, d.before, d.after].filter(Boolean).join(' · '), `h-${n}`);
-  });
+  for (const { target, searchText } of historyEntries(history)) add(t('search.history'), searchText, target);
   for (const d of epic.docs || []) add(t('search.doc', { t: kindText(d.kind) }), d.title, null, { doc: d.id });
   searchIndex = items;
   api(`/api/epics/${enc(epic.id)}/docs-text`).then((texts) => {
@@ -879,7 +1546,8 @@ function buildSearchIndex(epic, history) {
   }).catch(() => {});
 }
 
-function flash(sid) {
+function flash(sid, revealHistory = false) {
+  revealPaginatedTarget(sid, revealHistory);
   const el = document.querySelector(`[data-sid="${CSS.escape(sid)}"]`);
   if (!el) return;
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -929,8 +1597,8 @@ function bindSearch() {
         openDoc(it.doc).catch((err) => alertBox(err.message));
         return;
       }
-      if (it.open && it.open !== (tlState.open || defaultOpen(buildLanes(current)))) toggleDetail(it.open);
-      requestAnimationFrame(() => (it.target ? flash(it.target) : $('#map-frame')?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
+      if (it.open) toggleDetail(it.open);
+      requestAnimationFrame(() => (it.target ? flash(it.target, true) : $('#map-frame')?.scrollIntoView({ behavior: 'smooth', block: 'start' })));
       return;
     }
     if (!e.target.closest('.top-search')) $('#search-results').hidden = true;
@@ -976,7 +1644,7 @@ function markProgress(modal, e) {
   if (!el) return;
   el.className = `pr-row ${e.state === 'start' ? 'running' : e.state}`;
   el.querySelector('.pr-state').innerHTML = e.state === 'start' ? '<span class="spinner"></span>' : icon(e.state === 'ok' ? 'check' : 'alert');
-  el.querySelector('.pr-detail').textContent = e.state === 'start' ? t('refresh.running') : e.state === 'ok' ? e.detail || t('refresh.ok') : cap(e.detail || t('refresh.error'));
+  el.querySelector('.pr-detail').textContent = e.state === 'start' ? t('refresh.running') : e.state === 'ok' ? e.detail || t('refresh.ok') : e.state === 'partial' ? e.detail || t('refresh.partial') : cap(e.detail || t('refresh.error'));
 }
 
 async function runRefresh(id, modal) {
@@ -992,6 +1660,7 @@ async function runRefresh(id, modal) {
   $('#pr-summary').textContent = t('refresh.going');
   let ok = 0;
   let failed = 0;
+  let partial = 0;
   try {
     const res = await fetch(`/api/epics/${enc(id)}/refresh?stream=1`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scope: 'all' }) });
     const reader = res.body.getReader();
@@ -1009,9 +1678,10 @@ async function runRefresh(id, modal) {
           markProgress(modal, e);
           if (e.type === 'branch' && e.state === 'ok') ok++;
           if (e.type === 'branch' && e.state === 'error') failed++;
+          if (e.type === 'branch' && e.state === 'partial') partial++;
         }
         if (e.type === 'error') $('#pr-summary').innerHTML = `<span class="crit">${esc(t('refresh.errorText', { e: e.detail }))}</span>`;
-        if (e.type === 'done') $('#pr-summary').innerHTML = failed ? `<span class="warn">${esc(t('refresh.doneWithErrors', { ok, failed }))}</span>` : `<span class="ok">${icon('check')}${esc(t('refresh.done', { ok }))}</span>`;
+        if (e.type === 'done') $('#pr-summary').innerHTML = partial ? `<span class="warn">${esc(t('refresh.donePartial', { ok, partial, failed }))}</span>` : failed ? `<span class="warn">${esc(t('refresh.doneWithErrors', { ok, failed }))}</span>` : `<span class="ok">${icon('check')}${esc(t('refresh.done', { ok }))}</span>`;
       }
     }
   } catch (e) {
@@ -1060,6 +1730,7 @@ function closeModals() {
 
 async function bootEpic() {
   const id = EXPORT ? EXPORT.epic.id : decodeURIComponent(location.pathname.split('/')[2]);
+  decisionDrafts = new DecisionDrafts(id);
   applyI18n();
   if (EXPORT) markExport();
   const exp = $('#export-link');
@@ -1072,9 +1743,14 @@ async function bootEpic() {
     await renderEpic(id);
   });
   bindMapTools();
+  bindSideCarousel();
   bindSearch();
   bindDocs();
-  await renderEpic(id);
+  if (!EXPORT) bindDecisionForms(id);
+  const sectionSettings = bindSectionSettings({ api, onError: alertBox, onSettings: applyPageSettings, readOnly: Boolean(EXPORT) });
+  if (sectionSettings.save) saveSettings = sectionSettings.save;
+  bindPagination(sectionSettings.save);
+  await Promise.all([renderEpic(id), sectionSettings.reload().catch((err) => alertBox(err.message))]);
   $('#refresh-all').addEventListener('click', () => refreshModal(current));
   document.addEventListener('click', (e) => {
     const el = e.target;
@@ -1101,26 +1777,12 @@ async function bootEpic() {
       tlState.allDocs = !tlState.allDocs;
       return void renderMapArea(current);
     }
+    const turn = el.closest('[data-side-turn]');
+    if (turn) return void rotateSide(Number(turn.dataset.sideTurn));
+    const pick = el.closest('[data-side-pick]');
+    if (pick) return void rotateSide(1, pick.dataset.sidePick);
     const openCard = el.closest('[data-open]');
-    if (openCard) toggleDetail(openCard.dataset.open);
-    const done = el.closest('[data-done]');
-    if (done) return confirmModal(current, done.dataset.done);
-    const confirm = el.closest('[data-confirm]');
-    if (confirm) {
-      const modal = $('#confirm-modal');
-      const checked = [...modal.querySelectorAll('[data-check]:checked')].map((b) => b.dataset.check);
-      const resolution = modal.querySelector('#confirm-resolution').value.trim() || undefined;
-      return void withButton(confirm, async () => {
-        await api(`/api/epics/${enc(id)}/waiting/${enc(confirm.dataset.confirm)}/done`, { method: 'POST', body: { checked, resolution } });
-        modal.hidden = true;
-        await renderEpic(id);
-      });
-    }
-    const undo = el.closest('[data-undo]');
-    if (undo) withButton(undo, async () => {
-      await api(`/api/epics/${enc(id)}/waiting/${enc(undo.dataset.undo)}/undo`, { method: 'POST', body: {} });
-      await renderEpic(id);
-    });
+    if (openCard) toggleDetail(openCard.dataset.open, Boolean(openCard.closest('.side-carousel')));
     const refresh = el.closest('[data-refresh]');
     if (refresh) withButton(refresh, async () => {
       await api(`/api/epics/${enc(id)}/refresh`, { method: 'POST', body: { scope: 'branch', branch: refresh.dataset.refresh } });
@@ -1132,16 +1794,21 @@ async function bootEpic() {
       hidePopover();
       closeModals();
     }
+    if (e.target.closest?.('.side-carousel') && ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].includes(e.key)) {
+      e.preventDefault();
+      return void rotateSide(['ArrowUp', 'ArrowLeft'].includes(e.key) ? -1 : 1);
+    }
     const card = e.target.closest?.('[data-open]');
     if (card && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault();
-      toggleDetail(card.dataset.open);
+      toggleDetail(card.dataset.open, Boolean(card.closest('.side-carousel')));
     }
   });
   if (!EXPORT) setInterval(async () => {
+    await sectionSettings.reload().catch(() => {});
     try {
       const { updatedAt } = await api(`/api/epics/${enc(id)}/rev`);
-      if (current && updatedAt !== current.updatedAt && !$('#confirm-modal:not([hidden])')) await renderEpic(id);
+      if (current && updatedAt !== current.updatedAt) await renderEpic(id);
     } catch {}
   }, 10000);
 }

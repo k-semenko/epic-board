@@ -1,9 +1,9 @@
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { readEpic, writeFacts } from './store.mjs';
 import { BoardError } from './errors.mjs';
 import { branchLine } from './brief.mjs';
 import { stripProxy } from './paths.mjs';
+import { inspectRepository } from './repositories.mjs';
 
 const PROXY_VARS = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy'];
 
@@ -73,37 +73,52 @@ const PROVIDERS = {
 async function mrFacts(repo, target, head, run) {
   const provider = PROVIDERS[repo.provider];
   if (!target.mr?.iid || !provider || !repo.project) return null;
-  const r = await run(provider.cmd, provider.args(target.mr.iid, repo.project), { cwd: repo.path });
+  const r = await run(provider.cmd, provider.args(target.mr.iid, repo.project));
   if (r.code !== 0) return { error: `${provider.cmd}: ${r.stderr.trim() || r.code}` };
   try {
     const mr = provider.parse(JSON.parse(r.stdout));
-    return { ...mr, shaMatchesHead: Boolean(mr.sha && head && mr.sha.startsWith(head)), error: null };
+    return { ...mr, shaMatchesHead: mr.sha && head ? mr.sha.startsWith(head) : null, error: null };
   } catch (e) {
     return { error: `${provider.cmd}: not JSON (${e.message})` };
   }
 }
 
-async function branchFacts(epic, target, run) {
+function repositoryLocation(epic, name) {
+  const repo = epic.repos[name];
+  const savedCommonDir = repo.commonDir && (inspectRepository(repo.commonDir)?.commonDir || repo.commonDir);
+  const worktrees = (epic.tasks || []).flatMap((task) => (task.branches || []).filter((branch) => branch.repo === name).map((branch) => branch.worktree));
+  for (const path of new Set([repo.path, repo.commonDir, repo.root, ...worktrees].filter(Boolean))) {
+    const location = inspectRepository(path);
+    if (location && (!savedCommonDir || location.commonDir === savedCommonDir)) return location;
+  }
+  return null;
+}
+
+function liveWorktree(target, location) {
+  const found = target.worktree && inspectRepository(target.worktree);
+  return Boolean(found && location && found.commonDir === location.commonDir);
+}
+
+async function branchFacts(epic, target, run, location) {
   const repo = epic.repos[target.repo];
-  const worktreeExists = Boolean(target.worktree && existsSync(target.worktree));
-  const cwd = worktreeExists ? target.worktree : repo.path;
-  const git = (...args) => run('git', ['-C', cwd, ...args]);
+  const worktreeExists = liveWorktree(target, location);
+  const git = (...args) => run('git', ['--git-dir', location.commonDir, ...args]);
   const log = await git('log', '-1', '--format=%h%x00%s', '--end-of-options', target.name);
-  if (log.code !== 0) return { error: `git log ${target.name}: ${log.stderr.trim() || log.code}` };
+  if (log.code !== 0) return { error: `git log ${target.name}: ${log.stderr.trim() || log.code}`, worktreeExists, dirty: null, mr: await mrFacts(repo, target, null, run) };
   const [head, subject] = log.stdout.trim().split('\0');
   const base = await counts(git, `origin/${repo.base}...${target.name}`);
   const remote = await git('rev-parse', '--verify', '--quiet', '--end-of-options', `refs/remotes/origin/${target.name}`);
   const own = remote.code === 0 ? await counts(git, `origin/${target.name}...${target.name}`) : null;
   let dirty = null;
   if (worktreeExists) {
-    const status = await git('status', '--porcelain');
+    const status = await run('git', ['-C', target.worktree, 'status', '--porcelain']);
     dirty = status.code === 0 ? status.stdout.trim().length > 0 : null;
   }
   return {
     head, subject,
     behind: base?.left ?? null,
     ahead: base?.right ?? null,
-    unpushed: own ? own.right : base?.right ?? null,
+    unpushed: own?.right ?? null,
     remoteBehind: own ? own.left : null,
     dirty, worktreeExists,
     mr: await mrFacts(repo, target, head, run),
@@ -128,6 +143,9 @@ export async function refreshEpic(id, { scope = 'all', task, branch, run = execR
   const epic = readEpic(id);
   const targets = targetsOf(epic, { scope, task, branch });
   const repoErrors = {};
+  const locations = {};
+  const repoLocations = {};
+  const fetched = new Map();
   for (const name of new Set(targets.map((t) => t.repo))) {
     const repo = epic.repos?.[name];
     if (!repo) {
@@ -136,19 +154,36 @@ export async function refreshEpic(id, { scope = 'all', task, branch, run = execR
       continue;
     }
     onProgress({ type: 'repo', key: name, state: 'start' });
-    const r = await run('git', ['-C', repo.path, 'fetch', '--prune', 'origin']);
+    repoLocations[name] = { path: repo.path };
+    const location = repositoryLocation(epic, name);
+    locations[name] = location;
+    if (!location) {
+      onProgress({ type: 'repo', key: name, state: 'partial', detail: 'Local Git directory is unavailable; checking the linked MR separately' });
+      continue;
+    }
+    repoLocations[name] = { path: repo.path, ...location };
+    if (!fetched.has(location.commonDir)) fetched.set(location.commonDir, await run('git', ['--git-dir', location.commonDir, 'fetch', '--prune', 'origin']));
+    const r = fetched.get(location.commonDir);
     if (r.code !== 0) repoErrors[name] = `git fetch ${name}: ${r.stderr.trim() || r.code}`;
     onProgress({ type: 'repo', key: name, state: repoErrors[name] ? 'error' : 'ok', detail: repoErrors[name] || 'git fetch' });
   }
   const results = {};
   const facts = await pool(targets, 4, async (t) => {
     onProgress({ type: 'branch', key: t.key, state: 'start' });
-    const f = repoErrors[t.repo] ? { error: repoErrors[t.repo] } : await branchFacts(epic, t, run);
-    onProgress({ type: 'branch', key: t.key, state: f.error ? 'error' : 'ok', detail: f.error || branchLine(t.key, f, t.mr?.iid).replace(`${t.key} `, '') });
+    const repo = epic.repos?.[t.repo];
+    let f;
+    if (!repo) f = { error: repoErrors[t.repo] };
+    else if (!locations[t.repo]) f = {
+      localUnavailable: true, localReason: `Local Git directory is unavailable: ${repo.path || repo.root || '(not configured)'}`,
+      mr: await mrFacts(repo, t, null, run),
+    };
+    else if (repoErrors[t.repo]) f = { error: repoErrors[t.repo], worktreeExists: liveWorktree(t, locations[t.repo]), dirty: null, mr: await mrFacts(repo, t, null, run) };
+    else f = await branchFacts(epic, t, run, locations[t.repo]);
+    onProgress({ type: 'branch', key: t.key, state: f.error || f.mr?.error ? 'error' : f.localUnavailable ? 'partial' : 'ok', detail: f.error || f.mr?.error || branchLine(t.key, f, t.mr?.iid).replace(`${t.key} `, '') });
     return f;
   });
   targets.forEach((t, i) => {
     results[t.key] = facts[i];
   });
-  return { epic: writeFacts(id, results), results };
+  return { epic: writeFacts(id, results, { repoLocations }), results };
 }

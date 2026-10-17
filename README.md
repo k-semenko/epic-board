@@ -8,12 +8,13 @@ It ships as a [Claude Code](https://code.claude.com) plugin: the agent writes to
 
 - **Any tracker.** Tasks have any id (`PROJ-12`, `#42`, `web-login`) and a link to wherever they live. The board never calls a tracker: it is storage you write to.
 - **Facts from git, not from memory.** `refresh` runs `git fetch` once per repository and recounts every branch: head, distance from the base, unpushed commits, dirty worktree. With `glab` or `gh` it also reads merge request / pull request state and pipeline.
-- **Needs decision.** Items that block on a person carry what exactly to decide or do, links to the tasks, steps, branches and documents involved, and an optional checklist that must be ticked before "Done" is accepted.
+- **Needs decision.** Items that block on a person carry what exactly to decide or do, links to the tasks, steps, branches and documents involved, and confirmation, single-choice or multiple-choice responses. Every optional checklist condition is required. Human submission waits for agent review; closure records the agent outcome and keeps the answer history.
 - **A map of the epic.** Tasks as cards with cross-task dependencies, the opened task as a strip of steps, the merge order and the goal.
 - **Stage documents.** Specs, plans, logs and reviews next to their step: kept on the board or linked from a repository, viewable and editable on the page, with versions.
 - **Session plans.** Each agent session records what it is doing and what comes next; the board shows Claude, Codex, Grok and Gemini sessions side by side.
 - **Export.** One self-contained, read-only HTML file to hand to someone who has no board.
 - **English and Russian** interface.
+- **Block order.** Open the gear in an epic's header → “Block order”, drag the blocks and save. The order applies to every epic on the board and is included in HTML exports.
 - **Local and dependency-free.** Node ≥ 22, no npm dependencies, listens on `127.0.0.1` only, data stays in your home directory.
 
 ## Install
@@ -62,12 +63,15 @@ epic task SHOP-1 WEB-31 --title "Payment form" --url https://tracker.example.com
 epic step SHOP-1 WEB-31/card --title "Card input" --state active
 epic branch SHOP-1 WEB-31 web feat/payment-form --mr 412
 epic wait SHOP-1 add psp --title "Pick the payment provider" --details "Compare fees and refunds" \
-  --ref step:WEB-31/card --check "Fees compared" --check "Refund API checked"
+  --ref step:WEB-31/card --input single --option a="Provider A" --option b="Provider B" --recommend a \
+  --check "Fees compared" --check "Refund API checked"
 epic refresh SHOP-1
 epic url SHOP-1
 ```
 
 `node cli/epic.mjs help` lists every command; [`skills/epic-board/reference/cli.md`](skills/epic-board/reference/cli.md) has examples and [`reference/schema.md`](skills/epic-board/reference/schema.md) the data model.
+
+After submitting an answer on the page, ask the agent in chat to review it. The agent reads `epic wait SHOP-1 show psp --json`, then resolves the current answer with `--version`, `--submission-id` and `--resolution`, or opens a new revision with `--version` and `--reason`. Answers stay pending until that review; hooks never start it automatically. Closure does not grant push, publication, merge or task-completion permission. Schema 3 preserves question, answer and review history, including legacy closures.
 
 ## Configuration
 

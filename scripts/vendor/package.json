@@ -1,0 +1,10 @@
+{
+  "name": "epic-board-editor-vendor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Build-only dependency for the checked-in instant Markdown editor assets",
+  "dependencies": {
+    "vditor": "4.0.0"
+  }
+}

@@ -56,17 +56,34 @@ test('build an epic through the cli', () => {
   ok(['export', 'shop', '--out', out]);
   assert.match(readFileSync(out, 'utf8'), /__EPIC_EXPORT__/);
   ok(['open-item', 'shop', 'WEB-90', 'done', task.open[0].id]);
-  const partial = cli(['wait', 'shop', 'done', 'psp', '--checked', 'c1']);
+  assert.match(cli(['wait', 'shop', 'done', 'psp']).stderr, /resolve/);
+  assert.match(cli(['wait', 'shop', 'undo', 'psp']).stderr, /revise/);
+  let w1 = JSON.parse(ok(['wait', 'shop', 'show', 'psp', '--json']).stdout);
+  assert.equal(w1.input.type, 'confirm');
+  assert.equal(cli(['wait', 'shop', 'submit', 'psp', '--confirmed', '--submission-id', 'human-1']).status, 1);
+  const partial = cli(['wait', 'shop', 'submit', 'psp', '--version', w1.version, '--submission-id', 'human-1', '--confirmed', '--checked', 'c1']);
   assert.equal(partial.status, 1);
-  assert.match(partial.stderr, /Legal ok/);
-  ok(['wait', 'shop', 'done', 'psp', '--checked', 'c1,c2', '--resolution', 'Cards via provider X']);
-  let after = show();
-  assert.ok(after.waiting[0].doneAt, 'done keeps the item and stamps it');
-  assert.equal(after.waiting[0].resolution, 'Cards via provider X');
-  ok(['wait', 'shop', 'undo', 'psp']);
-  assert.equal(show().waiting[0].doneAt, undefined);
-  ok(['wait', 'shop', 'remove', 'psp']);
-  assert.equal(show().waiting.length, 0);
+  assert.match(partial.stderr, /checklist/i);
+  ok(['wait', 'shop', 'submit', 'psp', '--version', w1.version, '--submission-id', 'human-1', '--confirmed', '--checked', 'c1,c2', '--comment', 'Fees reviewed']);
+  w1 = show().waiting[0];
+  assert.equal(w1.status, 'answered');
+  assert.equal(w1.doneAt, undefined);
+  assert.match(ok(['wait', 'shop', 'show', 'psp']).stdout, /Fees reviewed/);
+  assert.equal(cli(['wait', 'shop', 'resolve', 'psp', '--version', 'stale', '--submission-id', 'human-1', '--resolution', 'Use X']).status, 1);
+  ok(['wait', 'shop', 'resolve', 'psp', '--version', w1.version, '--submission-id', 'human-1', '--resolution', 'Cards via provider X']);
+  w1 = show().waiting[0];
+  assert.equal(w1.status, 'closed');
+  assert.equal(w1.resolution, 'Cards via provider X');
+  ok(['wait', 'shop', 'revise', 'psp', '--version', w1.version, '--reason', 'Fees changed', '--title', 'Confirm fees', '--check', 'New fees compared']);
+  w1 = show().waiting[0];
+  assert.equal(w1.revision, 2);
+  assert.deepEqual(w1.checklist, [{ id: 'c1', text: 'New fees compared' }]);
+  assert.equal(cli(['wait', 'shop', 'remove', 'psp', '--version', w1.version]).status, 1);
+  ok(['wait', 'shop', 'add', 'temporary', '--title', 'Mistaken request']);
+  const temporary = show().waiting.find((w) => w.id === 'temporary');
+  assert.equal(cli(['wait', 'shop', 'remove', 'temporary']).status, 1);
+  ok(['wait', 'shop', 'remove', 'temporary', '--version', temporary.version]);
+  assert.equal(show().waiting.some((w) => w.id === 'temporary'), false);
   ok(['bind', 'shop', '--session', 'sid-2', '--agent', 'codex']);
   assert.equal(show().sessions.find((s) => s.id === 'sid-2').agent, 'codex');
   assert.equal(cli(['bind', 'shop', '--session', 'sid-3', '--agent', 'Bad Agent!']).status, 1);
@@ -94,4 +111,54 @@ test('a copy of the plugin (like the cache) finds data through the config', () =
   const r = spawnSync(process.execPath, [join(copy, 'cli/epic.mjs'), 'show', 'shop', '--json'], { encoding: 'utf8', env });
   assert.equal(r.status, 0, r.stderr);
   assert.equal(JSON.parse(r.stdout).id, 'shop');
+});
+
+
+test('CLI choice requests preserve IDs and recommendation without selecting for the human', () => {
+  ok(['wait', 'shop', 'add', 'choice', '--title', 'Provider', '--input', 'single', '--option', 'a=Provider A', '--option', 'b=Provider B', '--recommend', 'a', '--ref', 'waiting:psp']);
+  let w = JSON.parse(ok(['wait', 'shop', 'show', 'choice', '--json']).stdout);
+  assert.deepEqual(w.input, { type: 'single', options: [{ id: 'a', text: 'Provider A', recommended: true }, { id: 'b', text: 'Provider B' }] });
+  assert.equal(w.rounds.length, 0);
+  assert.equal(cli(['wait', 'shop', 'submit', 'choice', '--version', w.version, '--submission-id', 'choice-1', '--selected', 'a,b']).status, 1);
+  ok(['wait', 'shop', 'submit', 'choice', '--version', w.version, '--submission-id', 'choice-1', '--selected', 'b']);
+  w = show().waiting.find((x) => x.id === 'choice');
+  assert.deepEqual(w.rounds[0].response.selected, ['b']);
+  ok(['wait', 'shop', 'revise', 'choice', '--version', w.version, '--reason', 'Allow two providers', '--input', 'multi', '--option', 'a=Provider A', '--option', 'b=Provider B']);
+  w = show().waiting.find((x) => x.id === 'choice');
+  ok(['wait', 'shop', 'submit', 'choice', '--version', w.version, '--submission-id', 'choice-2', '--selected', 'a,b']);
+  w = show().waiting.find((x) => x.id === 'choice');
+  assert.deepEqual(w.rounds[1].response.selected, ['a', 'b']);
+  assert.equal(w.rounds[0].review.outcome, 'revised');
+  assert.equal(cli(['wait', 'shop', 'add', 'bad-choice', '--title', 'Bad', '--input', 'single', '--option', 'a=A', '--option', 'b=B', '--recommend', 'missing']).status, 1);
+  assert.equal(show().waiting.some((x) => x.id === 'bad-choice'), false);
+});
+
+test('revising choice options keeps the existing input type and guards stale versions', () => {
+  for (const type of ['single', 'multi']) {
+    const id = `revise-${type}`;
+    ok(['wait', 'shop', 'add', id, '--title', 'Provider', '--input', type, '--option', 'a=A', '--option', 'b=B']);
+    let w = JSON.parse(ok(['wait', 'shop', 'show', id, '--json']).stdout);
+    const originalVersion = w.version;
+    ok(['wait', 'shop', 'revise', id, '--version', w.version, '--reason', 'Updated labels', '--option', 'a=New A', '--option', 'b=New B']);
+    w = JSON.parse(ok(['wait', 'shop', 'show', id, '--json']).stdout);
+    assert.deepEqual(w.input, { type, options: [{ id: 'a', text: 'New A' }, { id: 'b', text: 'New B' }] });
+    assert.equal(cli(['wait', 'shop', 'revise', id, '--version', originalVersion, '--reason', 'Stale change', '--option', 'a=Old A', '--option', 'b=Old B']).status, 1);
+    assert.deepEqual(JSON.parse(ok(['wait', 'shop', 'show', id, '--json']).stdout), w);
+  }
+});
+
+test('input-only revision retains choice options and recommendation-only revision targets current options', () => {
+  ok(['wait', 'shop', 'add', 'input-patch', '--title', 'Provider', '--input', 'single', '--option', 'a=A', '--option', 'b=B', '--recommend', 'a']);
+  let w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
+  ok(['wait', 'shop', 'revise', 'input-patch', '--version', w.version, '--reason', 'Allow several', '--input', 'multi']);
+  w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
+  assert.deepEqual(w.input, { type: 'multi', options: [{ id: 'a', text: 'A', recommended: true }, { id: 'b', text: 'B' }] });
+  ok(['wait', 'shop', 'revise', 'input-patch', '--version', w.version, '--reason', 'Recommend B', '--recommend', 'b']);
+  w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
+  assert.deepEqual(w.input, { type: 'multi', options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B', recommended: true }] });
+  assert.equal(cli(['wait', 'shop', 'revise', 'input-patch', '--version', w.version, '--reason', 'Unknown advice', '--recommend', 'missing']).status, 1);
+  assert.deepEqual(JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout), w);
+  ok(['wait', 'shop', 'revise', 'input-patch', '--version', w.version, '--reason', 'Confirm the text', '--input', 'confirm']);
+  w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
+  assert.deepEqual(w.input, { type: 'confirm' });
 });

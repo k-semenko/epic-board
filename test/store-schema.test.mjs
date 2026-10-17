@@ -11,9 +11,9 @@ test('ids are slugs: tracker keys and plain numbers both work', () => {
   for (const id of ['../x', '', '1/2', '-x', 'a b', 'x'.repeat(65)]) assert.throws(() => store.checkId(id), { status: 400 }, id);
 });
 
-test('new epics are schema 2, tasks carry any id and link', () => {
+test('new epics are schema 3, tasks carry any id and link', () => {
   const epic = store.createEpic({ id: 'WEB-1', title: 'Checkout' });
-  assert.equal(epic.schema, 2);
+  assert.equal(epic.schema, 3);
   store.patchEpic('WEB-1', { repos: { web: { path: '/tmp/web', base: 'main', provider: 'github', project: 'github.com/acme/web' } } });
   const { epic: next } = store.patchEpic('WEB-1', { tasks: [{ id: 'JIRA-7', title: 'Pay button', url: 'https://jira.example.com/browse/JIRA-7', tracker: 'Jira', status: 'In progress' }] });
   assert.equal(next.tasks[0].url, 'https://jira.example.com/browse/JIRA-7');
@@ -34,21 +34,27 @@ test('a pending decision links to stored items and checks them', () => {
   assert.throws(() => store.patchEpic('WEB-1', { waiting: [{ id: 'x', title: 'X', refs: ['task:NOPE'] }] }), { status: 400, code: 'bad-ref' });
   assert.throws(() => store.patchEpic('WEB-1', { waiting: [{ id: 'x', title: 'X', refs: ['ftp://x'] }] }), { status: 400, code: 'bad-ref' });
   assert.throws(() => store.patchEpic('WEB-1', { waiting: [{ id: 'x', title: 'X', kind: 'ddl' }] }), { status: 400, code: 'bad-kind' });
-  assert.throws(() => store.patchEpic('WEB-1', { waiting: [{ id: 'x' }] }), { status: 400, code: 'no-title' });
+  assert.throws(() => store.patchEpic('WEB-1', { waiting: [{ id: 'x' }] }), { status: 400 });
 });
 
-test('done needs every checklist item ticked', () => {
-  assert.throws(() => store.resolveWaiting('WEB-1', 'pick-psp', { checked: ['c1'] }), { status: 400, code: 'checklist' });
-  const epic = store.resolveWaiting('WEB-1', 'pick-psp', { checked: ['c1', 'c2'], resolution: 'Stripe' }, { by: 'button' });
+test('submission needs every checklist item ticked before agent resolution', () => {
+  const version = store.readEpic('WEB-1').waiting[0].version;
+  const body = { version, submissionId: 'provider-answer', confirmed: true };
+  assert.throws(() => store.submitWaiting('WEB-1', 'pick-psp', { ...body, checked: ['c1'] }), { status: 400, code: 'checklist' });
+  const answered = store.submitWaiting('WEB-1', 'pick-psp', { ...body, checked: ['c1', 'c2'] }, { by: 'button' });
+  assert.equal(answered.waiting[0].doneAt, undefined);
+  const epic = store.resolveWaiting('WEB-1', 'pick-psp', { version: answered.waiting[0].version, submissionId: 'provider-answer', resolution: 'Stripe' });
   const w = epic.waiting[0];
   assert.ok(w.doneAt);
   assert.equal(w.resolution, 'Stripe');
   assert.deepEqual(w.checked, ['c1', 'c2']);
-  const back = store.reopenWaiting('WEB-1', 'pick-psp');
+  const back = store.reviseWaiting('WEB-1', 'pick-psp', { version: w.version, reason: 'Reconsider provider' });
   assert.equal(back.waiting[0].doneAt, undefined);
   assert.equal(back.waiting[0].checked, undefined);
   store.patchEpic('WEB-1', { waiting: [{ id: 'plain', title: 'Ship it' }] });
-  assert.ok(store.resolveWaiting('WEB-1', 'plain', {}).waiting.find((x) => x.id === 'plain').doneAt);
+  const plain = store.readEpic('WEB-1').waiting.find((x) => x.id === 'plain');
+  const plainAnswered = store.submitWaiting('WEB-1', 'plain', { version: plain.version, submissionId: 'plain-answer', confirmed: true }).waiting.find((x) => x.id === 'plain');
+  assert.ok(store.resolveWaiting('WEB-1', 'plain', { version: plainAnswered.version, submissionId: 'plain-answer', resolution: 'Recorded' }).waiting.find((x) => x.id === 'plain').doneAt);
   assert.throws(() => store.resolveWaiting('WEB-1', 'nope', {}), { status: 404 });
 });
 
@@ -63,14 +69,14 @@ test('schema 1 files are migrated on read', () => {
   };
   writeFileSync(store.epicPath('100'), JSON.stringify(old));
   const epic = store.readEpic('100');
-  assert.equal(epic.schema, 2);
+  assert.equal(epic.schema, 3);
   assert.deepEqual(epic.repos.app, { path: '/w/app', base: 'master', provider: 'gitlab', project: 'gitlab.example.com/g/app' });
   assert.equal(epic.tasks[0].status, 'Review');
   assert.equal(epic.tasks[0].statusCheckedAt, at);
   assert.equal('stage' in epic.tasks[0], false);
   assert.deepEqual(epic.waiting.map((w) => [w.kind, w.title, 'text' in w]), [['action', 'Apply DDL', false], ['approval', 'OK?', false]]);
   store.patchEpic('100', { goal: 'G' });
-  assert.equal(store.readEpic('100').schema, 2);
+  assert.equal(store.readEpic('100').schema, 3);
   assert.ok(store.listEpics().some((e) => e.id === '100'));
 });
 
@@ -84,12 +90,13 @@ test('a schema 1 item without text or with a dangling task stays writable', () =
 
 test('a checklist given again replaces the old one', () => {
   store.patchEpic('WEB-1', { waiting: [{ id: 'cl', title: 'C', checklist: [{ id: 'c1', text: 'a' }, { id: 'c2', text: 'b' }, { id: 'c3', text: 'c' }] }] });
-  const { epic } = store.patchEpic('WEB-1', { waiting: [{ id: 'cl', checklist: [{ id: 'c1', text: 'only' }] }] });
+  const item = store.readEpic('WEB-1').waiting.find((w) => w.id === 'cl');
+  const epic = store.reviseWaiting('WEB-1', 'cl', { version: item.version, reason: 'Update conditions', patch: { checklist: [{ id: 'c1', text: 'only' }] } });
   assert.deepEqual(epic.waiting.find((w) => w.id === 'cl').checklist, [{ id: 'c1', text: 'only' }]);
-  assert.throws(() => store.patchEpic('WEB-1', { waiting: [{ id: 'cl', checklist: [{ text: 'no id' }] }] }), { status: 400, code: 'bad-checklist' });
+  assert.throws(() => store.reviseWaiting('WEB-1', 'cl', { version: epic.waiting.find((w) => w.id === 'cl').version, reason: 'Invalid conditions', patch: { checklist: [{ text: 'no id' }] } }), { status: 400, code: 'bad-checklist' });
 });
 
-test('done checks the checklist under the lock it writes with', () => {
+test('patch checks the merged data under the lock it writes with', () => {
   const calls = [];
   const { epic } = store.patchEpic('WEB-1', { goal: 'x' }, { check: (e) => calls.push(e.goal) });
   assert.equal(epic.goal, 'x');

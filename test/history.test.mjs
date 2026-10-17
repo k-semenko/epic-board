@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { describeEvent } from '../server/page/history.mjs';
+import * as historyPage from '../server/page/history.mjs';
 import { setLang, t, DICT } from '../server/page/i18n.mjs';
 
 setLang('en', { persist: false });
@@ -63,4 +64,51 @@ test('russian reads the same events', () => {
 
 test('both dictionaries have the same keys', () => {
   assert.deepEqual(Object.keys(DICT.ru).sort(), Object.keys(DICT.en).sort());
+});
+
+test('decision lifecycle events describe human answers, agent review and new revisions', () => {
+  assert.deepEqual(describeEvent({ op: 'set', path: 'waiting[q].status', before: 'open', after: 'answered' }), { where: 'needs decision', what: 'stage', change: 'set', before: 'Waiting for you', after: 'Waiting for agent' });
+  const round = { revision: 1, request: { title: 'Choose storage', input: { type: 'single', options: [{ id: 'repo', text: 'Repository' }] } }, response: { selected: ['repo'], comment: 'Keep history' } };
+  const submitted = describeEvent({ op: 'set', path: 'waiting[q].rounds', before: [], after: [round] });
+  assert.equal(submitted.what, 'answer submitted');
+  assert.equal(submitted.after, 'Choose storage · Repository · Keep history');
+  const reviewed = describeEvent({ op: 'set', path: 'waiting[q].rounds', before: [round], after: [{ ...round, review: { outcome: 'accepted', text: 'Recorded in plan' } }] });
+  assert.equal(reviewed.what, 'agent reviewed');
+  assert.equal(reviewed.after, 'Recorded in plan');
+  assert.equal(describeEvent({ op: 'set', path: 'waiting[q].revision', before: 1, after: 2 }).what, 'question revision');
+});
+
+test('history preserves choice labels when a choice response also contains confirmed true', () => {
+  const event = describeEvent({ op: 'set', path: 'waiting[q].rounds', before: [], after: [{ request: { title: 'Storage', input: { type: 'single', options: [{ id: 'repo', text: 'Repository' }] } }, response: { selected: ['repo'], confirmed: true } }] });
+  assert.equal(event.after, 'Storage · Repository');
+});
+
+
+test('history search shares visible lifecycle entries and their original anchors', () => {
+  const rounds = { op: 'set', path: 'waiting[q].rounds', before: [], after: [{ request: { title: 'Storage', input: { type: 'single', options: [{ id: 'repo', text: 'Repository' }] } }, response: { selected: ['repo'] } }] };
+  const version = { op: 'set', path: 'waiting[q].version', before: 'opaque-old', after: 'opaque-new' };
+  const stage = { op: 'set', path: 'waiting[q].status', before: 'open', after: 'answered' };
+  const entries = historyPage.historyEntries([rounds, version, stage]);
+  assert.deepEqual(entries.map(({ target, searchText }) => ({ target, searchText })), [
+    { target: 'h-0', searchText: 'needs decision · answer submitted · Storage · Repository' },
+    { target: 'h-2', searchText: 'needs decision · stage · Waiting for you · Waiting for agent' },
+  ]);
+  assert.equal(entries[0].description.after, 'Storage · Repository');
+  assert.equal(entries[1].description.after, 'Waiting for agent');
+  assert.equal(entries[1].event, stage);
+});
+
+test('history keeps every visible entry beyond twenty and preserves original anchors around hidden versions', () => {
+  const version = { op: 'set', path: 'waiting[q].version', before: 'opaque-old', after: 'opaque-new' };
+  const events = Array.from({ length: 24 }, (_, index) => ({ op: 'set', path: 'tasks[WEB-8].title', after: `History event ${index + 1}` }));
+  const entries = historyPage.historyEntries([version, ...events.slice(0, 12), version, ...events.slice(12), version]);
+  assert.equal(entries.length, 24);
+  assert.deepEqual(entries.map((entry) => entry.target), [
+    'h-1', 'h-2', 'h-3', 'h-4', 'h-5', 'h-6', 'h-7', 'h-8', 'h-9', 'h-10', 'h-11', 'h-12',
+    'h-14', 'h-15', 'h-16', 'h-17', 'h-18', 'h-19', 'h-20', 'h-21', 'h-22', 'h-23', 'h-24', 'h-25',
+  ]);
+  assert.equal(entries.at(-1).event, events.at(-1));
+  assert.equal(entries.at(-1).description.after, 'History event 24');
+  assert.match(entries.at(-1).searchText, /History event 24/);
+  assert.equal(entries.some((entry) => entry.searchText.includes('opaque-')), false);
 });

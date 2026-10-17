@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dataDir } from './paths.mjs';
 import { BoardError } from './errors.mjs';
+import { migrateWaiting, prepareWaitingPatch, transitionWaiting, validateWaiting } from './waiting.mjs';
+import { inspectRepository } from './repositories.mjs';
 
 // Any tracker key works as an id (42, PROJ-12, gh.341); it also names files, so no slashes or leading dots.
 export const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-export const SCHEMA = 2;
+export const SCHEMA = 3;
 export const WAITING_KINDS = ['decision', 'approval', 'review', 'action', 'other'];
 export const PROVIDERS = ['gitlab', 'github'];
 
@@ -101,12 +103,12 @@ export function migrate(epic) {
   }));
   const taskIds = new Set(out.tasks.map((t) => t.id));
   // Schema 1 never validated these items, so a migrated file must not fail its first write.
-  out.waiting = (epic.waiting || []).map(({ text, kind, task, ...w }) => ({
+  out.waiting = (epic.waiting || []).map(({ text, kind, task, ...w }) => migrateWaiting({
     ...w,
     ...(task !== undefined && taskIds.has(task) ? { task } : {}),
     kind: OLD_KINDS[kind] || (WAITING_KINDS.includes(kind) ? kind : 'other'),
     title: w.title || text || '(untitled)',
-  }));
+  }, epic.id));
   return out;
 }
 
@@ -264,6 +266,7 @@ function refExists(epic, ref) {
   if (kind === 'branch') return tasks.some((t) => (t.branches || []).some((b) => `${b.repo}:${b.name}` === value));
   if (kind === 'doc') return (epic.docs || []).some((d) => d.id === value);
   if (kind === 'decision') return (epic.decisions || []).some((d) => d.id === value);
+  if (kind === 'waiting') return (epic.waiting || []).some((w) => w.id === value);
   return false;
 }
 
@@ -277,6 +280,9 @@ export function validateEpic(epic) {
   for (const [name, repo] of Object.entries(epic.repos || {})) {
     if (repo.provider !== undefined && !PROVIDERS.includes(repo.provider)) throw new BoardError(400, 'bad-provider', `repo ${name}: provider is ${PROVIDERS.join(' or ')}`);
     if (repo.project !== undefined && !/^[\w.-]+(\/[\w.-]+)+$/.test(String(repo.project))) throw new BoardError(400, 'bad-project', `repo ${name}: project is host/owner/name, e.g. github.com/acme/web`);
+    for (const field of ['root', 'commonDir']) {
+      if (repo[field] !== undefined && (typeof repo[field] !== 'string' || !repo[field].trim())) throw new BoardError(400, 'bad-repo-location', `repo ${name}: ${field} must be a nonempty path string`);
+    }
   }
   for (const s of epic.sessions || []) {
     if (s.agent !== undefined && !/^[a-z0-9-]{1,20}$/.test(String(s.agent))) {
@@ -303,6 +309,7 @@ export function validateEpic(epic) {
     }
   }
   for (const w of epic.waiting || []) {
+    validateWaiting(w);
     if (!w.title) throw new BoardError(400, 'no-title', `pending item ${w.id}: needs a title`);
     if (w.kind !== undefined && !WAITING_KINDS.includes(w.kind)) throw new BoardError(400, 'bad-kind', `pending item ${w.id}: kind is ${WAITING_KINDS.join(', ')}`);
     if (w.task !== undefined && !(epic.tasks || []).some((t) => t.id === w.task)) throw new BoardError(400, 'bad-ref', `pending item ${w.id}: no task ${w.task}`);
@@ -323,6 +330,18 @@ function prepareDecisions(epic, patch, at) {
   return { ...patch, decisions: patch.decisions.map((d) => (d.id ? d : { ...d, id: `d${++n}`, at: d.at || at })) };
 }
 
+function prepareRepositories(epic, patch) {
+  if (!patch.repos || typeof patch.repos !== 'object' || Array.isArray(patch.repos)) return patch;
+  const repos = { ...patch.repos };
+  for (const [name, repo] of Object.entries(repos)) {
+    if (!repo || typeof repo !== 'object' || !Object.hasOwn(repo, 'path')) continue;
+    const location = inspectRepository(repo.path);
+    if (location) repos[name] = { ...repo, ...location };
+    else if (repo.path !== epic.repos?.[name]?.path) repos[name] = { ...repo, root: null, commonDir: null };
+  }
+  return { ...patch, repos };
+}
+
 // `check` sees the merged epic under the lock, before anything is written.
 export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, check } = {}) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new BoardError(400, 'bad-patch', 'patch must be an object');
@@ -334,7 +353,7 @@ export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, chec
     const epic = readEpic(id);
     const at = new Date().toISOString();
     const changes = [];
-    const next = mergeObject(epic, prepareDecisions(epic, patch, at), '', changes);
+    const next = mergeObject(epic, prepareRepositories(epic, prepareDecisions(epic, prepareWaitingPatch(epic, patch, at), at)), '', changes);
     validateEpic(next);
     if (check) check(next);
     if (!changes.length) return { epic, changes };
@@ -350,39 +369,87 @@ function pendingItem(epic, itemId) {
   return item;
 }
 
-// Done items stay on the list with a stamp: what was decided is part of the record.
-export function resolveWaiting(id, itemId, { checked = [], resolution } = {}, { by = 'cli', why = '' } = {}) {
-  pendingItem(readEpic(id), itemId);
-  const ticked = [...new Set(checked.map(String))];
-  const patch = { id: itemId, doneAt: new Date().toISOString(), checked: ticked.length ? ticked : null, resolution: resolution ? String(resolution) : null };
-  // The checklist is judged inside the lock, so an item added meanwhile cannot slip through unticked.
-  const check = (next) => {
-    const item = pendingItem(next, itemId);
-    const left = (item.checklist || []).filter((c) => !ticked.includes(c.id));
-    if (left.length) throw new BoardError(400, 'checklist', `not confirmed yet: ${left.map((c) => c.text).join('; ')}`);
-  };
-  return patchEpic(id, { waiting: [patch] }, { by, why, check }).epic;
+function changeWaiting(id, itemId, action, body, { by = 'cli', why = '' } = {}) {
+  return withLock(id, () => {
+    const epic = readEpic(id);
+    const before = pendingItem(epic, itemId);
+    const at = new Date().toISOString();
+    const after = transitionWaiting(before, action, body, { by, at });
+    if (after === before) return epic;
+    const next = { ...epic, updatedAt: at, waiting: epic.waiting.flatMap((item) => item.id === itemId ? (after ? [after] : []) : [item]) };
+    validateEpic(next);
+    const changes = after ? [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => !same(before[key], after[key])).map((key) => ({ op: 'set', path: `waiting[${itemId}].${key}`, before: before[key] ?? null, after: after[key] ?? null })) : [{ op: 'remove', path: `waiting[${itemId}]`, before, after: null }];
+    saveEpic(next);
+    appendHistory(id, changes.map((change) => ({ at, by, why, ...change })));
+    return next;
+  });
 }
 
-export function reopenWaiting(id, itemId, { by = 'cli', why = '' } = {}) {
-  pendingItem(readEpic(id), itemId);
-  return patchEpic(id, { waiting: [{ id: itemId, doneAt: null, checked: null, resolution: null }] }, { by, why }).epic;
+export function submitWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'submit', body, opts);
 }
 
-const WATCHED = ['head', 'behind', 'ahead', 'unpushed', 'remoteBehind', 'dirty', 'mr.state', 'mr.draft', 'mr.pipeline', 'error'];
+export function resolveWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'resolve', body, opts);
+}
+
+export function reviseWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'revise', body, opts);
+}
+
+export function removeWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'remove', body, opts);
+}
+
+export function reopenWaiting() {
+  throw new BoardError(400, 'waiting-action', 'use wait revise with version and a reason');
+}
+
+const WATCHED = ['head', 'behind', 'ahead', 'unpushed', 'remoteBehind', 'dirty', 'mr.state', 'mr.draft', 'mr.pipeline', 'error', 'localUnavailable'];
 const pick = (obj, dotted) => dotted.split('.').reduce((v, k) => (v == null ? undefined : v[k]), obj);
 
 // A failed refresh keeps the last good facts and their fetchedAt, so the page can show them as stale.
-export function writeFacts(id, results, { at = new Date().toISOString() } = {}) {
+export function writeFacts(id, results, { at = new Date().toISOString(), repoLocations = {} } = {}) {
   return withLock(id, () => {
     const epic = readEpic(id);
     const facts = { ...(epic.facts || {}) };
     const events = [];
+    const observedRepos = Object.keys(repoLocations).sort((a, b) => b.length - a.length);
+    for (const [name, observed] of Object.entries(repoLocations)) {
+      const repo = epic.repos?.[name];
+      if (!repo || repo.path !== observed.path) continue;
+      for (const field of ['root', 'commonDir']) {
+        if (typeof observed[field] !== 'string' || !observed[field].trim() || same(repo[field], observed[field])) continue;
+        events.push({ at, by: 'refresh', why: '', op: 'refresh', path: `repos.${name}.${field}`, before: repo[field] ?? null, after: observed[field] });
+        repo[field] = observed[field];
+      }
+    }
     for (const [key, result] of Object.entries(results)) {
+      const repoName = observedRepos.find((name) => key.startsWith(`${name}:`));
+      if (repoName !== undefined && (!epic.repos?.[repoName] || epic.repos[repoName].path !== repoLocations[repoName].path)) continue;
       const prev = facts[key] || null;
-      const next = result.error ? { ...(prev || {}), error: result.error, errorAt: at } : { ...result, fetchedAt: at, error: null };
-      // A glab failure keeps the last good MR facts, like a git failure keeps the branch facts.
-      if (!result.error && next.mr) next.mr = next.mr.error ? { ...(prev?.mr || {}), error: next.mr.error, errorAt: at } : { ...next.mr, fetchedAt: at };
+      let next;
+      if (result.localUnavailable === true) {
+        next = { ...(prev || {}), error: null, localUnavailable: true, localReason: result.localReason || 'Local repository is unavailable', dirty: null, worktreeExists: false };
+        delete next.errorAt;
+      } else if (result.error) {
+        next = { ...(prev || {}), error: result.error, errorAt: at };
+        if (Object.hasOwn(result, 'worktreeExists')) {
+          delete next.localUnavailable;
+          delete next.localReason;
+        }
+        for (const field of ['dirty', 'worktreeExists']) {
+          if (Object.hasOwn(result, field)) next[field] = result[field];
+        }
+      } else {
+        next = { ...result, fetchedAt: at, error: null };
+        delete next.localUnavailable;
+        delete next.localReason;
+      }
+      // Git and forge requests have separate successful timestamps.
+      if (result.mr === null) next.mr = null;
+      else if (result.mr) next.mr = result.mr.error ? { ...(prev?.mr || {}), error: result.mr.error, errorAt: at } : { ...result.mr, fetchedAt: at };
+      if (next.mr && (result.error || result.localUnavailable === true)) next.mr = { ...next.mr, shaMatchesHead: null };
       for (const field of WATCHED) {
         const before = pick(prev, field) ?? null;
         const after = pick(next, field) ?? null;

@@ -52,6 +52,60 @@ test('errors carry status and json', async () => {
   assert.equal((await call('/nope')).status, 404);
 });
 
+test('global settings can be saved without changing epic data or history', async () => {
+  const defaults = await call('/api/settings');
+  assert.equal(defaults.status, 200);
+  assert.deepEqual(await defaults.json(), {
+    epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
+    epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
+    mapHeight: null,
+  });
+  const before = await (await call('/api/epics/5')).json();
+  const history = await (await call('/api/epics/5/history')).json();
+  const settings = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
+  const expected = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null };
+  const saved = await call('/api/settings', { method: 'PUT', body: settings });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(await saved.json(), expected);
+  assert.deepEqual(await (await call('/api/settings')).json(), expected);
+  const resized = await call('/api/settings', { method: 'PUT', body: { epicPageSizes: { waiting: 10, history: 15 } } });
+  const resizedSettings = { ...settings, epicPageSizes: { waiting: 10, decisions: 5, history: 15 }, mapHeight: null };
+  assert.equal(resized.status, 200);
+  assert.deepEqual(await resized.json(), resizedSettings);
+  assert.deepEqual(await (await call('/api/settings')).json(), resizedSettings);
+  assert.deepEqual(await (await call('/api/epics/5')).json(), before);
+  assert.deepEqual(await (await call('/api/epics/5/history')).json(), history);
+});
+
+test('invalid settings requests return 400 and preserve the saved order', async () => {
+  const before = await (await call('/api/settings')).json();
+  const invalid = [
+    {},
+    { epicSectionOrder: 'map' },
+    { epicSectionOrder: ['map', 'waiting'] },
+    { epicSectionOrder: ['map', 'map', 'branches', 'sessions', 'decisions', 'history'] },
+    { epicSectionOrder: ['other', 'waiting', 'branches', 'sessions', 'decisions', 'history'] },
+    { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'], port: 1234 },
+    { epicPageSizes: {} },
+    { epicPageSizes: { waiting: '10' } },
+    { epicPageSizes: { waiting: 20 } },
+    { epicPageSizes: { map: 10 } },
+  ];
+  for (const body of invalid) {
+    const response = await call('/api/settings', { method: 'PUT', body });
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.equal((await response.json()).error, 'bad-settings');
+    assert.deepEqual(await (await call('/api/settings')).json(), before);
+  }
+});
+
+test('settings writes use the same origin and JSON guards as epic writes', async () => {
+  const body = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
+  assert.equal((await call('/api/settings', { method: 'PUT', body, headers: { Origin: 'http://evil.example' } })).status, 403);
+  const response = await fetch(`${base}/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) });
+  assert.equal(response.status, 415);
+});
+
 test('host and origin checks', async () => {
   assert.equal(await raw('/api/epics', { headers: { Host: 'evil.example' } }), 403);
   assert.equal(await raw('/api/epics', { headers: { Host: `localhost:${port}` } }), 200);
@@ -63,25 +117,62 @@ test('host and origin checks', async () => {
   assert.equal(noJson.status, 415);
 });
 
-test('waiting done button and refresh', async () => {
-  await call('/api/epics/5', { method: 'PATCH', body: { patch: { waiting: [{ id: 'w1', kind: 'action', title: 'Migrate', checklist: [{ id: 'c1', text: 'Backup' }] }] } } });
-  const partial = await call('/api/epics/5/waiting/w1/done', { method: 'POST', body: {} });
-  assert.equal(partial.status, 400);
-  assert.match((await partial.json()).detail, /Backup/);
-  assert.equal((await call('/api/epics/5/waiting/nope/done', { method: 'POST', body: {} })).status, 404);
-  assert.equal((await call('/api/epics/5/waiting/w1/done', { method: 'POST', body: { checked: ['c1'], resolution: 'done at 10' } })).status, 200);
-  let epic = await (await call('/api/epics/5')).json();
-  assert.equal(epic.waiting.length, 1, 'a done item stays on the list');
-  assert.ok(epic.waiting[0].doneAt);
-  const list = await (await call('/api/epics')).json();
-  assert.equal(list.find((e) => e.id === '5').waiting, 0, 'done items are not counted as waiting');
-  assert.ok(list.find((e) => e.id === '5').createdAt);
-  assert.equal(list.find((e) => e.id === '5').tasks, 1);
-  assert.equal(list.find((e) => e.id === '5').branches, 0);
-  assert.equal((await call('/api/epics/5/waiting/w1/undo', { method: 'POST', body: {} })).status, 200);
-  epic = await (await call('/api/epics/5')).json();
-  assert.equal('doneAt' in epic.waiting[0], false);
+test('waiting submission stays pending until agent resolution and supports guarded revision/removal', async () => {
+  const path = '/api/epics/5/waiting/w1';
+  await call('/api/epics/5', { method: 'PATCH', body: { patch: { waiting: [{ id: 'w1', kind: 'decision', title: 'Provider', input: { type: 'single', options: [{ id: 'a', text: 'Provider A' }, { id: 'b', text: 'Provider B' }] }, checklist: [{ id: 'c1', text: 'Backup' }] }] } } });
+  let w = (await (await call('/api/epics/5')).json()).waiting[0];
+  const submit = { version: w.version, submissionId: 'human-1', selected: ['a'], checked: ['c1'], comment: 'Fees checked' };
+  assert.equal((await call(`${path}/done`, { method: 'POST', body: {} })).status, 400);
+  const invalid = await call(`${path}/submit`, { method: 'POST', body: { ...submit, selected: [] } });
+  assert.equal(invalid.status, 400);
+  const accepted = await call(`${path}/submit`, { method: 'POST', body: submit });
+  assert.equal(accepted.status, 200);
+  w = (await accepted.json()).waiting[0];
+  assert.equal(w.status, 'answered');
+  assert.equal(w.doneAt, undefined);
+  assert.deepEqual(w.rounds[0].response.selected, ['a']);
+  assert.equal((await (await call('/api/epics')).json()).find((e) => e.id === '5').waiting, 1);
+  assert.equal((await call(`${path}/resolve`, { method: 'POST', body: { version: submit.version, submissionId: 'human-1', resolution: 'Use A' } })).status, 409);
+  assert.equal((await call(`${path}/resolve`, { method: 'POST', body: { version: w.version, submissionId: 'other', resolution: 'Use A' } })).status, 409);
+  const closed = await call(`${path}/resolve`, { method: 'POST', body: { version: w.version, submissionId: 'human-1', resolution: 'Use A' } });
+  assert.equal(closed.status, 200);
+  w = (await closed.json()).waiting[0];
+  assert.equal(w.status, 'closed');
+  assert.ok(w.doneAt);
+  assert.equal(w.rounds[0].review.by, 'agent');
+  assert.equal((await (await call('/api/epics')).json()).find((e) => e.id === '5').waiting, 0);
+  assert.equal((await call(`${path}/submit`, { method: 'POST', body: submit })).status, 200, 'lost responses may be retried after review');
+  assert.equal((await call(`${path}/undo`, { method: 'POST', body: {} })).status, 400);
+  const revised = await call(`${path}/revise`, { method: 'POST', body: { version: w.version, reason: 'Confirm new fees', patch: { title: 'Provider after fee change' } } });
+  assert.equal(revised.status, 200);
+  w = (await revised.json()).waiting[0];
+  assert.equal(w.status, 'open');
+  assert.equal(w.revision, 2);
+  assert.equal((await call(`${path}/remove`, { method: 'POST', body: { version: w.version } })).status, 409, 'answered history cannot be deleted');
+  const added = await call('/api/epics/5', { method: 'PATCH', body: { patch: { waiting: [{ id: 'mistake', kind: 'other', title: 'Remove me' }] } } });
+  assert.equal(added.status, 200);
+  const mistake = (await (await call('/api/epics/5')).json()).waiting.find((x) => x.id === 'mistake');
+  assert.equal((await call('/api/epics/5/waiting/mistake/remove', { method: 'POST', body: {} })).status, 400);
+  assert.equal((await call('/api/epics/5/waiting/mistake/remove', { method: 'POST', body: { version: mistake.version } })).status, 200);
   assert.equal((await call('/api/epics/5/refresh', { method: 'POST', body: { scope: 'all' } })).status, 200);
+});
+
+test('waiting mutations preserve guards and malformed bodies do not change data', async () => {
+  const path = '/api/epics/5/waiting/w1/submit';
+  const before = await (await call('/api/epics/5')).json();
+  assert.equal((await call(path, { method: 'POST', body: {}, headers: { Origin: 'http://evil.example' } })).status, 403);
+  assert.equal((await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' })).status, 415);
+  for (const body of [null, [], { version: before.waiting[0].version, submissionId: 'bad', selected: 'a' }]) {
+    const response = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    assert.equal(response.status, 400);
+  }
+  assert.deepEqual(await (await call('/api/epics/5')).json(), before);
+});
+
+test('unknown waiting actions return 404, including object prototype names', async () => {
+  for (const action of ['missing', 'constructor', 'toString', '__proto__']) {
+    assert.equal((await call(`/api/epics/5/waiting/w1/${action}`, { method: 'POST', body: {} })).status, 404, action);
+  }
 });
 
 test('refresh can stream its progress as ndjson', async () => {
@@ -104,11 +195,16 @@ test('page modules are served as javascript', async () => {
   assert.equal(r.status, 200);
   assert.match(r.headers.get('content-type'), /text\/javascript/);
   assert.equal((await call('/vendor/mermaid.min.js')).status, 404);
-  for (const lib of ['marked.min.js', 'purify.min.js']) {
+  for (const lib of ['marked.min.js', 'purify.min.js', 'vditor.min.js', 'vditor-lute.min.js', 'vditor-icons.js', 'vditor-i18n.js', 'vditor-adapter.js']) {
     const v = await call(`/vendor/${lib}`);
     assert.equal(v.status, 200, lib);
     assert.match(v.headers.get('content-type'), /text\/javascript/);
   }
+  const css = await call('/vendor/vditor.css');
+  assert.equal(css.status, 200);
+  assert.match(css.headers.get('content-type'), /text\/css/);
+  assert.equal((await call('/vendor/milkdown.min.js')).status, 404);
+  assert.equal((await call('/vendor/vditor.LICENSE.txt')).status, 404);
   assert.equal((await call('/vendor/..%2Fpackage.json')).status, 404);
 });
 
@@ -140,8 +236,22 @@ test('export downloads one html file', async () => {
 });
 
 test('pages are served', async () => {
-  assert.match(await (await call('/')).text(), /<title>/);
+  const index = await (await call('/')).text();
+  assert.match(index, /<title>EpicBoard<\/title>/);
+  assert.match(index, /EpicBoard<\/a>/);
+  assert.match(index, /name="color-scheme" content="light dark"/);
+  assert.match(index, /name="theme-color" content="#f3f5f7" media="\(prefers-color-scheme: light\)"/);
+  assert.match(index, /name="theme-color" content="#0f141a" media="\(prefers-color-scheme: dark\)"/);
+  assert.match(index, /href="\/static\/favicon\.svg"/);
+  assert.match(index, /href="\/static\/favicon-dark\.svg"/);
   assert.match(await (await call('/e/5')).text(), /epic\.js|app\.js/);
+  const icon = await call('/static/favicon.svg');
+  assert.equal(icon.status, 200);
+  assert.match(icon.headers.get('content-type'), /image\/svg\+xml/);
+  const legacy = await call('/favicon.ico');
+  assert.equal(legacy.status, 200);
+  assert.match(legacy.headers.get('content-type'), /image\/png/);
+  assert.ok((await legacy.arrayBuffer()).byteLength > 32);
 });
 
 test.after(() => server.close());

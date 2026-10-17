@@ -9,19 +9,28 @@ import { allowedHosts, publicUrl } from './paths.mjs';
 import { VERSION } from './version.mjs';
 import * as docs from './docs.mjs';
 import { BoardError } from './errors.mjs';
+import { readSettings, writeSettings } from './settings.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const BY = new Set(['agent', 'button', 'cli', 'hook']);
+const VENDOR_FILES = new Set([
+  'marked.min.js', 'purify.min.js', 'vditor.min.js', 'vditor.css',
+  'vditor-lute.min.js', 'vditor-icons.js', 'vditor-i18n.js', 'vditor-adapter.js',
+]);
 
 function send(res, status, body, type = 'application/json; charset=utf-8') {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
-  res.end(typeof body === 'string' ? body : JSON.stringify(body));
+  if (Buffer.isBuffer(body)) res.end(body);
+  else res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
 
-function serveFile(res, file) {
+function serveFile(res, file, type) {
   if (!existsSync(file)) throw new BoardError(404, 'not-found', 'no such page');
-  send(res, 200, readFileSync(file, 'utf8'), TYPES[extname(file)] || 'application/octet-stream');
+  const mime = type || TYPES[extname(file)] || 'application/octet-stream';
+  // A PNG read as text is corrupted; SVG stays text so the export can inline it.
+  const body = mime.startsWith('image/') && !mime.includes('svg') ? readFileSync(file) : readFileSync(file, 'utf8');
+  send(res, 200, body, mime);
 }
 
 function readBody(req) {
@@ -71,15 +80,21 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       const m = req.method;
 
       if (m === 'GET' && parts.length === 0) return serveFile(res, join(ROOT, 'server/page/index.html'));
+      if (m === 'GET' && parts.length === 1 && parts[0] === 'favicon.ico') return serveFile(res, join(ROOT, 'server/page/favicon.png'), 'image/png');
+      if (m === 'GET' && parts.length === 1 && parts[0] === 'editor') return serveFile(res, join(ROOT, 'server/page/doc-editor.html'));
       if (m === 'GET' && parts[0] === 'e' && parts.length === 2) {
         store.checkId(parts[1]);
         return serveFile(res, join(ROOT, 'server/page/epic.html'));
       }
       if (m === 'GET' && parts[0] === 'static' && parts.length === 2 && /^[\w.-]+$/.test(parts[1])) return serveFile(res, join(ROOT, 'server/page', parts[1]));
       // Only the vendored libraries listed here are served; the folder itself is not browsable.
-      if (m === 'GET' && parts[0] === 'vendor' && parts.length === 2 && ['marked.min.js', 'purify.min.js'].includes(parts[1])) return serveFile(res, join(ROOT, 'vendor', parts[1]));
+      if (m === 'GET' && parts[0] === 'vendor' && parts.length === 2 && VENDOR_FILES.has(parts[1])) return serveFile(res, join(ROOT, 'vendor', parts[1]));
       if (parts[0] !== 'api') throw new BoardError(404, 'not-found', 'no such path');
       if (parts[1] === 'health' && m === 'GET') return send(res, 200, { ok: true, version: VERSION });
+      if (parts[1] === 'settings' && parts.length === 2) {
+        if (m === 'GET') return send(res, 200, readSettings());
+        if (m === 'PUT') return send(res, 200, writeSettings(await readBody(req)));
+      }
 
       if (parts[1] === 'selfcheck' && m === 'GET') {
         const { selfcheck } = await import('./selfcheck.mjs');
@@ -101,7 +116,10 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       const tail = parts.slice(3).join('/');
       if (m === 'GET' && tail === '') return send(res, 200, store.readEpic(id));
       if (m === 'GET' && tail === 'rev') return send(res, 200, { updatedAt: store.readEpic(id).updatedAt });
-      if (m === 'GET' && tail === 'history') return send(res, 200, store.readHistory(id, { limit: Math.min(Number(url.searchParams.get('limit')) || 20, 500) }));
+      if (m === 'GET' && tail === 'history') {
+        const limit = url.searchParams.get('limit');
+        return send(res, 200, store.readHistory(id, { limit: limit === 'all' ? Infinity : Math.min(Number(limit) || 20, 500) }));
+      }
       if (tail === 'docs' && m === 'POST') {
         const body = await readBody(req);
         const fields = { task: body.task || undefined, step: body.step || undefined, kind: body.kind, title: body.title, path: body.path };
@@ -147,14 +165,17 @@ export function createBoardServer({ port, run = execRunner } = {}) {
         const { epic } = await refreshEpic(id, { scope: body.scope || 'all', task: body.task, branch: body.branch, run });
         return send(res, 200, epic);
       }
-      if (m === 'POST' && parts[3] === 'waiting' && parts.length === 6 && parts[5] === 'done') {
-        const body = await readBody(req);
-        const checked = Array.isArray(body.checked) ? body.checked.map(String) : [];
-        return send(res, 200, store.resolveWaiting(id, parts[4], { checked, resolution: body.resolution }, { by: 'button' }));
-      }
-      if (m === 'POST' && parts[3] === 'waiting' && parts.length === 6 && parts[5] === 'undo') {
-        await readBody(req);
-        return send(res, 200, store.reopenWaiting(id, parts[4], { by: 'button' }));
+      if (m === 'POST' && parts[3] === 'waiting' && parts.length === 6) {
+        const action = parts[5];
+        if (action === 'done' || action === 'undo') {
+          throw new BoardError(400, 'waiting-action', `Use waiting/${parts[4]}/${action === 'done' ? 'resolve with version, submissionId and resolution after human submission' : 'revise with version and reason'}`);
+        }
+        const mutate = new Map([['submit', store.submitWaiting], ['resolve', store.resolveWaiting], ['revise', store.reviseWaiting], ['remove', store.removeWaiting]]).get(action);
+        if (mutate) {
+          const body = await readBody(req);
+          if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BoardError(400, 'bad-body', 'waiting action body must be an object');
+          return send(res, 200, mutate(id, parts[4], body, { by: action === 'submit' ? 'button' : 'agent' }));
+        }
       }
       throw new BoardError(404, 'not-found', 'no such path');
     } catch (e) {

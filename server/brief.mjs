@@ -10,14 +10,23 @@ export function ago(iso, now = Date.now()) {
 
 export function branchLine(key, f, mrIid) {
   if (!f) return `${key} · no facts yet, run refresh`;
-  const parts = [`${key} ${f.head ?? '?'}`];
+  const parts = [`${key} ${f.localUnavailable || f.error ? 'last known ' : ''}${f.head ?? '?'}`];
   if (f.behind) parts.push(`behind ${f.behind}`);
   if (f.unpushed) parts.push(`unpushed ${f.unpushed}`);
   if (f.dirty) parts.push('dirty tree');
   if (f.mr && !f.mr.error) parts.push(`MR ${mrIid ? `#${mrIid} ` : ''}${[f.mr.draft ? 'draft' : f.mr.state, f.mr.pipeline].filter(Boolean).join(' ')}`);
   if (f.mr?.error) parts.push(`MR: ${f.mr.error}`);
+  if (f.localUnavailable) parts.push('local Git unavailable');
   if (f.error) parts.push(`error: ${f.error}`);
   return parts.join(' · ');
+}
+
+export function waitingAnswer(item) {
+  const round = (item.rounds || []).findLast((r) => r.revision === item.revision);
+  if (!round) return '';
+  const { response, request } = round;
+  const options = new Map((request.input?.options || []).map((o) => [o.id, o.text]));
+  return [response.confirmed ? 'Confirmed' : '', ...(response.selected || []).map((id) => options.get(id) || id), response.comment].filter(Boolean).join('; ').replace(/\s+/g, ' ');
 }
 
 // Hook output after compaction: short enough to read in one glance, never more than 25 lines.
@@ -30,7 +39,8 @@ export function buildBrief(epic, { session, now = Date.now() } = {}) {
   const waiting = (epic.waiting || []).filter((w) => !w.doneAt);
   if (waiting.length) {
     lines.push(`Needs a decision: ${waiting.length}`);
-    for (const w of waiting.slice(0, 5)) lines.push(`- [${w.kind || 'other'}] ${w.title}${w.task ? ` (${w.task})` : ''}${w.checklist?.length ? ` · checklist ${w.checklist.length}` : ''}`);
+    lines.push(`Human: ${waiting.filter((w) => w.status !== 'answered').length} · Agent: ${waiting.filter((w) => w.status === 'answered').length}`);
+    for (const w of waiting.slice(0, 5)) lines.push(`- ${w.id} · waiting for ${w.status === 'answered' ? 'agent' : 'human'} · [${w.kind || 'other'}] ${w.title}${w.task ? ` (${w.task})` : ''}${w.checklist?.length ? ` · checklist ${w.checklist.length}` : ''}${w.status === 'answered' ? ` · answer: ${waitingAnswer(w)}` : ''}`);
   }
   const own = (epic.sessions || []).find((s) => s.id === session);
   if (own) lines.push(`Session: doing: ${own.doing || '-'}; next: ${own.next || '-'} (marked ${ago(own.lastAt, now)} ago)`);
