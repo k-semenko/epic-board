@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Keep the task chain where it was scrolled when a task is opened, and zoom that chain with Ctrl or Command and the wheel. A corner control shows the scale and resets it to 100%.
 - Stop treating commits ahead of the base as unpushed when the remote branch is absent, including branches deleted after squash merge.
 - Keep repository root and common Git paths so refresh survives deleted worktrees; refresh merge requests independently and distinguish current MR state from unavailable local Git data.
 - Show editable Markdown markers in the active document block and render formatting when the cursor moves away.

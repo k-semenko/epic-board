@@ -171,10 +171,16 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .hint { margin: 6px 0 0; font-size: 13px; }
 
 /* Overview: whole tasks as cards; the opened card shows its steps below. */
-.overview { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+.overview { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; overflow-anchor: none; }
 .overview.has-side { display: grid; grid-template-columns: minmax(0, 1fr) 252px; gap: 22px; align-items: start; }
 .overview-main { min-width: 0; }
-.ov-scroll { overflow-x: auto; padding: 2px; }
+.ov-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin: -6px 0 8px; background: var(--surface); }
+.ov-head .ov-section-title { margin: 0; }
+.map-zoom { display: flex; align-items: center; gap: 6px; padding: 2px 2px 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.map-zoom-scale { min-width: 3.2em; text-align: right; }
+.map-zoom button { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.map-zoom button[disabled] { cursor: default; }
+.ov-scroll { overflow: auto; padding: 2px; overflow-anchor: none; }
 .ov-section-title { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 600; margin: 0 0 12px; }
 .ov-section-title .mono { margin-left: auto; }
 .overview-side { border-left: 1px solid var(--line); padding-left: 18px; min-width: 0; }
@@ -441,7 +447,7 @@ button.doc-open .chip svg.i { display: none; }
   .map-frame.map-full { height: auto; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
   #map { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
   #map > .here { flex: none; margin: 0; }
-  #map > .overview { flex: none; max-height: 46%; overflow: auto; }
+  #map > .overview { flex: 0 1 auto; max-height: 46%; min-height: 0; overflow: auto; }
   #map > .overview.has-side { max-height: 55%; }
   #map > .detail { flex: 1; min-height: 0; margin: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }
   #map > .detail-merge { grid-template-rows: auto auto auto minmax(0, 1fr); }

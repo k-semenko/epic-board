@@ -307,7 +307,7 @@ function bindSideCarousel() {
   let wheelUsed = false;
   document.addEventListener('wheel', (e) => {
     const carousel = e.target.closest('.side-carousel');
-    if (!carousel?.querySelector('[data-side-turn]') || e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    if (!carousel?.querySelector('[data-side-turn]') || e.ctrlKey || e.metaKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
     e.preventDefault();
     const now = performance.now();
     if (now - lastWheel > 180) { wheelAmount = 0; wheelUsed = false; }
@@ -342,7 +342,8 @@ function renderOverview(ov, open) {
     const info = n.kind === 'task' ? `<button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>` : '';
     return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
-  return `<div class="overview${ov.side.length ? ' has-side' : ''}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}>${ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : ''}<div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
+  const chainTitle = ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : '';
+  return `<div class="overview${ov.side.length ? ' has-side' : ''}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapZoomControl()}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" style="max-width:${width}px">
     <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
     ${edges}${cards}</svg></div></section>${renderSideStack(ov.side, open)}</div>`;
 }
@@ -359,7 +360,7 @@ function narrowFlow(steps) {
 }
 
 const TL = { colW: 200, nodeW: 168, nodeH: 84, rowH: 100, pad: 24 };
-const tlState = { focused: null, open: null, step: null, allDocs: false, side: null, sideBusy: false };
+const tlState = { focused: null, open: null, step: null, allDocs: false, side: null, sideBusy: false, mapScale: 1 };
 
 function nodeX(col) { return TL.pad + col * TL.colW; }
 function rowY(i) { return i * TL.rowH + (TL.rowH - TL.nodeH) / 2; }
@@ -775,6 +776,8 @@ function setFull(on) {
   if (tools) on ? frame.prepend(tools) : $('.map-section .section-head').appendChild(tools);
   if (on && frame.requestFullscreen && !document.fullscreenElement) frame.requestFullscreen().catch(() => {});
   if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  // Full screen changes the width the chain fits into, so the same scale has to be measured again.
+  globalThis.requestAnimationFrame?.(() => applyOverviewScale());
 }
 
 document.addEventListener('keydown', (e) => {
@@ -784,11 +787,158 @@ document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement && $('#map-frame')?.classList.contains('map-full')) setFull(false);
 });
 
-// The map is always drawn at 100%; enlarging is left to the browser's own zoom.
+// 100% is the chain fitted to the block. Ctrl/Cmd+wheel multiplies that, the same gesture as a browser zoom.
+const MAP_SCALE_MIN = 0.5;
+const MAP_SCALE_MAX = 2.5;
+
+function clampMapScale(scale) {
+  return Math.min(MAP_SCALE_MAX, Math.max(MAP_SCALE_MIN, scale));
+}
+
+function nextMapScale(scale, deltaY) {
+  return clampMapScale(scale * Math.exp(-deltaY * 0.0014));
+}
+
+function formatMapScale(scale) {
+  return `${Math.round(scale * 100)}%`;
+}
+
+function mapZoomControl() {
+  const scale = tlState.mapScale || 1;
+  const idle = Math.round(scale * 100) === 100;
+  return `<div class="map-zoom" role="group" aria-label="${esc(t('map.zoom'))}"><span class="map-zoom-scale">${formatMapScale(scale)}</span><button type="button" data-map-zoom-reset${idle ? ' disabled' : ''}>${esc(t('map.reset'))}</button></div>`;
+}
+
+function measureOverviewFit(svg) {
+  const width = svg.style.width;
+  const maxWidth = svg.style.maxWidth;
+  const minWidth = svg.style.minWidth;
+  svg.style.width = '';
+  svg.style.maxWidth = '';
+  svg.style.minWidth = '';
+  const fit = svg.getBoundingClientRect?.().width || 0;
+  svg.style.width = width;
+  svg.style.maxWidth = maxWidth;
+  svg.style.minWidth = minWidth;
+  return fit;
+}
+
+function applyOverviewScale() {
+  const scale = tlState.mapScale || 1;
+  const label = $('.map-zoom-scale');
+  if (label) label.textContent = formatMapScale(scale);
+  const reset = $('[data-map-zoom-reset]');
+  if (reset) reset.disabled = Math.round(scale * 100) === 100;
+  const svg = $('.ov-svg');
+  if (!svg) return;
+  if (scale === 1) {
+    svg.style.width = '';
+    svg.style.maxWidth = '';
+    svg.style.minWidth = '';
+    return;
+  }
+  const fit = measureOverviewFit(svg);
+  if (!fit) return;
+  svg.style.minWidth = '0';
+  svg.style.maxWidth = 'none';
+  svg.style.width = `${fit * scale}px`;
+}
+
+// The point under the cursor stays put while the chain grows or shrinks around it.
+function keepZoomPoint(svg, clientX, clientY, px, py) {
+  const rect = svg.getBoundingClientRect();
+  let dx = rect.left + px * rect.width - clientX;
+  let dy = rect.top + py * rect.height - clientY;
+  let node = svg.parentElement;
+  while (node && node !== document.body && (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5)) {
+    const left = node.scrollLeft || 0;
+    const top = node.scrollTop || 0;
+    if ((node.scrollWidth || 0) > (node.clientWidth || 0) + 1) node.scrollLeft = left + dx;
+    if ((node.scrollHeight || 0) > (node.clientHeight || 0) + 1) node.scrollTop = top + dy;
+    dx -= (node.scrollLeft || 0) - left;
+    dy -= (node.scrollTop || 0) - top;
+    node = node.parentElement;
+  }
+}
+
+function zoomOverview(deltaY, clientX, clientY) {
+  const svg = $('.ov-svg');
+  const next = nextMapScale(tlState.mapScale || 1, deltaY);
+  if (!svg?.getBoundingClientRect || next === tlState.mapScale) {
+    tlState.mapScale = next;
+    applyOverviewScale();
+    return;
+  }
+  const before = svg.getBoundingClientRect();
+  const px = before.width ? (clientX - before.left) / before.width : 0.5;
+  const py = before.height ? (clientY - before.top) / before.height : 0.5;
+  tlState.mapScale = next;
+  applyOverviewScale();
+  keepZoomPoint(svg, clientX, clientY, px, py);
+}
+
+function resetOverviewScale() {
+  const svg = $('.ov-svg');
+  const before = svg?.getBoundingClientRect?.();
+  tlState.mapScale = 1;
+  applyOverviewScale();
+  if (svg && before?.width) keepZoomPoint(svg, before.left + before.width / 2, before.top + before.height / 2, 0.5, 0.5);
+}
+
+function readBoxScroll(sel) {
+  const el = $(sel);
+  return { x: el?.scrollLeft || 0, y: el?.scrollTop || 0 };
+}
+
+function writeBoxScroll(sel, saved) {
+  const el = $(sel);
+  if (!el || !saved) return;
+  el.scrollLeft = saved.x;
+  el.scrollTop = saved.y;
+}
+
+function pageScroll() {
+  const frame = $('#map-frame');
+  return {
+    x: globalThis.window?.scrollX || 0,
+    y: globalThis.window?.scrollY || 0,
+    frameX: frame?.scrollLeft || 0,
+    frameY: frame?.scrollTop || 0,
+  };
+}
+
+function restorePageScroll(saved) {
+  if (!saved) return;
+  globalThis.window?.scrollTo?.(saved.x, saved.y);
+  const frame = $('#map-frame');
+  if (!frame) return;
+  frame.scrollLeft = saved.frameX;
+  frame.scrollTop = saved.frameY;
+}
+
+function holdMapScroll(saved) {
+  writeBoxScroll('.overview', saved.overview);
+  writeBoxScroll('.ov-scroll', saved.chain);
+  restorePageScroll(saved.page);
+}
+
 function bindMapTools() {
   document.addEventListener('click', (e) => {
     if (e.target.closest('.map-tools [data-fullscreen]')) setFull(!$('#map-frame').classList.contains('map-full'));
+    if (e.target.closest('[data-map-zoom-reset]')) resetOverviewScale();
   });
+  document.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.target.closest?.('.overview-main')) return;
+    e.preventDefault();
+    const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? (globalThis.window?.innerHeight || 800) : 1);
+    zoomOverview(delta, e.clientX, e.clientY);
+  }, { passive: false });
+  // A click focuses the card inside the SVG and the browser scrolls that focus into view, which throws the chain off.
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || e.target.closest?.('[data-info]')) return;
+    if (e.target.closest?.('#map [data-open]')) e.preventDefault();
+  });
+  globalThis.window?.addEventListener?.('resize', () => applyOverviewScale());
 }
 
 function focusTimeline(layout) {
@@ -845,9 +995,14 @@ function renderMapArea(epic) {
   const here = map.here.length ? map.here.map((h) => `${esc(h.task)} · ${esc(h.title)}`).join('; ') : esc(t('map.noActive'));
   const prev = $('#tl-scroll');
   const keep = prev && tlState.focused === open ? prev.scrollLeft : null;
+  // Rebuilding the chain drops its scroll; opening a task must not jump back to the first cards.
+  const held = { overview: readBoxScroll('.overview'), chain: readBoxScroll('.ov-scroll'), page: pageScroll() };
   $('#map').innerHTML = `<p class="here"><span class="chip active-chip">${icon('target')}${esc(t('map.here'))}</span>${here}</p>`
     + renderOverview(ov, open)
     + (open ? renderDetail(map, open) : '');
+  applyOverviewScale();
+  holdMapScroll(held);
+  globalThis.requestAnimationFrame?.(() => holdMapScroll(held));
   if (!open) return;
   bindPan();
   if (keep !== null) $('#tl-scroll').scrollLeft = keep;
