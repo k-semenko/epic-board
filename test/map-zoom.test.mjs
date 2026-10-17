@@ -22,7 +22,15 @@ function mapApp() {
   const label = { textContent: '' };
   const reset = { disabled: false };
   function box() {
-    return { scrollLeft: 0, scrollTop: 0, scrollWidth: 0, scrollHeight: 0, clientWidth: 200, clientHeight: 120, isConnected: true };
+    const listeners = {};
+    const el = {
+      scrollLeft: 0, scrollTop: 0, scrollWidth: 0, scrollHeight: 0, clientWidth: 200, clientHeight: 120, isConnected: true,
+      dataset: {}, className: '', captured: false, listeners,
+      classList: { add(name) { el.className = name; }, remove() { el.className = ''; } },
+      setPointerCapture() { el.captured = true; },
+      addEventListener(type, handler) { (listeners[type] ||= []).push(handler); },
+    };
+    return el;
   }
   svg.parentElement = chain;
   const map = {
@@ -160,6 +168,46 @@ test('reset returns the chain to 100%', () => {
   assert.equal(harness.app.tlState.mapScale, 1);
   assert.equal(harness.label.textContent, '100%');
   assert.equal(harness.reset.disabled, true);
+});
+
+function pointer(partial) {
+  return { button: 0, pointerId: 1, clientX: 0, clientY: 0, ...partial };
+}
+
+test('dragging the overview pans the chain and does not count as a click', () => {
+  const harness = mapApp();
+  harness.app.renderMapArea(sampleEpic());
+  const ov = harness.overview;
+  const chain = harness.chain;
+  ov.scrollTop = 80;
+  ov.scrollHeight = 400;
+  ov.clientHeight = 40;
+  chain.scrollLeft = 50;
+  chain.scrollWidth = 900;
+  chain.clientWidth = 200;
+  const fire = (type, event) => ov.listeners[type][0](event);
+  fire('pointerdown', pointer({ clientX: 100, clientY: 100 }));
+  fire('pointermove', pointer({ clientX: 102, clientY: 101 }));
+  assert.equal(ov.scrollTop, 80);
+  assert.equal(chain.scrollLeft, 50);
+  fire('pointermove', pointer({ clientX: 60, clientY: 140 }));
+  assert.equal(chain.scrollLeft, 90);
+  assert.equal(ov.scrollTop, 40);
+  assert.equal(ov.scrollLeft, 0);
+  assert.equal(ov.className, 'dragging');
+  assert.equal(ov.captured, true);
+  fire('pointerup', pointer({}));
+  const dragged = { stopped: false, preventDefault() {}, stopPropagation() { dragged.stopped = true; } };
+  fire('click', dragged);
+  assert.equal(dragged.stopped, true);
+
+  harness.app.renderMapArea(sampleEpic());
+  const fresh = harness.overview;
+  fresh.listeners.pointerdown[0](pointer({ clientX: 10, clientY: 10 }));
+  fresh.listeners.pointerup[0](pointer({ clientX: 10, clientY: 10 }));
+  const tap = { stopped: false, preventDefault() {}, stopPropagation() { tap.stopped = true; } };
+  fresh.listeners.click[0](tap);
+  assert.equal(tap.stopped, false);
 });
 
 test('a click on a task card does not let the browser scroll the focused card into view', () => {

@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Keep agents on the CLI when the user pastes a board link: the skill maps page links to epic, task and step ids and leaves the page and its API to the user.
 - Move answer review and stage-document rules from the main skill into `reference/waiting.md` and `reference/docs.md`.
 - Give the task-chain overview a fixed 40px height so the block stays put and the chain scrolls inside it.
+- Drag the task chain by hand the same way as the step strip. A short press still opens the task.
 - Keep the task chain where it was scrolled when a task is opened, and zoom that chain with Ctrl or Command and the wheel. A corner control shows the scale and resets it to 100%.
 - Stop treating commits ahead of the base as unpushed when the remote branch is absent, including branches deleted after squash merge.
 - Keep repository root and common Git paths so refresh survives deleted worktrees; refresh merge requests independently and distinguish current MR state from unavailable local Git data.

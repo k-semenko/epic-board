@@ -947,32 +947,69 @@ function focusTimeline(layout) {
   scroller.scrollLeft = nodeX(layout.focus.col) + TL.nodeW / 2 - scroller.clientWidth / 2;
 }
 
-// Drag to pan the steps of the opened task: a long task is wider than the screen by design.
-function bindPan() {
-  const scroller = $('#tl-scroll');
+// The inner scroller takes what it can; whatever is left moves the outer one.
+function panScroll(el, axis, from, delta) {
+  if (!el) return delta;
+  const horizontal = axis === 'x';
+  const max = Math.max(0, (el[horizontal ? 'scrollWidth' : 'scrollHeight'] || 0) - (el[horizontal ? 'clientWidth' : 'clientHeight'] || 0));
+  const next = Math.min(max, Math.max(0, from - delta));
+  el[horizontal ? 'scrollLeft' : 'scrollTop'] = next;
+  return delta - (from - next);
+}
+
+// A few pixels of travel starts a pan. A shorter press stays a click.
+function bindHandPan(scroller, apply, moved = (dx, dy) => Math.hypot(dx, dy) > 4) {
   if (!scroller || scroller.dataset.bound) return;
   scroller.dataset.bound = '1';
   let drag = null;
-  // Panning starts only after the pointer travels a few pixels, so a click still selects a step.
   scroller.addEventListener('pointerdown', (e) => {
-    if (e.button === 0) drag = { x: e.clientX, left: scroller.scrollLeft, id: e.pointerId, moving: false };
+    if (e.button !== 0) return;
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId, moving: false, origin: apply() };
   });
   scroller.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    if (!drag.moving && Math.abs(e.clientX - drag.x) > 4) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dx = e.clientX - drag.x;
+    const dy = e.clientY - drag.y;
+    if (!drag.moving && moved(dx, dy)) {
       drag.moving = true;
-      scroller.setPointerCapture(drag.id);
+      scroller.setPointerCapture?.(drag.id);
       scroller.classList.add('dragging');
     }
-    if (drag.moving) scroller.scrollLeft = drag.left - (e.clientX - drag.x);
+    if (drag.moving) apply(drag.origin, dx, dy);
   });
-  const stop = () => {
-    if (drag?.moving) scroller.dataset.dragEnd = String(Date.now());
+  const stop = (e) => {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    if (drag.moving) scroller.dataset.dragEnd = String(Date.now());
     drag = null;
     scroller.classList.remove('dragging');
   };
   scroller.addEventListener('pointerup', stop);
   scroller.addEventListener('pointercancel', stop);
+  scroller.addEventListener('click', (e) => {
+    if (Date.now() - Number(scroller.dataset.dragEnd || 0) > 200) return;
+    e.preventDefault();
+    e.stopPropagation();
+  });
+}
+
+// Drag to pan the steps of the opened task: a long task is wider than the screen by design.
+function bindPan() {
+  const scroller = $('#tl-scroll');
+  bindHandPan(scroller, (origin, dx) => {
+    if (!origin) return { left: scroller.scrollLeft };
+    scroller.scrollLeft = origin.left - dx;
+  }, (dx) => Math.abs(dx) > 4);
+}
+
+// The chain is taller than its window and wider once zoomed, so the hand moves both ways.
+function bindOverviewPan() {
+  const scroller = $('.overview');
+  bindHandPan(scroller, (origin, dx, dy) => {
+    const chain = $('.ov-scroll');
+    if (!origin) return { chainLeft: chain?.scrollLeft || 0, chainTop: chain?.scrollTop || 0, left: scroller.scrollLeft, top: scroller.scrollTop };
+    panScroll(scroller, 'x', origin.left, panScroll(chain, 'x', origin.chainLeft, dx));
+    panScroll(scroller, 'y', origin.top, panScroll(chain, 'y', origin.chainTop, dy));
+  });
 }
 
 // ---------- Map area ----------
@@ -1003,6 +1040,7 @@ function renderMapArea(epic) {
   applyOverviewScale();
   holdMapScroll(held);
   globalThis.requestAnimationFrame?.(() => holdMapScroll(held));
+  bindOverviewPan();
   if (!open) return;
   bindPan();
   if (keep !== null) $('#tl-scroll').scrollLeft = keep;
