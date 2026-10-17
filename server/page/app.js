@@ -1098,14 +1098,12 @@ function renderMapArea(epic) {
   if (tlState.open === 'merge' && !allNodes.some((n) => n.kind === 'task' && n.id === 'merge')) tlState.open = MERGE_ID;
   if (tlState.open && !allNodes.some((n) => n.id === tlState.open && n.kind !== 'goal')) tlState.open = null;
   const open = tlState.open || defaultOpen(map);
-  const here = map.here.length ? map.here.map((h) => `${esc(h.task)} · ${esc(h.title)}`).join('; ') : esc(t('map.noActive'));
   const prev = $('#tl-scroll');
   const stepBefore = tlState.step;
   const keep = prev && tlState.focused === open && tlState.focusedStep === stepBefore ? prev.scrollLeft : null;
   // Rebuilding the chain drops its scroll; opening a task must not jump back to the first cards.
   const held = { overview: readBoxScroll('.overview'), chain: readBoxScroll('.ov-scroll'), page: pageScroll() };
-  $('#map').innerHTML = `<p class="here"><span class="chip active-chip">${icon('target')}${esc(t('map.here'))}</span>${here}</p>`
-    + renderOverview(ov, open)
+  $('#map').innerHTML = renderOverview(ov, open)
     + (open ? renderDetail(map, open) : '');
   applyOverviewScale();
   holdMapScroll(held);

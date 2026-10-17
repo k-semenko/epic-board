@@ -63,8 +63,6 @@ tr:last-child td { border-bottom: 0; }
 
 /* Map: one lane per task, steps wrap like words so long chains stay readable at any width. */
 .map { display: grid; gap: 10px; }
-.here { margin: 0 0 4px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.active-chip { background: var(--s-active); color: var(--accent); }
 .lane { display: grid; grid-template-columns: minmax(180px, 220px) 1fr; gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
 .lane-head { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .lane-title { font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -127,7 +125,6 @@ h2 .count { font-size: 11px; color: var(--warn); }
 /* Timeline: lane titles stay pinned on the left while the drawn map scrolls and zooms on the right. */
 .tl { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
 .tl-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
-.tl-bar .here { margin: 0; }
 .tl-tools { display: flex; gap: 6px; }
 .tl-scroll { overflow-x: scroll; overflow-y: auto; cursor: grab; max-height: 70vh; user-select: none; }
 .tl-scroll.dragging { cursor: grabbing; }
@@ -162,7 +159,6 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .nowrap { white-space: nowrap; }
 .steps li { grid-template-columns: 1.4em 1fr; align-items: start; }
 .steps li > svg.i { margin-top: .2em; }
-.active-chip svg.i { margin-right: .3em; }
 .links { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13.5px; }
 .links li { display: flex; gap: 2px; align-items: flex-start; }
 .links li > svg.i { margin-top: .22em; }
@@ -254,8 +250,8 @@ svg.i.inl { color: var(--muted); margin: 0 .3em; }
 .ov-card > .ov-flags { margin-top: auto; }
 
 /* Icon rows: flex centring keeps a 16 px icon on the text's optical middle in every font size. */
-.chip, .ov-top, .ov-flags > span, .wait-meta, .session-head, .agent, .brand, .nav-link, .meta > span, .step-title, .tl-title, .here, .search { display: inline-flex; align-items: center; }
-.ov-top, .here, .session-head { display: flex; }
+.chip, .ov-top, .ov-flags > span, .wait-meta, .session-head, .agent, .brand, .nav-link, .meta > span, .step-title, .tl-title, .search { display: inline-flex; align-items: center; }
+.ov-top, .session-head { display: flex; }
 .chip svg.i { margin-right: .3em; }
 .step-title, .tl-title { display: flex; align-items: flex-start; }
 .step-title > svg.i, .tl-title > svg.i { margin-top: .18em; }
@@ -458,7 +454,6 @@ button.doc-open .chip svg.i { display: none; }
   .map-frame { height: calc(100dvh - 128px); min-height: 560px; display: flex; flex-direction: column; overflow: hidden; }
   .map-frame.map-full { height: auto; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
   #map { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
-  #map > .here { flex: none; margin: 0; }
   #map > .overview { flex: 0 0 248px; height: 248px; overflow: auto; }
   #map > .overview.has-side { flex: 0 0 400px; height: 400px; min-height: 400px; }
   #map > .detail { flex: 1; min-height: 0; margin: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }

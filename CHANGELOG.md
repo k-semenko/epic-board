@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Remove the map line that named the active step, including the empty "No active steps" state.
 - Show the whole task chain at full strength in the overview, and fit it inside that block at 100%.
 - Scroll the step strip so the open step sits in the middle. The first and last steps stay at the ends of the strip.
 - Widen the page column to 1300px. The header uses the same limit.
