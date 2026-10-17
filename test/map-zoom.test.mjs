@@ -175,35 +175,38 @@ function pointer(partial) {
   return { button: 0, pointerId: 1, clientX: 0, clientY: 0, ...partial };
 }
 
-test('dragging the overview pans the chain and does not count as a click', () => {
+test('dragging the chain pans it and leaves the off-chain column still', () => {
   const harness = mapApp();
   harness.app.renderMapArea(sampleEpic());
   const ov = harness.overview;
   const chain = harness.chain;
-  ov.scrollTop = 80;
-  ov.scrollHeight = 400;
-  ov.clientHeight = 40;
+  ov.scrollTop = 12;
+  ov.scrollLeft = 3;
   chain.scrollLeft = 50;
+  chain.scrollTop = 80;
   chain.scrollWidth = 900;
+  chain.scrollHeight = 400;
   chain.clientWidth = 200;
-  const fire = (type, event) => ov.listeners[type][0](event);
+  chain.clientHeight = 40;
+  const fire = (type, event) => chain.listeners[type][0](event);
   fire('pointerdown', pointer({ clientX: 100, clientY: 100 }));
   fire('pointermove', pointer({ clientX: 102, clientY: 101 }));
-  assert.equal(ov.scrollTop, 80);
+  assert.equal(chain.scrollTop, 80);
   assert.equal(chain.scrollLeft, 50);
   fire('pointermove', pointer({ clientX: 60, clientY: 140 }));
   assert.equal(chain.scrollLeft, 90);
-  assert.equal(ov.scrollTop, 40);
-  assert.equal(ov.scrollLeft, 0);
-  assert.equal(ov.className, 'dragging');
-  assert.equal(ov.captured, true);
+  assert.equal(chain.scrollTop, 40);
+  assert.equal(ov.scrollTop, 12);
+  assert.equal(ov.scrollLeft, 3);
+  assert.equal(chain.className, 'dragging');
+  assert.equal(chain.captured, true);
   fire('pointerup', pointer({}));
   const dragged = { stopped: false, preventDefault() {}, stopPropagation() { dragged.stopped = true; } };
   fire('click', dragged);
   assert.equal(dragged.stopped, true);
 
   harness.app.renderMapArea(sampleEpic());
-  const fresh = harness.overview;
+  const fresh = harness.chain;
   fresh.listeners.pointerdown[0](pointer({ clientX: 10, clientY: 10 }));
   fresh.listeners.pointerup[0](pointer({ clientX: 10, clientY: 10 }));
   const tap = { stopped: false, preventDefault() {}, stopPropagation() { tap.stopped = true; } };

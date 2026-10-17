@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Keep the off-chain column fixed. Only the task chain on the left scrolls.
 - Draw overview task cards larger, and place the info button in the top-right corner at the same size as the status chip.
 - Remove the map line that named the active step, including the empty "No active steps" state.
 - Show the whole task chain at full strength in the overview. 100% is a card at its drawn size, and the chain scrolls inside the block.

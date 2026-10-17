@@ -1029,14 +1029,13 @@ function bindPan() {
   }, (dx) => Math.abs(dx) > 4);
 }
 
-// The chain is taller than its window and wider once zoomed, so the hand moves both ways.
+// The off-chain column is outside this scroller, so a drag never moves it.
 function bindOverviewPan() {
-  const scroller = $('.overview');
+  const scroller = $('.ov-scroll');
   bindHandPan(scroller, (origin, dx, dy) => {
-    const chain = $('.ov-scroll');
-    if (!origin) return { chainLeft: chain?.scrollLeft || 0, chainTop: chain?.scrollTop || 0, left: scroller.scrollLeft, top: scroller.scrollTop };
-    panScroll(scroller, 'x', origin.left, panScroll(chain, 'x', origin.chainLeft, dx));
-    panScroll(scroller, 'y', origin.top, panScroll(chain, 'y', origin.chainTop, dy));
+    if (!origin) return { left: scroller.scrollLeft, top: scroller.scrollTop };
+    panScroll(scroller, 'x', origin.left, dx);
+    panScroll(scroller, 'y', origin.top, dy);
   });
 }
 
