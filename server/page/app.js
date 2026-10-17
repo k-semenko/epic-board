@@ -352,7 +352,7 @@ function renderOverview(ov, open) {
   }).join('');
   const chainTitle = ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : '';
   const canLocate = [...ov.nodes, ...ov.side].some((n) => n.kind === 'task' && (n.current.length || n.id === open));
-  return `<div class="overview${ov.side.length ? ' has-side' : ''}${mapHeightClass()}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapHeightControl(Boolean(ov.side.length))}${mapZoomControl(canLocate)}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" data-h="${height}" style="max-width:${width}px">
+  return `<div class="overview${ov.side.length ? ' has-side' : ''}${mapHeightClass()}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapHeightControl(Boolean(ov.side.length))}${mapZoomControl()}${mapLocateControl(canLocate)}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" data-h="${height}" style="max-width:${width}px">
     <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
     ${edges}${cards}</svg></div></section>${renderSideStack(ov.side, open)}</div>`;
 }
@@ -840,10 +840,14 @@ function mapHeightControl(hasSide) {
   return `<div class="map-size" role="group" aria-label="${esc(t('map.height'))}">${['s', 'm', 'l'].map(button).join('')}</div>`;
 }
 
-function mapZoomControl(canLocate) {
+function mapZoomControl() {
   const scale = tlState.mapScale || 1;
   const idle = Math.round(scale * 100) === 100;
-  return `<div class="map-zoom" role="group" aria-label="${esc(t('map.zoom'))}"><span class="map-zoom-scale">${formatMapScale(scale)}</span><button type="button" data-map-zoom-reset${idle ? ' disabled' : ''}>${esc(t('map.reset'))}</button><button type="button" class="icon-btn" data-map-locate aria-label="${esc(t('map.locate'))}" title="${esc(t('map.locate'))}"${canLocate ? '' : ' disabled'}>${icon('target')}</button></div>`;
+  return `<div class="map-zoom" role="group" aria-label="${esc(t('map.zoom'))}"><span class="map-zoom-scale">${formatMapScale(scale)}</span><button type="button" data-map-zoom-reset${idle ? ' disabled' : ''}>${esc(t('map.reset'))}</button></div>`;
+}
+
+function mapLocateControl(canLocate) {
+  return `<button type="button" class="icon-btn map-locate" data-map-locate aria-label="${esc(t('map.locate'))}" title="${esc(t('map.locate'))}"${canLocate ? '' : ' disabled'}>${icon('target')}</button>`;
 }
 
 function applyMapHeightClass() {

@@ -177,7 +177,9 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .map-zoom-scale { min-width: 3.2em; text-align: right; }
 .map-zoom button { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
 .map-zoom button[disabled] { cursor: default; }
-.map-zoom [data-map-locate] { padding: 2px 7px; }
+.map-locate { width: 30px; height: 30px; padding: 0; border-radius: 999px; background: var(--bg); color: var(--muted); justify-content: center; }
+.map-locate svg.i { width: 16px; height: 16px; margin: 0; }
+.map-locate[disabled] { cursor: default; }
 .map-size { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); }
 .map-size button { padding: 2px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; min-width: 28px; justify-content: center; }
 .map-size button[aria-pressed="true"] { background: var(--chip); color: var(--fg); }
