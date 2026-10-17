@@ -17,7 +17,7 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--sans); }
-.wrap { max-width: 1200px; margin: 0 auto; padding-block: 24px 48px; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+.wrap { max-width: 1300px; margin: 0 auto; padding-block: 24px 48px; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
 /* Grid children default to min-width:auto, so a wide diagram or table would widen the page. */
 .wrap > *, .head > * { min-width: 0; }
 h1 { overflow-wrap: anywhere; }
@@ -273,7 +273,7 @@ svg.i.inl { color: var(--muted); margin: 0 .3em; }
 
 /* Top bar */
 .topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
-.topbar-in { max-width: 1200px; margin: 0 auto; padding-block: 10px; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); display: flex; align-items: center; gap: 18px; }
+.topbar-in { max-width: 1300px; margin: 0 auto; padding-block: 10px; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); display: flex; align-items: center; gap: 18px; }
 .brand { font-weight: 700; color: var(--fg); }
 .brand svg.i { color: var(--accent); }
 .actions { flex-wrap: wrap; }

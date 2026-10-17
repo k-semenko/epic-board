@@ -19,6 +19,8 @@ test('style.css has balanced braces and no orphan selectors', () => {
     else if (ch === ';') pending = '';
   }
   assert.equal(depth, 0);
+  assert.match(css, /\.wrap \{[^}]*max-width: 1300px/);
+  assert.match(css, /\.topbar-in \{[^}]*max-width: 1300px/);
   assert.match(css, /\.overview \{[^}]*height: 248px/);
   assert.match(css, /#map > \.overview \{[^}]*flex: 0 0 248px/);
   assert.match(css, /#map > \.overview\.has-side \{[^}]*height: 328px/);
