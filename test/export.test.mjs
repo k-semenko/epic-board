@@ -39,6 +39,10 @@ test('export is a self-contained html page with the epic and its history', () =>
   assert.ok(parsed.exportedAt);
   assert.equal(html.split('</script>').length - 1, html.split('<script').length - 1, 'a title cannot close the data script early');
   assert.match(html, /<title>42 · /);
+  assert.match(html, / · EpicBoard<\/title>/);
+  assert.match(html, /EpicBoard<\/a>/);
+  assert.match(html, /data:image\/svg\+xml,/);
+  assert.doesNotMatch(html, /apple-touch-icon/);
 });
 
 test('unknown epic is 404', () => {

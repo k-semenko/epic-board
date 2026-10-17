@@ -1381,7 +1381,7 @@ async function renderEpic(id) {
   const [epic, history] = await Promise.all([api(`/api/epics/${enc(id)}`), api(`/api/epics/${enc(id)}/history?limit=all`).catch(() => [])]);
   currentHistory = history;
   current = epic;
-  document.title = `${epic.id} · ${epic.title}`;
+  document.title = `${epic.id} · ${epic.title} · EpicBoard`;
   $('#title').innerHTML = `<span class="mono muted">${esc(epic.id)}</span> · ${esc(epic.title)}${epic.url ? ` ${external(epic.url, '')}` : ''}`;
   $('#goal').textContent = epic.goal || '';
   const stamps = Object.values(epic.facts || {}).map((f) => f.fetchedAt).filter(Boolean).sort();

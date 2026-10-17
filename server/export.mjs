@@ -35,13 +35,23 @@ const LINE_SEPARATORS = /[\u2028\u2029]/g;
 const safeJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c').replace(LINE_SEPARATORS, (c) => `\\u${c.charCodeAt(0).toString(16)}`);
 const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
+const iconUri = (name) => `data:image/svg+xml,${encodeURIComponent(readFileSync(join(PAGE, name), 'utf8'))}`;
+
+// An export is one file. Icons travel inside it; the home-screen PNG stays on the server.
+function detachLocalIcons(html) {
+  return html
+    .replace('href="/static/favicon.svg"', `href="${iconUri('favicon.svg')}"`)
+    .replace('href="/static/favicon-dark.svg"', `href="${iconUri('favicon-dark.svg')}"`)
+    .replace(/[ \t]*<link rel="apple-touch-icon" href="\/static\/apple-touch-icon.png">\n/, '');
+}
+
 export function buildExport(id) {
   const epic = readEpic(id);
   const history = readHistory(id, { limit: Infinity });
   const css = readFileSync(join(PAGE, 'style.css'), 'utf8');
   const data = { epic, history, docs: allTexts(id), settings: readSettings(), exportedAt: new Date().toISOString() };
-  return readFileSync(join(PAGE, 'epic.html'), 'utf8')
-    .replace(/<title>[^<]*<\/title>/, `<title>${escHtml(epic.id)} · ${escHtml(epic.title)}</title>`)
+  return detachLocalIcons(readFileSync(join(PAGE, 'epic.html'), 'utf8'))
+    .replace(/<title>[^<]*<\/title>/, `<title>${escHtml(epic.id)} · ${escHtml(epic.title)} · EpicBoard</title>`)
     .replace('<link rel="stylesheet" href="/static/style.css">', () => `<style>\n${css}\n</style>`)
     .replace('<script src="/vendor/marked.min.js"></script>', () => inlineScript(readFileSync(join(VENDOR, 'marked.min.js'), 'utf8')))
     .replace('<script src="/vendor/purify.min.js"></script>', () => inlineScript(readFileSync(join(VENDOR, 'purify.min.js'), 'utf8')))

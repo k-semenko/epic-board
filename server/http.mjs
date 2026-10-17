@@ -12,7 +12,7 @@ import { BoardError } from './errors.mjs';
 import { readSettings, writeSettings } from './settings.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const BY = new Set(['agent', 'button', 'cli', 'hook']);
 const VENDOR_FILES = new Set([
   'marked.min.js', 'purify.min.js', 'vditor.min.js', 'vditor.css',
@@ -21,12 +21,16 @@ const VENDOR_FILES = new Set([
 
 function send(res, status, body, type = 'application/json; charset=utf-8') {
   res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store' });
-  res.end(typeof body === 'string' ? body : JSON.stringify(body));
+  if (Buffer.isBuffer(body)) res.end(body);
+  else res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
 
-function serveFile(res, file) {
+function serveFile(res, file, type) {
   if (!existsSync(file)) throw new BoardError(404, 'not-found', 'no such page');
-  send(res, 200, readFileSync(file, 'utf8'), TYPES[extname(file)] || 'application/octet-stream');
+  const mime = type || TYPES[extname(file)] || 'application/octet-stream';
+  // A PNG read as text is corrupted; SVG stays text so the export can inline it.
+  const body = mime.startsWith('image/') && !mime.includes('svg') ? readFileSync(file) : readFileSync(file, 'utf8');
+  send(res, 200, body, mime);
 }
 
 function readBody(req) {
@@ -76,6 +80,7 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       const m = req.method;
 
       if (m === 'GET' && parts.length === 0) return serveFile(res, join(ROOT, 'server/page/index.html'));
+      if (m === 'GET' && parts.length === 1 && parts[0] === 'favicon.ico') return serveFile(res, join(ROOT, 'server/page/favicon.png'), 'image/png');
       if (m === 'GET' && parts.length === 1 && parts[0] === 'editor') return serveFile(res, join(ROOT, 'server/page/doc-editor.html'));
       if (m === 'GET' && parts[0] === 'e' && parts.length === 2) {
         store.checkId(parts[1]);

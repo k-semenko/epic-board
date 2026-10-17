@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Name the board EpicBoard in the header and the document title, and ship a light and dark favicon with matching theme-color.
 - Open an epic from anywhere on its card. The title is no longer the only hit target.
 - Keep agents on the CLI when the user pastes a board link: the skill maps page links to epic, task and step ids and leaves the page and its API to the user.
 - Move answer review and stage-document rules from the main skill into `reference/waiting.md` and `reference/docs.md`.

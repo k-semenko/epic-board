@@ -235,8 +235,22 @@ test('export downloads one html file', async () => {
 });
 
 test('pages are served', async () => {
-  assert.match(await (await call('/')).text(), /<title>/);
+  const index = await (await call('/')).text();
+  assert.match(index, /<title>EpicBoard<\/title>/);
+  assert.match(index, /EpicBoard<\/a>/);
+  assert.match(index, /name="color-scheme" content="light dark"/);
+  assert.match(index, /name="theme-color" content="#f3f5f7" media="\(prefers-color-scheme: light\)"/);
+  assert.match(index, /name="theme-color" content="#0f141a" media="\(prefers-color-scheme: dark\)"/);
+  assert.match(index, /href="\/static\/favicon\.svg"/);
+  assert.match(index, /href="\/static\/favicon-dark\.svg"/);
   assert.match(await (await call('/e/5')).text(), /epic\.js|app\.js/);
+  const icon = await call('/static/favicon.svg');
+  assert.equal(icon.status, 200);
+  assert.match(icon.headers.get('content-type'), /image\/svg\+xml/);
+  const legacy = await call('/favicon.ico');
+  assert.equal(legacy.status, 200);
+  assert.match(legacy.headers.get('content-type'), /image\/png/);
+  assert.ok((await legacy.arrayBuffer()).byteLength > 32);
 });
 
 test.after(() => server.close());

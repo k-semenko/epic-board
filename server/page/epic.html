@@ -3,12 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>epic-board</title>
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f141a" media="(prefers-color-scheme: dark)">
+<title>EpicBoard</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/static/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <nav class="topbar"><div class="topbar-in">
-  <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>epic-board</a>
+  <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>EpicBoard</a>
   <div class="top-search"><label class="search"><span data-icon="search"></span><input id="q" type="search" data-i18n-ph="epic.search" autocomplete="off"></label><div id="search-results" class="search-results" hidden></div></div>
   <button type="button" id="lang" class="lang-btn">RU</button>
 </div></nav>
