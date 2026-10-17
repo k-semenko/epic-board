@@ -212,7 +212,7 @@ const stateIcon = (state) => icon(STATE_ICON[state] || 'circle', `st-${state}`);
 
 // ---------- Overview: one card per task ----------
 
-const OV = { w: 232, h: 140, gapX: 84, gapY: 18, pad: 14 };
+const OV = { w: 280, h: 160, gapX: 84, gapY: 18, pad: 14 };
 const ovX = (col) => OV.pad + col * (OV.w + OV.gapX);
 const ovY = (row) => OV.pad + row * (OV.h + OV.gapY);
 

@@ -195,7 +195,7 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .side-controls { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px; }
 .side-controls button { width: 32px; height: 26px; padding: 0; justify-content: center; }
 .side-controls .mono { min-width: 65px; text-align: center; color: var(--muted); }
-.side-action { display: flex; align-items: center; color: var(--muted); font-size: 11.5px; margin-top: auto; padding-right: 20px; }
+.side-action { display: flex; align-items: center; color: var(--muted); font-size: 11.5px; margin-top: auto; }
 @media (max-width: 760px) {
   .overview { height: auto; }
   .overview.has-side { grid-template-columns: minmax(0, 1fr); gap: 18px; }
@@ -277,7 +277,19 @@ svg.i.inl { color: var(--muted); margin: 0 .3em; }
 .info-btn { border: 0; background: transparent; color: var(--muted); padding: 3px; }
 .info-btn:hover { color: var(--accent); }
 .ov-card { position: relative; }
-.ov-info { position: absolute; right: 6px; bottom: 6px; z-index: 1; }
+/* Same box as the status chip, so the corner control does not hang off the card. */
+.ov-card .chip,
+.ov-info { height: 20px; box-sizing: border-box; }
+.ov-info {
+  position: absolute; top: 9px; right: 8px; z-index: 1;
+  width: 20px; padding: 0; border-radius: 999px; background: var(--chip);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ov-info svg.i { width: 12px; height: 12px; }
+/* The side card's 1px border sits inside the layer, so padding-top alone puts the control above the chip. */
+.side-layer > .ov-info { top: 6px; }
+.ov-card:has(> .ov-info) .ov-top,
+.side-layer:has(> .ov-info) .ov-top { padding-right: 22px; }
 .popover { position: absolute; z-index: 20; max-height: min(70vh, 560px); overflow: auto; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: 0 12px 32px rgba(0, 0, 0, .25); font-size: 14px; }
 .popover h4 { margin: 0 28px 6px 0; font-size: 15px; }
 .popover h5 { margin: 12px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
