@@ -171,7 +171,7 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .hint { margin: 6px 0 0; font-size: 13px; }
 
 /* Overview: whole tasks as cards; the opened card shows its steps below. */
-.overview { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; height: 40px; overflow: auto; overflow-anchor: none; cursor: grab; user-select: none; }
+.overview { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; height: 248px; overflow: auto; overflow-anchor: none; cursor: grab; user-select: none; }
 .overview.dragging, .overview.dragging * { cursor: grabbing; }
 .overview.has-side { display: grid; grid-template-columns: minmax(0, 1fr) 252px; gap: 22px; align-items: start; }
 .overview-main { min-width: 0; }
@@ -190,7 +190,7 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .side-layer > .ov-card { padding-top: 5px; }
 .side-layer .ov-title { -webkit-line-clamp: 3; }
 .side-current > .ov-card { box-shadow: 0 5px 12px color-mix(in srgb, var(--fg) 8%, transparent); }
-.side-current > .ov-card.selected { box-shadow: 0 0 0 2px var(--accent); }
+.side-current > .ov-card.selected { box-shadow: inset 0 0 0 2px var(--accent); }
 .side-pick { all: unset; position: absolute; top: 0; left: 0; right: 0; height: 22px; border-radius: 8px 8px 0 0; cursor: pointer; }
 .side-pick:hover, .side-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .side-single { height: 180px; }
@@ -201,6 +201,7 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .side-controls .mono { min-width: 65px; text-align: center; color: var(--muted); }
 .side-action { display: flex; align-items: center; color: var(--muted); font-size: 11.5px; margin-top: auto; padding-right: 20px; }
 @media (max-width: 760px) {
+  .overview { height: auto; }
   .overview.has-side { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .overview-side { border-left: 0; border-top: 1px solid var(--line); padding: 16px 0 0; }
   .side-carousel { max-width: 330px; margin-inline: auto; }
@@ -211,7 +212,7 @@ button.ov-card:hover { border-color: var(--accent); }
 button.ov-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ov-card.active { background: var(--s-active); border-color: var(--accent); }
 .ov-card.done { background: var(--s-done); }
-.ov-card.selected { box-shadow: 0 0 0 2px var(--accent); }
+.ov-card.selected { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
 .ov-card.k-merge { border-style: dashed; background: var(--surface); }
 .ov-card.k-goal { cursor: default; background: var(--s-active); border-color: var(--accent); }
 .ov-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; color: var(--muted); font-size: 12px; }
@@ -241,6 +242,15 @@ button.ov-card:focus-visible { outline: 2px solid var(--accent); outline-offset:
 svg.i.inl { color: var(--muted); margin: 0 .3em; }
 /* Grid children default to min-width:auto; a long step chain must scroll inside, not widen the page. */
 .map > *, .detail > *, .detail-links > * { min-width: 0; }
+/* The outer ring was clipped by the SVG card box and showed up as glowing corners. */
+.ov-svg:has(.ov-card.selected) .ov-card:not(.selected),
+.tl-svg:has(.tl-node.selected) .tl-node:not(.selected),
+.side-deck:has(.ov-card.selected) .ov-card:not(.selected) { opacity: .5; }
+.ov-svg:has(.ov-card.selected) .ov-card:not(.selected):hover,
+.tl-svg:has(.tl-node.selected) .tl-node:not(.selected):hover,
+.side-deck:has(.ov-card.selected) .ov-card:not(.selected):hover { opacity: .82; }
+.ov-card, .tl-node { transition: opacity .16s ease, border-color .16s ease; }
+@media (prefers-reduced-motion: reduce) { .ov-card, .tl-node { transition: none; } }
 .ov-card > * { flex: none; }
 .ov-card > .ov-flags { margin-top: auto; }
 
@@ -450,7 +460,8 @@ button.doc-open .chip svg.i { display: none; }
   .map-frame.map-full { height: auto; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
   #map { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
   #map > .here { flex: none; margin: 0; }
-  #map > .overview { flex: 0 0 40px; height: 40px; overflow: auto; }
+  #map > .overview { flex: 0 0 248px; height: 248px; overflow: auto; }
+  #map > .overview.has-side { flex-basis: 328px; height: 328px; }
   #map > .detail { flex: 1; min-height: 0; margin: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }
   #map > .detail-merge { grid-template-rows: auto auto auto minmax(0, 1fr); }
   .detail .tl-scroll { max-height: none; }
@@ -524,7 +535,7 @@ button.primary:hover { filter: brightness(1.08); }
 .step-changes { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; }
 .step-changes li { display: grid; grid-template-columns: 4.5em 1fr; gap: 8px; }
 .tl-node[data-step] { cursor: pointer; }
-.tl-node.selected { box-shadow: 0 0 0 2px var(--accent); }
+.tl-node.selected { border: 2px solid var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .tl-node:not(.active):hover { border-color: var(--accent); }
 @media (max-width: 900px) { .step-split { grid-template-columns: 1fr; } }
 .modal .wait-details { padding-left: 0; margin-bottom: 8px; }

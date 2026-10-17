@@ -19,8 +19,10 @@ test('style.css has balanced braces and no orphan selectors', () => {
     else if (ch === ';') pending = '';
   }
   assert.equal(depth, 0);
-  assert.match(css, /\.overview \{[^}]*height: 40px/);
-  assert.match(css, /#map > \.overview \{[^}]*flex: 0 0 40px/);
+  assert.match(css, /\.overview \{[^}]*height: 248px/);
+  assert.match(css, /#map > \.overview \{[^}]*flex: 0 0 248px/);
+  assert.match(css, /#map > \.overview\.has-side \{[^}]*height: 328px/);
+  assert.match(css, /\.ov-svg:has\(\.ov-card\.selected\) \.ov-card:not\(\.selected\)[^{]*\{[^}]*opacity: \.5/);
   assert.doesNotMatch(css, /#map > \.overview\.has-side \{[^}]*max-height: 55%/);
   assert.equal(pending.trim(), '', `text after the last rule: ${pending.trim()}`);
   for (const chunk of css.split('}')) {
