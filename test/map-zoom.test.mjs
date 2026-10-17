@@ -115,6 +115,10 @@ test('the chain shows its scale and a reset to 100%', () => {
   assert.match(harness.html, /class="map-zoom"/);
   assert.match(harness.html, /map-zoom-scale">100%</);
   assert.match(harness.html, /data-map-zoom-reset disabled>Reset</);
+  assert.match(harness.html, /data-map-locate/);
+  assert.match(harness.html, /data-map-height="m"[^>]*aria-pressed="true"/);
+  assert.match(harness.html, /data-map-height="s"[^>]*aria-pressed="false"/);
+  assert.match(harness.html, /data-map-height="l"/);
 });
 
 test('opening another task keeps the task chain scrolled and the page still', () => {

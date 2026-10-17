@@ -351,7 +351,8 @@ function renderOverview(ov, open) {
     return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
   const chainTitle = ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : '';
-  return `<div class="overview${ov.side.length ? ' has-side' : ''}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapZoomControl()}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" data-h="${height}" style="max-width:${width}px">
+  const canLocate = [...ov.nodes, ...ov.side].some((n) => n.kind === 'task' && (n.current.length || n.id === open));
+  return `<div class="overview${ov.side.length ? ' has-side' : ''}${mapHeightClass()}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapHeightControl(Boolean(ov.side.length))}${mapZoomControl(canLocate)}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" data-h="${height}" style="max-width:${width}px">
     <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
     ${edges}${cards}</svg></div></section>${renderSideStack(ov.side, open)}</div>`;
 }
@@ -791,7 +792,11 @@ function setFull(on) {
   if (on && frame.requestFullscreen && !document.fullscreenElement) frame.requestFullscreen().catch(() => {});
   if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
   // Full screen changes the width the chain fits into, so the same scale has to be measured again.
-  globalThis.requestAnimationFrame?.(() => applyOverviewScale());
+  fitLargeMap();
+  globalThis.requestAnimationFrame?.(() => {
+    applyOverviewScale();
+    fitLargeMap();
+  });
 }
 
 document.addEventListener('keydown', (e) => {
@@ -817,10 +822,85 @@ function formatMapScale(scale) {
   return `${Math.round(scale * 100)}%`;
 }
 
-function mapZoomControl() {
+let mapHeight = null;
+let saveSettings = async () => {};
+
+function mapHeightClass() {
+  return mapHeight ? ` map-h-${mapHeight}` : '';
+}
+
+// Until a height is saved, the pressed mode matches the height the layout already uses.
+function effectiveMapHeight(hasSide) {
+  return mapHeight || (hasSide ? 'm' : 's');
+}
+
+function mapHeightControl(hasSide) {
+  const current = effectiveMapHeight(hasSide);
+  const button = (id) => `<button type="button" data-map-height="${id}" aria-pressed="${current === id}" title="${esc(t(`map.height.${id}Tip`))}">${esc(t(`map.height.${id}`))}</button>`;
+  return `<div class="map-size" role="group" aria-label="${esc(t('map.height'))}">${['s', 'm', 'l'].map(button).join('')}</div>`;
+}
+
+function mapZoomControl(canLocate) {
   const scale = tlState.mapScale || 1;
   const idle = Math.round(scale * 100) === 100;
-  return `<div class="map-zoom" role="group" aria-label="${esc(t('map.zoom'))}"><span class="map-zoom-scale">${formatMapScale(scale)}</span><button type="button" data-map-zoom-reset${idle ? ' disabled' : ''}>${esc(t('map.reset'))}</button></div>`;
+  return `<div class="map-zoom" role="group" aria-label="${esc(t('map.zoom'))}"><span class="map-zoom-scale">${formatMapScale(scale)}</span><button type="button" data-map-zoom-reset${idle ? ' disabled' : ''}>${esc(t('map.reset'))}</button><button type="button" class="icon-btn" data-map-locate aria-label="${esc(t('map.locate'))}" title="${esc(t('map.locate'))}"${canLocate ? '' : ' disabled'}>${icon('target')}</button></div>`;
+}
+
+function applyMapHeightClass() {
+  const ov = $('.overview');
+  if (!ov) return;
+  ov.classList.remove('map-h-s', 'map-h-m', 'map-h-l');
+  if (mapHeight) ov.classList.add(`map-h-${mapHeight}`);
+  const current = effectiveMapHeight(ov.classList.contains('has-side'));
+  for (const button of document.querySelectorAll('[data-map-height]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.mapHeight === current));
+  }
+  fitLargeMap();
+}
+
+// 128px is the old frame offset and misses the epic title, so the box would run past the screen.
+function fitLargeMap() {
+  const ov = $('.overview');
+  if (!ov?.getBoundingClientRect || !ov.style?.setProperty) return;
+  const full = $('#map-frame')?.classList.contains('map-full');
+  if (mapHeight !== 'l' || full) {
+    ov.style.removeProperty('--map-l-cut');
+    return;
+  }
+  const top = ov.getBoundingClientRect().top + (globalThis.scrollY || 0);
+  ov.style.setProperty('--map-l-cut', `${Math.max(0, Math.round(top + 12))}px`);
+}
+
+function scrollToActiveCard() {
+  const card = $('.ov-svg .ov-card.active') || $('.ov-svg .ov-card.selected');
+  const scroller = $('.ov-scroll');
+  if (!card || !scroller?.getBoundingClientRect) return;
+  const s = scroller.getBoundingClientRect();
+  const c = card.getBoundingClientRect();
+  const maxX = Math.max(0, (scroller.scrollWidth || 0) - (scroller.clientWidth || 0));
+  const maxY = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+  const left = (scroller.scrollLeft || 0) + (c.left + c.width / 2) - (s.left + s.width / 2);
+  const top = (scroller.scrollTop || 0) + (c.top + c.height / 2) - (s.top + s.height / 2);
+  const next = { left: Math.min(maxX, Math.max(0, left)), top: Math.min(maxY, Math.max(0, top)) };
+  const reduce = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  if (!reduce && scroller.scrollTo) scroller.scrollTo({ ...next, behavior: 'smooth' });
+  else {
+    scroller.scrollLeft = next.left;
+    scroller.scrollTop = next.top;
+  }
+}
+
+async function saveMapHeight(mode) {
+  const previous = mapHeight;
+  mapHeight = mode;
+  applyMapHeightClass();
+  try {
+    await saveSettings({ mapHeight: mode });
+  } catch (error) {
+    mapHeight = previous;
+    applyMapHeightClass();
+    alertBox(error.message);
+  }
 }
 
 function applyOverviewScale() {
@@ -927,6 +1007,11 @@ function bindMapTools() {
   document.addEventListener('click', (e) => {
     if (e.target.closest('.map-tools [data-fullscreen]')) setFull(!$('#map-frame').classList.contains('map-full'));
     if (e.target.closest('[data-map-zoom-reset]')) resetOverviewScale();
+    if (e.target.closest('[data-map-locate]')) scrollToActiveCard();
+    const height = e.target.closest('[data-map-height]');
+    if (height && !EXPORT && ['s', 'm', 'l'].includes(height.dataset.mapHeight) && height.dataset.mapHeight !== mapHeight) {
+      void saveMapHeight(height.dataset.mapHeight);
+    }
   });
   document.addEventListener('wheel', (e) => {
     if (!(e.ctrlKey || e.metaKey) || !e.target.closest?.('.overview-main')) return;
@@ -939,7 +1024,10 @@ function bindMapTools() {
     if (e.button !== 0 || e.target.closest?.('[data-info]')) return;
     if (e.target.closest?.('#map [data-open]')) e.preventDefault();
   });
-  globalThis.window?.addEventListener?.('resize', () => applyOverviewScale());
+  globalThis.window?.addEventListener?.('resize', () => {
+    applyOverviewScale();
+    fitLargeMap();
+  });
 }
 
 // Center the open step. A step near either end stays pinned there instead of scrolling past the strip.
@@ -1064,8 +1152,12 @@ function renderMapArea(epic) {
   $('#map').innerHTML = renderOverview(ov, open)
     + (open ? renderDetail(map, open) : '');
   applyOverviewScale();
+  fitLargeMap();
   holdMapScroll(held);
-  globalThis.requestAnimationFrame?.(() => holdMapScroll(held));
+  globalThis.requestAnimationFrame?.(() => {
+    fitLargeMap();
+    holdMapScroll(held);
+  });
   bindOverviewPan();
   if (!open) return;
   bindPan();
@@ -1230,6 +1322,11 @@ function applyPageSettings(settings) {
     pageSizes[block] = size;
     sectionPages[block] = 1;
     if (current) renderSection(block);
+  }
+  const next = ['s', 'm', 'l'].includes(settings?.mapHeight) ? settings.mapHeight : null;
+  if (next !== mapHeight) {
+    mapHeight = next;
+    applyMapHeightClass();
   }
 }
 
@@ -1647,6 +1744,7 @@ async function bootEpic() {
   bindDocs();
   if (!EXPORT) bindDecisionForms(id);
   const sectionSettings = bindSectionSettings({ api, onError: alertBox, onSettings: applyPageSettings, readOnly: Boolean(EXPORT) });
+  if (sectionSettings.save) saveSettings = sectionSettings.save;
   bindPagination(sectionSettings.save);
   await Promise.all([renderEpic(id), sectionSettings.reload().catch((err) => alertBox(err.message))]);
   $('#refresh-all').addEventListener('click', () => refreshModal(current));

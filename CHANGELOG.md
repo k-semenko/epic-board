@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Scroll the chain to the active card from a button beside the scale, and save the map height as S (one card), M (400px), or L (the screen under the header).
 - Keep the off-chain column fixed. Only the task chain on the left scrolls.
 - Draw overview task cards larger, and place the info button in the top-right corner at the same size as the status chip.
 - Remove the map line that named the active step, including the empty "No active steps" state.

@@ -14,6 +14,7 @@ test('missing settings use default section order and page sizes without writing 
   assert.deepEqual(readSettings(), {
     epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
+    mapHeight: null,
   });
   assert.equal(existsSync(file), false);
 });
@@ -21,8 +22,8 @@ test('missing settings use default section order and page sizes without writing 
 test('saved order survives subsequent reads and the latest save replaces it', () => {
   const first = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
   const latest = { epicSectionOrder: ['history', 'decisions', 'sessions', 'branches', 'map', 'waiting'] };
-  const firstSaved = { ...first, epicPageSizes: { waiting: 5, decisions: 5, history: 5 } };
-  const latestSaved = { ...latest, epicPageSizes: { waiting: 5, decisions: 5, history: 5 } };
+  const firstSaved = { ...first, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null };
+  const latestSaved = { ...latest, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null };
   assert.deepEqual(writeSettings(first), firstSaved);
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), firstSaved);
   assert.deepEqual(readSettings(), firstSaved);
@@ -34,6 +35,7 @@ test('saving only page sizes creates default section order and persists globally
   const settings = {
     epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 10, decisions: 15, history: 5 },
+    mapHeight: null,
   };
   assert.deepEqual(writeSettings({ epicPageSizes: { waiting: 10, decisions: 15 } }), settings);
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), settings);
@@ -45,8 +47,9 @@ test('partial settings updates preserve unmentioned fields and page sizes', () =
     epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 10, decisions: 15, history: 10 },
   };
-  assert.deepEqual(writeSettings(first), first);
-  const resized = { ...first, epicPageSizes: { waiting: 15, decisions: 15, history: 10 } };
+  const stored = { ...first, mapHeight: null };
+  assert.deepEqual(writeSettings(first), stored);
+  const resized = { ...stored, epicPageSizes: { waiting: 15, decisions: 15, history: 10 } };
   assert.deepEqual(writeSettings({ epicPageSizes: { waiting: 15 } }), resized);
   assert.deepEqual(readSettings(), resized);
   const reordered = { ...resized, epicSectionOrder: ['history', 'decisions', 'sessions', 'branches', 'map', 'waiting'] };
@@ -63,7 +66,7 @@ test('saving settings creates a missing data directory', (t) => {
   process.env.EPIC_BOARD_HOME = nestedHome;
   t.after(() => { process.env.EPIC_BOARD_HOME = home; });
   const settings = { epicSectionOrder: ['branches', 'waiting', 'map', 'sessions', 'decisions', 'history'] };
-  const saved = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 } };
+  const saved = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null };
   assert.deepEqual(writeSettings(settings), saved);
   assert.deepEqual(JSON.parse(readFileSync(join(nestedHome, 'settings.json'), 'utf8')), saved);
 });
@@ -73,11 +76,13 @@ test('older partial orders retain known positions and append missing sections', 
   assert.deepEqual(readSettings(), {
     epicSectionOrder: ['history', 'map', 'waiting', 'branches', 'sessions', 'decisions'],
     epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
+    mapHeight: null,
   });
   writeFileSync(file, '{}');
   assert.deepEqual(readSettings(), {
     epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
+    mapHeight: null,
   });
 });
 
@@ -119,6 +124,9 @@ test('invalid saves preserve existing settings', () => {
     { epicPageSizes: { waiting: 10, removed: 5 } },
     { epicSectionOrder: [], epicPageSizes: { waiting: 10 } },
     { ...valid, host: 'other.test' },
+    { mapHeight: null },
+    { mapHeight: 'xl' },
+    { mapHeight: 400 },
   ];
   for (const block of ['waiting', 'decisions', 'history']) {
     for (const size of [undefined, null, 0, 1, 6, 20, -5, 10.5, '5', true, [], {}, NaN, Infinity]) {
@@ -146,6 +154,16 @@ test('malformed stored JSON returns an error and cannot be overwritten by saving
   assert.throws(() => writeSettings({ epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] }), { status: 500, code: 'broken-settings' });
   assert.throws(() => writeSettings({ epicPageSizes: { waiting: 10 } }), { status: 500, code: 'broken-settings' });
   assert.equal(readFileSync(file, 'utf8'), '{broken');
+});
+
+test('map height is saved globally and a bad value falls back', () => {
+  writeFileSync(file, JSON.stringify({ mapHeight: 'tall' }));
+  assert.equal(readSettings().mapHeight, null);
+  const saved = writeSettings({ mapHeight: 'l' });
+  assert.equal(saved.mapHeight, 'l');
+  assert.equal(readSettings().mapHeight, 'l');
+  assert.equal(writeSettings({ mapHeight: 's' }).mapHeight, 's');
+  assert.equal(readSettings().epicPageSizes.waiting, 5);
 });
 
 test('stored settings must be an object', () => {

@@ -29,6 +29,9 @@ test('style.css has balanced braces and no orphan selectors', () => {
   assert.match(css, /#map > \.overview\.has-side \{[^}]*min-height: 400px/);
   assert.match(css, /#map > \.overview\.has-side \{[^}]*overflow: hidden/);
   assert.match(css, /#map > \.overview \.ov-scroll \{[^}]*min-height: 0/);
+  assert.match(css, /#map > \.overview\.has-side\.map-h-s \{[^}]*height: 248px/);
+  assert.match(css, /#map > \.overview\.has-side\.map-h-m \{[^}]*height: 400px/);
+  assert.match(css, /#map > \.overview\.has-side\.map-h-l \{[^}]*height: calc\(100dvh - var\(--map-l-cut, 128px\)\)/);
   assert.match(css, /\.tl-svg:has\(\.tl-node\.selected\) \.tl-node:not\(\.selected\)[^{]*\{[^}]*opacity: \.5/);
   assert.doesNotMatch(css, /\.ov-svg:has\(\.ov-card\.selected\)/);
   assert.match(css, /\.ov-info \{[^}]*top: 9px/);

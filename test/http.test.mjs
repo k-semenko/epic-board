@@ -58,17 +58,18 @@ test('global settings can be saved without changing epic data or history', async
   assert.deepEqual(await defaults.json(), {
     epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
+    mapHeight: null,
   });
   const before = await (await call('/api/epics/5')).json();
   const history = await (await call('/api/epics/5/history')).json();
   const settings = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
-  const expected = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 } };
+  const expected = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null };
   const saved = await call('/api/settings', { method: 'PUT', body: settings });
   assert.equal(saved.status, 200);
   assert.deepEqual(await saved.json(), expected);
   assert.deepEqual(await (await call('/api/settings')).json(), expected);
   const resized = await call('/api/settings', { method: 'PUT', body: { epicPageSizes: { waiting: 10, history: 15 } } });
-  const resizedSettings = { ...settings, epicPageSizes: { waiting: 10, decisions: 5, history: 15 } };
+  const resizedSettings = { ...settings, epicPageSizes: { waiting: 10, decisions: 5, history: 15 }, mapHeight: null };
   assert.equal(resized.status, 200);
   assert.deepEqual(await resized.json(), resizedSettings);
   assert.deepEqual(await (await call('/api/settings')).json(), resizedSettings);

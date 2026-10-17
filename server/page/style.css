@@ -177,6 +177,10 @@ button { display: inline-flex; align-items: center; gap: 0; }
 .map-zoom-scale { min-width: 3.2em; text-align: right; }
 .map-zoom button { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
 .map-zoom button[disabled] { cursor: default; }
+.map-zoom [data-map-locate] { padding: 2px 7px; }
+.map-size { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); }
+.map-size button { padding: 2px 8px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; min-width: 28px; justify-content: center; }
+.map-size button[aria-pressed="true"] { background: var(--chip); color: var(--fg); }
 .ov-scroll { overflow: auto; padding: 2px; overflow-anchor: none; cursor: grab; }
 .ov-section-title { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 600; margin: 0 0 12px; }
 .ov-section-title .mono { margin-left: auto; }
@@ -473,6 +477,18 @@ button.doc-open .chip svg.i { display: none; }
   #map > .overview > .overview-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
   #map > .overview .ov-head { flex: none; }
   #map > .overview .ov-scroll { flex: 1 1 auto; min-height: 0; }
+  /* S is one card, M is the fixed 400px window, L fills the screen left under the header. */
+  #map > .overview.map-h-s,
+  #map > .overview.has-side.map-h-s { flex: 0 0 248px; height: 248px; min-height: 248px; }
+  #map > .overview.map-h-m,
+  #map > .overview.has-side.map-h-m { flex: 0 0 400px; height: 400px; min-height: 400px; }
+  #map > .overview.map-h-l,
+  #map > .overview.has-side.map-h-l { flex: 0 0 auto; height: calc(100dvh - var(--map-l-cut, 128px)); min-height: 320px; }
+  .map-frame:not(.map-full):has(.overview.map-h-l) { height: auto; min-height: 0; overflow: visible; }
+  .map-frame:not(.map-full):has(.overview.map-h-l) #map { height: auto; overflow: visible; }
+  .map-frame:not(.map-full):has(.overview.map-h-l) #map > .detail { display: block; flex: none; min-height: auto; overflow: visible; }
+  .map-frame:not(.map-full):has(.overview.map-h-l) .docs-block { display: block; }
+  .map-frame:not(.map-full):has(.overview.map-h-l) .docs-scroll { overflow: visible; min-height: auto; }
   #map > .detail { flex: 1; min-height: 0; margin: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }
   #map > .detail-merge { grid-template-rows: auto auto auto minmax(0, 1fr); }
   .detail .tl-scroll { max-height: none; }
