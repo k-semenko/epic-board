@@ -801,7 +801,7 @@ document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement && $('#map-frame')?.classList.contains('map-full')) setFull(false);
 });
 
-// 100% is the chain fitted to the block. Ctrl/Cmd+wheel multiplies that, the same gesture as a browser zoom.
+// 100% is a card at its drawn size. The block is only a window, so a long chain scrolls.
 const MAP_SCALE_MIN = 0.5;
 const MAP_SCALE_MAX = 2.5;
 
@@ -823,40 +823,6 @@ function mapZoomControl() {
   return `<div class="map-zoom" role="group" aria-label="${esc(t('map.zoom'))}"><span class="map-zoom-scale">${formatMapScale(scale)}</span><button type="button" data-map-zoom-reset${idle ? ' disabled' : ''}>${esc(t('map.reset'))}</button></div>`;
 }
 
-function measureOverviewFit(svg) {
-  const width = svg.style.width;
-  const maxWidth = svg.style.maxWidth;
-  const minWidth = svg.style.minWidth;
-  svg.style.width = '';
-  svg.style.maxWidth = '';
-  svg.style.minWidth = '';
-  const fit = svg.getBoundingClientRect?.().width || 0;
-  svg.style.width = width;
-  svg.style.maxWidth = maxWidth;
-  svg.style.minWidth = minWidth;
-  return fit;
-}
-
-// 100% shows the whole chain. A chain taller than the block shrinks; zoom still multiplies that fit.
-function fitChainWidth(fitWidth, naturalW, naturalH, availH) {
-  if (!fitWidth || !naturalW || !naturalH || !availH) return fitWidth || 0;
-  return Math.min(fitWidth, availH * naturalW / naturalH);
-}
-
-function chainAvailHeight(svg) {
-  const overview = svg.closest?.('.overview');
-  const styleOf = globalThis.getComputedStyle;
-  if (!overview || typeof styleOf !== 'function') return 0;
-  const box = styleOf(overview);
-  if (!box || box.height === 'auto') return 0;
-  const head = overview.querySelector?.('.ov-head');
-  const headBox = head ? styleOf(head) : null;
-  const headH = head ? head.offsetHeight + (Number.parseFloat(headBox.marginTop) || 0) + (Number.parseFloat(headBox.marginBottom) || 0) : 0;
-  const scrollBox = svg.parentElement ? styleOf(svg.parentElement) : null;
-  const scrollPad = scrollBox ? (Number.parseFloat(scrollBox.paddingTop) || 0) + (Number.parseFloat(scrollBox.paddingBottom) || 0) : 0;
-  return Math.max(0, overview.clientHeight - (Number.parseFloat(box.paddingTop) || 0) - (Number.parseFloat(box.paddingBottom) || 0) - headH - scrollPad);
-}
-
 function applyOverviewScale() {
   const scale = tlState.mapScale || 1;
   const label = $('.map-zoom-scale');
@@ -865,8 +831,8 @@ function applyOverviewScale() {
   if (reset) reset.disabled = Math.round(scale * 100) === 100;
   const svg = $('.ov-svg');
   if (!svg) return;
-  const fit = measureOverviewFit(svg);
-  if (!fit) {
+  const natural = Number(svg.dataset?.w) || 0;
+  if (!natural) {
     if (scale === 1) {
       svg.style.width = '';
       svg.style.maxWidth = '';
@@ -874,16 +840,9 @@ function applyOverviewScale() {
     }
     return;
   }
-  const fitted = fitChainWidth(fit, Number(svg.dataset?.w) || 0, Number(svg.dataset?.h) || 0, chainAvailHeight(svg));
-  if (scale === 1 && fitted >= fit - 1) {
-    svg.style.width = '';
-    svg.style.maxWidth = '';
-    svg.style.minWidth = '';
-    return;
-  }
   svg.style.minWidth = '0';
   svg.style.maxWidth = 'none';
-  svg.style.width = `${fitted * scale}px`;
+  svg.style.width = `${natural * scale}px`;
 }
 
 // The point under the cursor stays put while the chain grows or shrinks around it.

@@ -65,7 +65,7 @@ function mapApp({ timeline = false } = {}) {
   const bootstrap = bundle.lastIndexOf('\nif (EXPORT || location.pathname');
   assert.ok(bootstrap > 0, 'app bootstrap is available');
   const script = `${bundle.slice(0, bootstrap)}
-    globalThis.app = { nextMapScale, formatMapScale, fitChainWidth, placeInView, tlState, renderMapArea, zoomOverview, resetOverviewScale, bindMapTools };
+    globalThis.app = { nextMapScale, formatMapScale, placeInView, tlState, renderMapArea, zoomOverview, resetOverviewScale, bindMapTools };
     current = epic;
   })();`;
   const context = vm.createContext({
@@ -232,14 +232,16 @@ test('a click on a task card does not let the browser scroll the focused card in
   assert.equal(info.defaultPrevented, false);
 });
 
-test('100% fit keeps a chain inside the block when it is taller than the width fit', () => {
-  const { app } = mapApp();
-  const tall = app.fitChainWidth(960, 576, 484, 330);
-  assert.equal(tall, 330 * 576 / 484);
-  assert.ok(tall < 960);
-  assert.equal(app.fitChainWidth(400, 1208, 326, 400), 400);
-  assert.equal(app.fitChainWidth(400, 0, 326, 400), 400);
-  assert.equal(app.fitChainWidth(0, 800, 200, 100), 0);
+test('100% draws the chain at card size and zoom multiplies that size', () => {
+  const harness = mapApp();
+  harness.app.renderMapArea(sampleEpic());
+  assert.equal(harness.svg.style.width, '800px');
+  harness.app.tlState.mapScale = 2.5;
+  harness.app.zoomOverview(0, 0, 0);
+  assert.equal(harness.svg.style.width, '2000px');
+  harness.app.resetOverviewScale();
+  assert.equal(harness.app.tlState.mapScale, 1);
+  assert.equal(harness.svg.style.width, '800px');
 });
 
 test('the open step scrolls to the middle, and the last step stays at the end', () => {
