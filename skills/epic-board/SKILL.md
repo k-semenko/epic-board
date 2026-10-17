@@ -7,6 +7,22 @@ description: Local board for multi-repository work (an "epic"): tasks from any t
 
 CLI: `node "${CLAUDE_PLUGIN_ROOT}/cli/epic.mjs" <command>` (below: `epic.mjs`). Full reference: `reference/cli.md`, data model: `reference/schema.md`. The board is local storage: it never calls a tracker; you write what you know into it.
 
+## Only the CLI
+
+You read and write the board only through `epic.mjs`. The page and its HTTP API are for the user: do not fetch, open or call them with any tool, even when the user pastes a link, says "open", or the CLI fails. On a CLI error, read the message and `epic.mjs help`, fix the command, or tell the user.
+
+A link is an address; turn it into CLI arguments (ids are URL-encoded):
+
+| Link | Means | Start with |
+|---|---|---|
+| `<host>/` | all epics | `list` |
+| `<host>/e/<epic>` | the epic | `show <epic>` |
+| `<host>/e/<epic>#t-<task>` | task `<task>` | `show <epic> --json` |
+| `<host>/e/<epic>#t-<task>/<step>` | step `<task>/<step>` | `show <epic> --json` |
+| `<host>/api/epics/<epic>/…` | the epic | `show <epic>` |
+
+An id from the link that is not in `show --json` is a question for the user. Pending items are listed in `show <epic>` (there is no `wait list`); `wait <epic> show <id> --json` gives one in full. When the user wants to look at the board, give them `epic.mjs url <epic>`.
+
 ## First run on a machine
 
 `epic.mjs service status`. If the service is not installed, offer `epic.mjs service install` (it copies the app next to the data and registers a user service: launchd on macOS, systemd --user on Linux). Do not install without the user's yes. `epic.mjs doctor` shows tools and credentials as the service sees them.
@@ -75,7 +91,3 @@ Specs, plans, execution logs, reviews and notes show up on the board next to the
 
 - `report <epic> --task <id>` — a Markdown summary of a task to paste into its tracker. Posting it anywhere is the user's call.
 - `export <epic> --out <file>.html` — one self-contained read-only HTML file to hand to a person.
-
-## The page
-
-`epic.mjs url <epic>`. Open it in the built-in browser panel when the user wants to look.
