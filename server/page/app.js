@@ -1027,7 +1027,6 @@ function bindPagination(saveSettings) {
     const list = $(`#${block}`);
     list.tabIndex = -1;
     list.focus({ preventScroll: true });
-    list.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
   $('#epic').addEventListener('change', async (event) => {
     const select = event.target.closest('[data-page-size]');
