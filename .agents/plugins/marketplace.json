@@ -1,0 +1,20 @@
+{
+  "name": "epic-board",
+  "interface": {
+    "displayName": "epic-board"
+  },
+  "plugins": [
+    {
+      "name": "epic-board",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

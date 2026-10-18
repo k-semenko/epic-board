@@ -24,6 +24,9 @@ if (market.metadata?.version !== undefined) found.push(['.claude-plugin/marketpl
 const cursorPlugin = readJson('.cursor-plugin/plugin.json');
 found.push(['.cursor-plugin/plugin.json version', cursorPlugin.version]);
 
+const codexPlugin = readJson('.codex-plugin/plugin.json');
+found.push(['.codex-plugin/plugin.json version', codexPlugin.version]);
+
 const cursorMarket = readJson('.cursor-plugin/marketplace.json');
 const cursorEntry = (cursorMarket.plugins ?? []).find((p) => p.name === cursorPlugin.name) ?? (cursorMarket.plugins ?? [])[0];
 if (!cursorEntry) fail('.cursor-plugin/marketplace.json has no plugins[] entry');

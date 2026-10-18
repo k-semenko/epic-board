@@ -60,8 +60,11 @@ server/http ──┘          │                <id>.history.ndjson
 
 ## Plugin
 
-- `.claude-plugin/` and `.cursor-plugin/` hold the manifests for Claude Code and Cursor. `skills/epic-board/` holds the instructions for the agent, `skills/review-answers/` the user-run answer review, and `hooks/` holds the hooks (`hooks.json` for Claude, `hooks.cursor.json` for Cursor).
-- `SessionStart` / `sessionStart` prints a short brief after compaction or resume (Claude), or a bind hint / bound-epic line (both), and syncs the service. Cursor emits `additional_context` and `EPIC_BOARD_SESSION_ID` in `env` before any service install (fire-and-forget); Claude uses nested `hookSpecificOutput` and can include the sync note in the same payload.
-- `PreCompact` / `preCompact` asks the summarizer to point at the board (Claude plain text) or shows the user a short board reminder (Cursor `user_message`).
+- `.claude-plugin/`, `.cursor-plugin/` and `.codex-plugin/` hold the manifests for Claude Code, Cursor and Codex. Codex discovers the local marketplace through `.agents/plugins/marketplace.json`. `skills/epic-board/` holds the agent instructions and `skills/review-answers/` the user-run answer review.
+- `hooks/hooks.json`, `hooks/hooks.cursor.json` and `hooks/hooks.codex.json` register each harness's hooks. Codex uses `${PLUGIN_ROOT}` in hook commands; skills find the CLI from the absolute path of the loaded skill file because that variable is not guaranteed in the agent shell.
+- `SessionStart` / `sessionStart` prints a short brief after compaction or resume (Claude and Codex), or a bind hint / bound-epic line, and syncs an existing service. Cursor emits `additional_context` and `EPIC_BOARD_SESSION_ID` in `env` before service sync (fire-and-forget); Claude and Codex use nested `hookSpecificOutput`.
+- Codex binds with `--agent codex` and uses `$CODEX_THREAD_ID` in the shell or `session_id` in hook input. Its SessionStart hook handles `startup`, `resume` and `compact`.
+- `PreCompact` / `preCompact` asks the summarizer to point at the board (Claude plain text) or shows the user a short board reminder (Cursor `user_message`). Codex registers no PreCompact hook because it ignores that event's stdout; the SessionStart hook restores state after compaction.
+- Codex invokes skills as `$epic-board:epic-board` and `$epic-board:review-answers`. The latter sets `policy.allow_implicit_invocation: false` in `agents/openai.yaml`.
 - Answer review starts only after a user request in chat. Hooks and briefs display pending human/agent work and never launch review automatically.
 - Hooks never fail a session: errors go to `<data>/hooks.log`.

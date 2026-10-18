@@ -95,6 +95,9 @@ ssh -t runner-host "sudo RUNNER_TOKEN=$RUNNER_TOKEN bash /tmp/setup-runner.sh --
    - `.claude-plugin/marketplace.json` → `plugins[0].version` and `metadata.version`, if present
    - `.cursor-plugin/plugin.json` → `version`
    - `.cursor-plugin/marketplace.json` → `plugins[0].version` and `metadata.version`, if present
+   - `.codex-plugin/plugin.json` → `version`
+
+   The Codex marketplace in `.agents/plugins/marketplace.json` has no version field.
 2. In `CHANGELOG.md`, move the `[Unreleased]` entries under `## [X.Y.Z] - YYYY-MM-DD`.
 3. Check locally:
 
@@ -146,6 +149,17 @@ claude plugin update epic-board@epic-board
 ```
 
 Automatic updates are toggled per marketplace in `/plugin` → **Marketplaces**.
+
+For Codex, test the local clone before publishing (CLI commands checked with `codex-cli 0.163.0`):
+
+```sh
+codex plugin marketplace add /absolute/path/to/epic-board
+codex plugin add epic-board@epic-board
+```
+
+Restart Codex or reopen the chat, review and trust hooks through `/hooks` where supported, then invoke `$epic-board:epic-board`. Check a session binding with `--agent codex` and `$CODEX_THREAD_ID`, and verify that resume or compaction restores the bound epic brief. Invoke `$epic-board:review-answers` explicitly when checking submitted answers; hooks never trigger it. The first service installation requires separate user approval; enabled session-start hooks update an existing service.
+
+Users can add the published repository marketplace with `codex plugin marketplace add k-semenko/epic-board`. The Codex manifest points to `./skills/` and `./hooks/hooks.codex.json`; the marketplace names the plugin `epic-board`, uses local source path `./` and makes it available for installation. See the [Codex plugin format](https://developers.openai.com/plugins/build/plugins) and [hook lifecycle](https://learn.chatgpt.com/docs/hooks).
 
 ## Verifying a downloaded release
 

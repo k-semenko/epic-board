@@ -15,7 +15,8 @@ store.patchEpic('4', { sessions: [{ id: 'sid', lastAt: '2026-10-01T00:00:00Z' }]
 
 // A throwaway HOME keeps the hook from finding (and updating) a real installed service.
 const home = mkdtempSync(join(tmpdir(), 'eb-hook-home-'));
-const hook = (file, input, env = {}) => spawnSync(process.execPath, [`hooks/${file}`], { input: JSON.stringify(input), encoding: 'utf8', env: { ...process.env, HOME: home, XDG_CONFIG_HOME: '', XDG_DATA_HOME: '', EPIC_BOARD_HOME: data, CURSOR_PLUGIN_ROOT: '', ...env } });
+const hookEnv = { ...process.env, HOME: home, XDG_CONFIG_HOME: '', XDG_DATA_HOME: '', EPIC_BOARD_HOME: data, CURSOR_PLUGIN_ROOT: '', GROK_PLUGIN_ROOT: '', PLUGIN_ROOT: '', CODEX_THREAD_ID: '' };
+const hook = (file, input, env = {}) => spawnSync(process.execPath, [`hooks/${file}`], { input: JSON.stringify(input), encoding: 'utf8', env: { ...hookEnv, ...env } });
 const claudeContext = (r) => JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
 const cursorOut = (r) => JSON.parse(r.stdout);
 
@@ -54,6 +55,36 @@ test('cursor session-start: context, env session id, --agent cursor', () => {
   assert.equal(bare.env.EPIC_BOARD_SESSION_ID, 'solo');
 });
 
+test('codex session-start: compatibility env still binds as codex', () => {
+  const r = hook('session-start.mjs', { session_id: 'new', source: 'startup', cwd: '/w/app/sub' }, {
+    PLUGIN_ROOT: '/plugin', CLAUDE_PLUGIN_ROOT: '/plugin', CODEX_THREAD_ID: 'other',
+  });
+  assert.equal(r.status, 0);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.match(out.hookSpecificOutput.additionalContext, /bind 3 --session new --agent codex/);
+  assert.equal(out.env, undefined);
+});
+
+test('codex session-start: thread id is available when input omits session id', () => {
+  const r = hook('session-start.mjs', { source: 'startup', cwd: '/w/app' }, {
+    PLUGIN_ROOT: '/plugin', CODEX_THREAD_ID: 'thread-id',
+  });
+  assert.equal(r.status, 0);
+  assert.match(claudeContext(r), /bind 3 --session thread-id --agent codex/);
+});
+
+test('codex compact and resume restore the freshest bound epic', () => {
+  for (const source of ['compact', 'resume']) {
+    const r = hook('session-start.mjs', { session_id: 'sid', source, cwd: '/elsewhere' }, { PLUGIN_ROOT: '/plugin' });
+    assert.equal(r.status, 0);
+    const text = claudeContext(r);
+    assert.match(text, /Epic 3 · E/);
+    assert.match(text, /doing: Coding/);
+    assert.match(text, /next: Tests/);
+  }
+});
+
 test('pre-compact: instruction for a bound session, nothing otherwise', () => {
   const compact = hook('pre-compact.mjs', { session_id: 'sid' }).stdout;
   assert.match(compact, /state of epic 3/);
@@ -71,7 +102,7 @@ test('cursor pre-compact: short user_message', () => {
 });
 
 test('broken input never fails the session', () => {
-  const r = spawnSync(process.execPath, ['hooks/session-start.mjs'], { input: '{oops', encoding: 'utf8', env: { ...process.env, HOME: home, EPIC_BOARD_HOME: data, CURSOR_PLUGIN_ROOT: '' } });
+  const r = spawnSync(process.execPath, ['hooks/session-start.mjs'], { input: '{oops', encoding: 'utf8', env: hookEnv });
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
 });

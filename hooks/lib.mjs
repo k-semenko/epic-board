@@ -12,7 +12,7 @@ export function readInput() {
 }
 
 export function sessionId(input) {
-  return input.session_id || input.conversation_id || null;
+  return input.session_id || input.conversation_id || (agentName() === 'codex' ? process.env.CODEX_THREAD_ID : null) || null;
 }
 
 export function cwdOf(input) {
@@ -29,12 +29,14 @@ export function isCursor() {
 
 export function agentName() {
   if (isCursor()) return 'cursor';
+  // Codex also sets CLAUDE_PLUGIN_ROOT; PLUGIN_ROOT identifies its hook process.
+  if (process.env.PLUGIN_ROOT) return 'codex';
   if (process.env.GROK_PLUGIN_ROOT) return 'grok';
   return 'claude';
 }
 
 // Cursor: additional_context + env (session id survives if context is dropped).
-// Claude: nested hookSpecificOutput.
+// Claude and Codex: nested hookSpecificOutput.
 export function emitSessionContext(text, { sessionId: sid } = {}) {
   if (isCursor()) {
     const out = {};
