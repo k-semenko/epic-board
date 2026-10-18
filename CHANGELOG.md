@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - Highlight the arrows and cards linked to the selected task, and widen the gap so the link label fits between the cards.
+- Draw a jump across several cards as a smooth curve instead of a square corner.
 
 ## [0.6.0] - 2026-10-17
 

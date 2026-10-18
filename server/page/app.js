@@ -328,6 +328,21 @@ function bindSideCarousel() {
   }, { passive: false });
 }
 
+// Quarter-circle corners. A radius of a few pixels still reads as a square elbow.
+function roundedSkip(xLeave, yLeave, xTip, yTip, arch) {
+  const dir = xTip >= xLeave ? 1 : -1;
+  const roomX = Math.abs(xTip - xLeave);
+  const roomY = Math.min(Math.abs(yLeave - arch), Math.abs(yTip - arch));
+  const R = Math.max(12, Math.min(36, roomX / 4, (roomY - 4) / 2));
+  const k = R * 0.5523;
+  const xL = xLeave;
+  const xR = xTip - dir * R;
+  const n = (v) => Math.round(v * 10) / 10;
+  const yTop = arch + R;
+  const yBot = yTip - R;
+  return `M${n(xL)},${n(yLeave)} V${n(yTop)} C${n(xL)},${n(yTop - k)} ${n(xL + dir * (R - k))},${n(arch)} ${n(xL + dir * R)},${n(arch)} H${n(xR - dir * R)} C${n(xR - dir * (R - k))},${n(arch)} ${n(xR)},${n(arch + k)} ${n(xR)},${n(yTop)} V${n(yBot)} C${n(xR)},${n(yBot + k)} ${n(xTip - dir * k)},${n(yTip)} ${n(xTip)},${n(yTip)}`;
+}
+
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
 function renderOverview(ov, open) {
   const at = new Map(ov.nodes.map((n) => [n.id, n]));
@@ -340,21 +355,21 @@ function renderOverview(ov, open) {
     // Verticals stay in the column gap. The arrow still arrives on the facing side.
     const xUp = span > 1 ? ovX(a.col) + OV.w + 2 : ovX(a.col) - 2;
     const tip = span > 1 ? ovX(b.col) - 2 : ovX(b.col) + OV.w;
-    const xDown = span > 1 ? tip - 24 : tip + 26;
-    return { e, a, b, span, xUp, xDown, tip, x0: Math.min(xUp, xDown), x1: Math.max(xUp, xDown) };
+    return { e, a, b, span, xUp, tip, x0: Math.min(xUp, tip), x1: Math.max(xUp, tip) };
   });
   const skips = routed.filter((r) => r.span !== 1).sort((p, q) => p.x0 - q.x0 || p.x1 - q.x1);
   const lanes = [];
   for (const skip of skips) {
-    const lane = lanes.find((taken) => taken.every(([from, to]) => skip.x1 < from - 12 || skip.x0 > to + 12));
+    const lane = lanes.find((taken) => taken.every(([from, to]) => skip.x1 < from - 28 || skip.x0 > to + 28));
     if (lane) lane.push([skip.x0, skip.x1]);
     else lanes.push([[skip.x0, skip.x1]]);
     skip.slot = lane ? lanes.indexOf(lane) : lanes.length - 1;
   }
   // A bezier between card centers still crosses the cards in between, so skips use the gutter.
-  const laneGap = 12;
-  const aboveCard = 16;
-  const topRoom = 10;
+  const laneGap = 22;
+  const corner = 36;
+  const aboveCard = corner + 8;
+  const topRoom = 12;
   const gutter = lanes.length ? topRoom + aboveCard + (lanes.length - 1) * laneGap - OV.pad : 0;
   const yOf = (row) => OV.pad + gutter + row * (OV.h + OV.gapY);
   const width = OV.pad * 2 + ov.cols * OV.w + (ov.cols - 1) * OV.gapX;
@@ -390,12 +405,7 @@ function renderOverview(ov, open) {
       const arch = archOf(r.slot);
       // Land above the neighbour arrow so the two strokes do not share the gap.
       const approach = y2 - 36;
-      const sign = r.xDown >= r.xUp ? 1 : -1;
-      const tipSign = r.tip >= r.xDown ? 1 : -1;
-      const radius = Math.min(8, Math.abs(r.xDown - r.xUp) / 3, Math.abs(y1 - arch) / 2, Math.abs(approach - arch) / 2, Math.abs(r.tip - r.xDown) / 2);
-      d = radius < 4
-        ? `M${r.xUp},${y1} V${arch} H${r.xDown} V${approach} H${r.tip}`
-        : `M${r.xUp},${y1} V${arch + radius} Q${r.xUp},${arch} ${r.xUp + sign * radius},${arch} H${r.xDown - sign * radius} Q${r.xDown},${arch} ${r.xDown},${arch + radius} V${approach - radius} Q${r.xDown},${approach} ${r.xDown + tipSign * radius},${approach} H${r.tip}`;
+      d = roundedSkip(r.xUp, y1, r.tip, approach, arch);
     }
     const tip = r.e.labels.length ? `<title>${esc(r.e.labels.join(', '))}</title>` : '';
     return `<path class="tl-edge${r.e.labels.length ? ' cross' : ''}${on ? ' lit' : ''}" d="${d}" marker-end="url(#${on ? 'ov-arrow-lit' : 'ov-arrow'})">${tip}</path>${caption}`;
