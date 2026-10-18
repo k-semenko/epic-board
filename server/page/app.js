@@ -338,12 +338,20 @@ function roundedSkip(xLeave, yLeave, xTip, yTip, arch) {
   const k = R * 0.5523;
   const n = (v) => Math.round(v * 10) / 10;
   const xRise = xLeave + dir * R;
-  const xLane = xLeave + dir * 2 * R;
   const xDrop = xTip - dir * R;
+  const yRise = yOut - R;
+  const yDrop = yTip - R;
+  const leave = `M${n(xLeave)},${n(yOut)} C${n(xLeave + dir * k)},${n(yOut)} ${n(xRise)},${n(yRise + k)} ${n(xRise)},${n(yRise)}`;
+  const arrive = `C${n(xDrop)},${n(yDrop + k)} ${n(xTip - dir * k)},${n(yTip)} ${n(xTip)},${n(yTip)}`;
+  // A short hop has no room for a flat crest; one curve clears the gap.
+  if (roomX < 260) {
+    const yCrest = Math.min(yRise, yDrop, arch) - 18;
+    return `${leave} C${n(xRise)},${n(yCrest)} ${n(xDrop)},${n(yCrest)} ${n(xDrop)},${n(yDrop)} ${arrive}`;
+  }
+  const xLane = xLeave + dir * 2 * R;
   const xLaneEnd = xTip - dir * 2 * R;
   const yTop = arch + R;
-  const yBot = yTip - R;
-  return `M${n(xLeave)},${n(yOut)} C${n(xLeave + dir * k)},${n(yOut)} ${n(xRise)},${n(yOut - R + k)} ${n(xRise)},${n(yOut - R)} V${n(yTop)} C${n(xRise)},${n(yTop - k)} ${n(xLane - dir * k)},${n(arch)} ${n(xLane)},${n(arch)} H${n(xLaneEnd)} C${n(xLaneEnd + dir * k)},${n(arch)} ${n(xDrop)},${n(arch + k)} ${n(xDrop)},${n(yTop)} V${n(yBot)} C${n(xDrop)},${n(yBot + k)} ${n(xTip - dir * k)},${n(yTip)} ${n(xTip)},${n(yTip)}`;
+  return `${leave} V${n(yTop)} C${n(xRise)},${n(yTop - k)} ${n(xLane - dir * k)},${n(arch)} ${n(xLane)},${n(arch)} H${n(xLaneEnd)} C${n(xLaneEnd + dir * k)},${n(arch)} ${n(xDrop)},${n(arch + k)} ${n(xDrop)},${n(yTop)} V${n(yDrop)} ${arrive}`;
 }
 
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
