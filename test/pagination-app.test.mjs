@@ -98,16 +98,15 @@ test('search targets reveal the correct page of every paginated block', () => {
   assert.match(html('history'), /data-sid="h-26"/);
 });
 
-test('paging restores an open card and keeps its drafted comment explicitly collapsed', () => {
+test('paging restores an open card and keeps its drafted comment visible', () => {
   const { app, html, cards } = appHarness();
   app.draft('q1', 'Keep this answer');
   app.waiting();
   const first = cards()[0];
   first.details.find((detail) => detail.dataset.waitPart === 'card').open = true;
-  first.details.find((detail) => detail.dataset.waitPart === 'comment').open = false;
   app.page('waiting', 2);
   app.page('waiting', 1);
   assert.equal(cards()[0].details.find((detail) => detail.dataset.waitPart === 'card').open, true);
-  assert.equal(cards()[0].details.find((detail) => detail.dataset.waitPart === 'comment').open, false);
-  assert.match(html('waiting'), /Keep this answer/);
+  assert.match(html('waiting'), /<textarea name="comment" rows="2">Keep this answer<\/textarea>/);
+  assert.doesNotMatch(html('waiting'), /<details class="wait-comment"/);
 });

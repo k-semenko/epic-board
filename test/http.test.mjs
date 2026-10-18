@@ -169,6 +169,21 @@ test('waiting mutations preserve guards and malformed bodies do not change data'
   assert.deepEqual(await (await call('/api/epics/5')).json(), before);
 });
 
+test('clarification from the page waits for the agent without confirming the checklist', async () => {
+  await call('/api/epics/5', { method: 'PATCH', body: { patch: { waiting: [{ id: 'ask', kind: 'decision', title: 'Pause', checklist: [{ id: 'c1', text: 'Resolved' }] }] } } });
+  let item = (await (await call('/api/epics/5')).json()).waiting.find((entry) => entry.id === 'ask');
+  const body = { version: item.version, submissionId: 'ask-1', comment: 'Why the studio?' };
+  assert.equal((await call('/api/epics/5/waiting/ask/clarify', { method: 'POST', body: { ...body, comment: ' ' } })).status, 400);
+  const accepted = await call('/api/epics/5/waiting/ask/clarify', { method: 'POST', body });
+  assert.equal(accepted.status, 200);
+  item = (await accepted.json()).waiting.find((entry) => entry.id === 'ask');
+  assert.equal(item.status, 'answered');
+  assert.equal(item.rounds[0].response.by, 'button');
+  assert.equal(item.rounds[0].response.clarification, true);
+  assert.deepEqual(item.rounds[0].response.checked, []);
+  assert.equal((await call('/api/epics/5/waiting/ask/clarify', { method: 'POST', body })).status, 200);
+});
+
 test('unknown waiting actions return 404, including object prototype names', async () => {
   for (const action of ['missing', 'constructor', 'toString', '__proto__']) {
     assert.equal((await call(`/api/epics/5/waiting/w1/${action}`, { method: 'POST', body: {} })).status, 404, action);

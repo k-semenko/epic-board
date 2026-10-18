@@ -8,7 +8,7 @@ Read this only when the user asks in chat to review answers, for example “Chec
 
 ## Reviewing one item
 
-1. Read `wait <epic> show <id> --json`; inspect the current question, version and latest round response (including selected option labels, checklist and comment). Re-read relevant task/branch context.
+1. Read `wait <epic> show <id> --json`; inspect the current question, version and latest round response (including selected option labels, checklist and comment). Re-read relevant task/branch context. A response with `clarification: true` is a request to change the question, not an agreement: `confirmed` is false and the checklist is empty. Revise the question when the comment leaves it unclear, or resolve with the outcome when the comment is enough to act.
 2. If the answer is sufficient, record how it was used: `wait <epic> resolve <id> --version <current-version> --submission-id <current-response-id> --resolution "<concrete outcome>"`.
 3. If clarification is required, use `wait <epic> revise <id> --version <current-version> --reason "<what needs clarification and why>" [request flags from add]`. This creates an open revision and preserves past answers. Reopening a closed item also uses revise with a reason.
 4. For a separate question, create a new ID with `--ref waiting:<original-id>`; resolve the original separately when appropriate.

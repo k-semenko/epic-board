@@ -106,6 +106,75 @@ export function layoutMap(map) {
   return { rows, edges, cols: goalCol + 1, goalCol, focus: active[0] ?? null };
 }
 
+// Step links can cycle once they are collapsed to tasks. Columns follow the
+// condensation, so a cycle stays in neighboring columns instead of growing forever.
+function stronglyConnected(ids, links) {
+  const out = new Map(ids.map((id) => [id, []]));
+  for (const { from, to } of links.values()) if (out.has(from) && out.has(to) && from !== to) out.get(from).push(to);
+  const index = new Map();
+  const low = new Map();
+  const stack = [];
+  const onStack = new Set();
+  const groups = [];
+  let next = 0;
+  const visit = (id) => {
+    index.set(id, next);
+    low.set(id, next);
+    next += 1;
+    stack.push(id);
+    onStack.add(id);
+    for (const to of out.get(id)) {
+      if (!index.has(to)) {
+        visit(to);
+        low.set(id, Math.min(low.get(id), low.get(to)));
+      } else if (onStack.has(to)) low.set(id, Math.min(low.get(id), index.get(to)));
+    }
+    if (low.get(id) === index.get(id)) {
+      const group = [];
+      let top;
+      do {
+        top = stack.pop();
+        onStack.delete(top);
+        group.push(top);
+      } while (top !== id);
+      groups.push(group);
+    }
+  };
+  for (const id of ids) if (!index.has(id)) visit(id);
+  return groups;
+}
+
+function taskColumns(ids, links) {
+  const order = new Map(ids.map((id, at) => [id, at]));
+  const groups = stronglyConnected(ids, links);
+  for (const group of groups) group.sort((a, b) => order.get(a) - order.get(b));
+  const component = new Map();
+  groups.forEach((group, at) => group.forEach((id) => component.set(id, at)));
+  const next = groups.map(() => new Set());
+  for (const { from, to } of links.values()) {
+    const left = component.get(from);
+    const right = component.get(to);
+    if (left !== undefined && right !== undefined && left !== right) next[left].add(right);
+  }
+  const start = groups.map(() => 0);
+  for (let pass = 0; pass < groups.length; pass += 1) {
+    let changed = false;
+    for (let at = 0; at < groups.length; at += 1) {
+      for (const to of next[at]) {
+        const column = start[at] + groups[at].length;
+        if (column > start[to]) {
+          start[to] = column;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  const columns = new Map();
+  groups.forEach((group, at) => group.forEach((id, offset) => columns.set(id, start[at] + offset)));
+  return columns;
+}
+
 // Task-level view: step links collapse into one arrow per task pair, so a long task no longer stretches the map.
 export function buildOverview(epic) {
   const map = buildLanes(epic);
@@ -120,19 +189,7 @@ export function buildOverview(epic) {
       }
     }
   }
-  const col = new Map(lanes.map((l) => [l.id, 0]));
-  for (let pass = 0; pass < 50; pass++) {
-    let changed = false;
-    for (const { from, to } of links.values()) {
-      if (!col.has(from)) continue;
-      const c = Math.max(col.get(to), col.get(from) + 1);
-      if (c !== col.get(to)) {
-        col.set(to, c);
-        changed = true;
-      }
-    }
-    if (!changed) break;
-  }
+  const col = taskColumns(lanes.map((lane) => lane.id), links);
 
   const facts = epic.facts || {};
   const taskNode = (l) => {
@@ -152,7 +209,8 @@ export function buildOverview(epic) {
   };
   const nodes = lanes.map((l) => ({ ...taskNode(l), col: col.get(l.id) }));
   const side = map.side.map((l) => ({ ...taskNode(l), side: true }));
-  const edges = [...links.values()].filter((e) => col.has(e.from));
+  // The map is one arrow per task. A later step of the earlier task may wait on the next task; that return stays on the step list.
+  const edges = [...links.values()].filter((e) => col.has(e.from) && (!col.has(e.to) || col.get(e.to) >= col.get(e.from)));
 
   const mergeBranches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
   const merged = lanes.filter((l) => l.branches.some((b) => mergeBranches.has(b))).map((l) => l.id);

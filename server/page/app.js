@@ -212,7 +212,7 @@ const stateIcon = (state) => icon(STATE_ICON[state] || 'circle', `st-${state}`);
 
 // ---------- Overview: one card per task ----------
 
-const OV = { w: 280, h: 160, gapX: 84, gapY: 18, pad: 14 };
+const OV = { w: 280, h: 160, gapX: 188, gapY: 44, pad: 14 };
 const ovX = (col) => OV.pad + col * (OV.w + OV.gapX);
 const ovY = (row) => OV.pad + row * (OV.h + OV.gapY);
 
@@ -328,32 +328,110 @@ function bindSideCarousel() {
   }, { passive: false });
 }
 
+// Quarter-circle corners. The stroke leaves the card sideways, then turns up in the gap.
+function roundedSkip(xLeave, yLeave, xTip, yTip, arch) {
+  const dir = xTip >= xLeave ? 1 : -1;
+  const yOut = yLeave - 36;
+  const roomX = Math.abs(xTip - xLeave);
+  const roomY = Math.min(yOut - arch, yTip - arch);
+  const R = Math.max(12, Math.min(36, roomX / 5, (roomY - 8) / 2));
+  const k = R * 0.5523;
+  const n = (v) => Math.round(v * 10) / 10;
+  const xRise = xLeave + dir * R;
+  const xDrop = xTip - dir * R;
+  const yRise = yOut - R;
+  const yDrop = yTip - R;
+  const leave = `M${n(xLeave)},${n(yOut)} C${n(xLeave + dir * k)},${n(yOut)} ${n(xRise)},${n(yRise + k)} ${n(xRise)},${n(yRise)}`;
+  const arrive = `C${n(xDrop)},${n(yDrop + k)} ${n(xTip - dir * k)},${n(yTip)} ${n(xTip)},${n(yTip)}`;
+  // A short hop has no room for a flat crest; one curve clears the gap.
+  if (roomX < 260) {
+    const yCrest = Math.min(yRise, yDrop, arch) - 18;
+    return `${leave} C${n(xRise)},${n(yCrest)} ${n(xDrop)},${n(yCrest)} ${n(xDrop)},${n(yDrop)} ${arrive}`;
+  }
+  const xLane = xLeave + dir * 2 * R;
+  const xLaneEnd = xTip - dir * 2 * R;
+  const yTop = arch + R;
+  return `${leave} V${n(yTop)} C${n(xRise)},${n(yTop - k)} ${n(xLane - dir * k)},${n(arch)} ${n(xLane)},${n(arch)} H${n(xLaneEnd)} C${n(xLaneEnd + dir * k)},${n(arch)} ${n(xDrop)},${n(arch + k)} ${n(xDrop)},${n(yTop)} V${n(yDrop)} ${arrive}`;
+}
+
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
 function renderOverview(ov, open) {
-  const width = OV.pad * 2 + ov.cols * OV.w + (ov.cols - 1) * OV.gapX;
-  const height = OV.pad * 2 + ov.rows * OV.h + (ov.rows - 1) * OV.gapY;
   const at = new Map(ov.nodes.map((n) => [n.id, n]));
-  const edges = ov.edges.filter((e) => at.has(e.from) && at.has(e.to)).map((e) => {
+  const drawn = ov.edges.filter((e) => at.has(e.from) && at.has(e.to));
+  const routed = drawn.map((e) => {
     const a = at.get(e.from);
     const b = at.get(e.to);
-    const x1 = ovX(a.col) + OV.w;
-    const y1 = ovY(a.row) + OV.h / 2;
-    const x2 = ovX(b.col);
-    const y2 = ovY(b.row) + OV.h / 2;
-    const bend = Math.max(20, (x2 - x1) / 2);
-    const d = y1 === y2 ? `M${x1},${y1} L${x2 - 2},${y2}` : `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2 - 2},${y2}`;
-    const label = e.labels.length ? `<text class="tl-label" x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle">${esc(e.labels.join(', '))}</text>` : '';
-    return `<path class="tl-edge${e.labels.length ? ' cross' : ''}" d="${d}" marker-end="url(#ov-arrow)"/>${label}`;
+    const span = b.col - a.col;
+    if (span === 1) return { e, a, b, span };
+    // Verticals stay in the column gap. The arrow still arrives on the facing side.
+    const xUp = span > 1 ? ovX(a.col) + OV.w + 2 : ovX(a.col) - 2;
+    const tip = span > 1 ? ovX(b.col) - 2 : ovX(b.col) + OV.w;
+    return { e, a, b, span, xUp, tip, x0: Math.min(xUp, tip), x1: Math.max(xUp, tip) };
+  });
+  const skips = routed.filter((r) => r.span !== 1).sort((p, q) => p.x0 - q.x0 || p.x1 - q.x1);
+  const lanes = [];
+  for (const skip of skips) {
+    const lane = lanes.find((taken) => taken.every(([from, to]) => skip.x1 < from - 28 || skip.x0 > to + 28));
+    if (lane) lane.push([skip.x0, skip.x1]);
+    else lanes.push([[skip.x0, skip.x1]]);
+    skip.slot = lane ? lanes.indexOf(lane) : lanes.length - 1;
+  }
+  // A bezier between card centers still crosses the cards in between, so skips use the gutter.
+  const laneGap = 22;
+  const corner = 36;
+  const aboveCard = corner + 8;
+  const topRoom = 12;
+  const gutter = lanes.length ? topRoom + aboveCard + (lanes.length - 1) * laneGap - OV.pad : 0;
+  const yOf = (row) => OV.pad + gutter + row * (OV.h + OV.gapY);
+  const width = OV.pad * 2 + ov.cols * OV.w + (ov.cols - 1) * OV.gapX;
+  const height = OV.pad * 2 + gutter + ov.rows * OV.h + (ov.rows - 1) * OV.gapY;
+  const archOf = (slot) => yOf(0) - aboveCard - slot * laneGap;
+  const hot = new Set();
+  if (open) {
+    for (const edge of drawn) {
+      if (edge.from === open || edge.to === open) {
+        hot.add(edge.from);
+        hot.add(edge.to);
+      }
+    }
+  }
+  const captionFor = (labels, x, y, on) => {
+    const text = labels.join(', ');
+    return `<foreignObject x="${x}" y="${y}" width="${OV.gapX - 24}" height="46"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-edge-label${on ? ' lit' : ''}">${esc(text)}</div></foreignObject>`;
+  };
+  const edges = routed.map((r) => {
+    const y1 = yOf(r.a.row) + OV.h / 2;
+    const y2 = yOf(r.b.row) + OV.h / 2;
+    const on = Boolean(open) && (r.e.from === open || r.e.to === open);
+    let d;
+    let caption = '';
+    if (r.span === 1) {
+      const x1 = ovX(r.a.col) + OV.w;
+      const x2 = ovX(r.b.col);
+      const bend = Math.max(20, (x2 - x1) / 2);
+      d = y1 === y2 ? `M${x1},${y1} L${x2 - 2},${y2}` : `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2 - 2},${y2}`;
+      // The caption sits under the stroke and inside the gap, so it cannot cover either card.
+      if (r.e.labels.length) caption = captionFor(r.e.labels, x1 + 12, Math.min(y1, y2) + 8, on);
+    } else {
+      const arch = archOf(r.slot);
+      // Land above the neighbour arrow so the two strokes do not share the gap.
+      const approach = y2 - 36;
+      d = roundedSkip(r.xUp, y1, r.tip, approach, arch);
+    }
+    const tip = r.e.labels.length ? `<title>${esc(r.e.labels.join(', '))}</title>` : '';
+    return `<path class="tl-edge${r.e.labels.length ? ' cross' : ''}${on ? ' lit' : ''}" d="${d}" marker-end="url(#${on ? 'ov-arrow-lit' : 'ov-arrow'})">${tip}</path>${caption}`;
   }).join('');
   const cards = ov.nodes.map((n) => {
-    const attrs = n.kind === 'goal' ? '' : ` role="button" tabindex="0" data-open="${esc(n.id)}" aria-expanded="${open === n.id}"`;
+    const picked = open === n.id;
+    const attrs = n.kind === 'goal' ? '' : ` role="button" tabindex="0" data-open="${esc(n.id)}" aria-expanded="${picked}"`;
     const info = n.kind === 'task' ? `<button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>` : '';
-    return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
+    const mark = picked ? ' picked' : hot.has(n.id) ? ' lit' : '';
+    return `<foreignObject class="ov-node${mark}" x="${ovX(n.col)}" y="${yOf(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${picked ? ' selected' : ''}${hot.has(n.id) && !picked ? ' lit' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
   const chainTitle = ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : '';
   const canLocate = [...ov.nodes, ...ov.side].some((n) => n.kind === 'task' && (n.current.length || n.id === open));
   return `<div class="overview${ov.side.length ? ' has-side' : ''}${mapHeightClass()}"><section class="overview-main"${ov.side.length ? ` aria-label="${esc(t('map.chain'))}"` : ''}><div class="ov-head">${chainTitle}${mapHeightControl(Boolean(ov.side.length))}${mapZoomControl()}${mapLocateControl(canLocate)}</div><div class="ov-scroll"><svg class="ov-svg" viewBox="0 0 ${width} ${height}" data-w="${width}" data-h="${height}" style="max-width:${width}px">
-    <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
+    <defs><marker id="ov-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker><marker id="ov-arrow-lit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead hot"/></marker></defs>
     ${edges}${cards}</svg></div></section>${renderSideStack(ov.side, open)}</div>`;
 }
 
@@ -1410,7 +1488,8 @@ function bindDecisionForms(id) {
     const item = current.waiting.find((w) => w.id === form.dataset.waitForm);
     if (!item || decisionDrafts.get(item).busy) return;
     readForm(form);
-    const result = decisionDrafts.submit(item, (body) => api(`/api/epics/${enc(id)}/waiting/${enc(item.id)}/submit`, { method: 'POST', body }));
+    const intent = event.submitter?.value === 'clarify' ? 'clarify' : 'agree';
+    const result = decisionDrafts.submit(item, (body) => api(`/api/epics/${enc(id)}/waiting/${enc(item.id)}/${intent === 'clarify' ? 'clarify' : 'submit'}`, { method: 'POST', body }), intent);
     renderWaiting(current);
     try {
       const epic = await result;

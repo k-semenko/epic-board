@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-18
+
+### Added
+
+- Send a pending item back for clarification from its card. The comment stays visible, and agreement still requires the checklist.
+
+### Fixed
+
+- Keep neighboring task cards one gap apart when their steps depend on each other. A collapsed cycle no longer stretches the first arrow across empty columns.
+- Do not draw a task arrow back to the previous card when a later step waits on the next task. That link stays on the opened task.
+
+### Changed
+
+- Highlight the arrows and cards linked to the selected task, and widen the gap so the link label fits between the cards.
+- Draw a jump across several cards as a smooth curve instead of a square corner. A short hop is one arch, with no flat top.
+
 ## [0.6.0] - 2026-10-17
 
 ### Added
@@ -80,7 +96,8 @@ First public release.
 - The UI is bilingual (English and Russian).
 - Linux support via `systemd --user`.
 
-[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/k-semenko/epic-board/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/k-semenko/epic-board/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/k-semenko/epic-board/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/k-semenko/epic-board/releases/tag/v0.5.0

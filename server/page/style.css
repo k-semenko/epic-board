@@ -132,7 +132,9 @@ h2 .count { font-size: 11px; color: var(--warn); }
 .tl-edge { fill: none; stroke: var(--muted); stroke-width: 1.4; opacity: .7; }
 .tl-edge.cross { stroke: var(--accent); stroke-dasharray: 5 4; opacity: .9; }
 .tl-arrowhead { fill: var(--muted); }
+.tl-arrowhead.hot { fill: var(--accent); }
 .tl-label { font: 11px var(--sans); fill: var(--accent); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; }
+.ov-edge-label { box-sizing: border-box; height: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; text-align: center; font: 11px/1.3 var(--sans); color: var(--accent); pointer-events: none; }
 .tl-node { box-sizing: border-box; height: 100%; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--s-todo); color: var(--fg); font: 12.5px/1.3 var(--sans); overflow: hidden; display: flex; flex-direction: column; }
 .tl-title { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .tl-node.done { background: var(--s-done); color: var(--muted); }
@@ -246,13 +248,19 @@ svg.i.inl { color: var(--muted); margin: 0 .3em; }
 /* Grid children default to min-width:auto; a long step chain must scroll inside, not widen the page. */
 .map > *, .detail > *, .detail-links > * { min-width: 0; }
 /* The outer ring was clipped by the SVG card box and showed up as glowing corners.
-   The upper chain stays fully lit: it is one chain, not a single chosen card. */
+   The opened task keeps its arrows and the cards they touch; the rest of the chain dims. */
 .tl-svg:has(.tl-node.selected) .tl-node:not(.selected),
 .side-deck:has(.ov-card.selected) .ov-card:not(.selected) { opacity: .5; }
 .tl-svg:has(.tl-node.selected) .tl-node:not(.selected):hover,
 .side-deck:has(.ov-card.selected) .ov-card:not(.selected):hover { opacity: .82; }
-.ov-card, .tl-node { transition: opacity .16s ease, border-color .16s ease; }
-@media (prefers-reduced-motion: reduce) { .ov-card, .tl-node { transition: none; } }
+.ov-svg:has(.ov-card.selected) .ov-node:not(.lit):not(.picked) { opacity: .38; }
+.ov-svg:has(.ov-card.selected) .ov-node:not(.lit):not(.picked):hover { opacity: .78; }
+.ov-svg:has(.ov-card.selected) .tl-edge:not(.lit) { opacity: .16; }
+.ov-svg:has(.ov-card.selected) .ov-edge-label:not(.lit) { opacity: .2; }
+.ov-svg:has(.ov-card.selected) .tl-edge.lit { opacity: 1; stroke: var(--accent); stroke-width: 2.1; stroke-dasharray: none; }
+.ov-svg:has(.ov-card.selected) .ov-card.lit { border-color: var(--accent); }
+.ov-card, .tl-node, .ov-node, .tl-edge, .ov-edge-label { transition: opacity .16s ease, border-color .16s ease; }
+@media (prefers-reduced-motion: reduce) { .ov-card, .tl-node, .ov-node, .tl-edge, .ov-edge-label { transition: none; } }
 .ov-card > * { flex: none; }
 .ov-card > .ov-flags { margin-top: auto; }
 
@@ -620,9 +628,11 @@ button.primary:hover { filter: brightness(1.08); }
 .wait-comment, .wait-history { font-size: 12px; margin-top: 9px; }
 .decision-card summary { cursor: pointer; color: var(--muted); width: fit-content; }
 .decision-card summary:hover { color: var(--accent); }
-.wait-comment textarea { display: block; width: 100%; margin-top: 7px; padding: 8px 10px; resize: vertical; min-height: 65px; font: inherit; border: 1px solid var(--line); border-radius: 5px; color: var(--fg); background: var(--surface); }
+.wait-comment { display: block; }
+.wait-comment textarea { display: block; width: 100%; margin-top: 7px; padding: 8px 10px; resize: vertical; min-height: 0; font: inherit; border: 1px solid var(--line); border-radius: 5px; color: var(--fg); background: var(--surface); }
 .decision-card input:focus-visible, .decision-card textarea:focus-visible, .decision-card summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.wait-actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+.wait-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.wait-actions [value="clarify"] { order: -1; }
 .wait-actions button { padding: 6px 11px; }
 .wait-error { color: var(--crit); font-size: 12px; margin: 7px 0 0; }
 .wait-answer { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }

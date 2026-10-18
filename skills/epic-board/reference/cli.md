@@ -13,7 +13,8 @@
 | `open-item` | `open-item SHOP-1 WEB-31 add Rebase` / `open-item SHOP-1 WEB-31 done <oid>` | loose ends of a task |
 | `wait` | `wait SHOP-1 add psp --kind decision --title "Pick a provider" --details "…" --task WEB-31 --ref step:WEB-31/wire --check "Fees compared"` | an item that needs a human; kind: decision, approval, review, action, other |
 | `wait show` | `wait SHOP-1 show psp --json` | full question, current version and response/history |
-| `wait submit` | `wait SHOP-1 submit psp --version V --submission-id S --confirmed --checked c1,c2 --comment "Checked fees"` | human response; single/multi use `--selected a,b`; remains pending agent review |
+| `wait submit` | `wait SHOP-1 submit psp --version V --submission-id S --confirmed --checked c1,c2 --comment "Checked fees"` | human agreement; single/multi use `--selected a,b`; every checklist id is required; remains pending agent review |
+| `wait clarify` | `wait SHOP-1 clarify psp --version V --submission-id S --comment "Fee table is missing"` | human asks to change the question; comment required, checklist and options are not; remains pending agent review |
 | `wait resolve` | `wait SHOP-1 resolve psp --version V --submission-id S --resolution "Provider A applied to the plan"` | agent accepts the current submitted response with an outcome |
 | `wait revise` | `wait SHOP-1 revise psp --version V --reason "Fee structure changed" --title "Confirm revised provider"` | new revision, preserving question/answer history; optional request flags from add replace supplied fields |
 | `wait remove` | `wait SHOP-1 remove mistaken --version V` | delete only open requests without response history |
@@ -33,7 +34,7 @@
 
 ## Interactive requests
 
-`wait add` accepts `--input confirm|single|multi` (default confirm), repeatable `--option id=text`, and `--recommend id`. Choice formats need at least two options; recommendation does not preselect an answer. `--ref waiting:<id>` links another request. `--check` remains an all-required checklist, separate from selectable options.
+`wait add` accepts `--input confirm|single|multi` (default confirm), repeatable `--option id=text`, and `--recommend id`. Choice formats need at least two options; recommendation does not preselect an answer. `--ref waiting:<id>` links another request. `--check` remains a checklist required to agree, separate from selectable options. Clarification does not check it.
 
 ```sh
 epic.mjs wait SHOP-1 add psp --title "Choose provider" --input single \
@@ -41,7 +42,7 @@ epic.mjs wait SHOP-1 add psp --title "Choose provider" --input single \
 epic.mjs wait SHOP-1 show psp --json
 ```
 
-Read the current version before every mutation; copy the current response's submissionId for resolve. Keep the same submissionId and payload when retrying a lost submit response. A new version after submit must be read before resolve/revise. `wait show` without `--json` also prints the full item.
+Read the current version before every mutation; copy the current response's submissionId for resolve. Keep the same submissionId and payload when retrying a lost submit or clarify response. A new version after submit or clarify must be read before resolve/revise. `wait show` without `--json` also prints the full item. A clarification response has `clarification: true` and is not an agreement.
 
 `revise` requires `--reason`, including reopening closed requests. Omitted request flags retain their values; supplied `--check` flags replace the entire checklist, and supplied `--option` flags replace all options. `--details -` and `--task -` clear those fields. `--option` without `--input` keeps the current format. `--input single|multi` alone keeps existing options; `--input confirm` removes inherited options. `--recommend id` alone changes the recommendation among current options. New supplied options replace old labels, hints and recommendation metadata.
 

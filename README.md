@@ -8,7 +8,7 @@ It ships as a [Claude Code](https://code.claude.com) plugin: the agent writes to
 
 - **Any tracker.** Tasks have any id (`PROJ-12`, `#42`, `web-login`) and a link to wherever they live. The board never calls a tracker: it is storage you write to.
 - **Facts from git, not from memory.** `refresh` runs `git fetch` once per repository and recounts every branch: head, distance from the base, unpushed commits, dirty worktree. With `glab` or `gh` it also reads merge request / pull request state and pipeline.
-- **Needs decision.** Items that block on a person carry what exactly to decide or do, links to the tasks, steps, branches and documents involved, and confirmation, single-choice or multiple-choice responses. Every optional checklist condition is required. Human submission waits for agent review; closure records the agent outcome and keeps the answer history.
+- **Needs decision.** Items that block on a person carry what exactly to decide or do, links to the tasks, steps, branches and documents involved, and confirmation, single-choice or multiple-choice responses. Every checklist condition is required to agree. A comment alone can send the item back for clarification. Either submission waits for agent review; closure records the agent outcome and keeps the answer history.
 - **A map of the epic.** Tasks as cards with cross-task dependencies, the opened task as a strip of steps, the merge order and the goal.
 - **Stage documents.** Specs, plans, logs and reviews next to their step: kept on the board or linked from a repository, viewable and editable on the page, with versions.
 - **Session plans.** Each agent session records what it is doing and what comes next; the board shows Claude, Codex, Grok and Gemini sessions side by side.

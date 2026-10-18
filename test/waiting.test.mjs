@@ -58,6 +58,27 @@ test('choice formats validate cardinality, IDs and all required checklist items'
   for (const input of [{ type: 'wat' }, { type: 'single', options: [options[0]] }, { type: 'multi', options: [options[0], options[0]] }]) assert.throws(() => add('bad-input', { input }), { status: 400 });
 });
 
+test('clarification records only the comment and still waits for the agent', () => {
+  add('ask', { checklist: [{ id: 'c1', text: 'Checked' }], input: { type: 'single', options: [{ id: 'a', text: 'Alpha' }, { id: 'b', text: 'Beta' }] } });
+  const version = get('ask').version;
+  assert.throws(() => store.clarifyWaiting('decisions', 'ask', { version, submissionId: 'ask-1', comment: '  ' }), { code: 'comment' });
+  store.clarifyWaiting('decisions', 'ask', { version, submissionId: 'ask-1', comment: '  What changed?  ' });
+  const answered = get('ask');
+  assert.equal(answered.status, 'answered');
+  assert.equal(answered.revision, 1);
+  assert.equal(answered.rounds[0].response.clarification, true);
+  assert.equal(answered.rounds[0].response.confirmed, false);
+  assert.deepEqual(answered.rounds[0].response.checked, []);
+  assert.deepEqual(answered.rounds[0].response.selected, []);
+  assert.equal(answered.rounds[0].response.comment, 'What changed?');
+  const history = store.readHistory('decisions', { limit: 500 }).length;
+  store.clarifyWaiting('decisions', 'ask', { version, submissionId: 'ask-1', comment: 'What changed?' });
+  assert.equal(store.readHistory('decisions', { limit: 500 }).length, history);
+  assert.equal(get('ask').version, answered.version);
+  assert.throws(() => store.clarifyWaiting('decisions', 'ask', { version, submissionId: 'ask-1', comment: 'Different' }), { status: 409, code: 'submission-conflict' });
+  assert.throws(() => store.submitWaiting('decisions', 'ask', { version: answered.version, submissionId: 'ask-2', confirmed: true, selected: ['a'], checked: ['c1'] }), { status: 409 });
+});
+
 test('return preserves answered prompt/labels, advances revision and rejects competing review', () => {
   add('return', { input: { type: 'single', options: [{ id: 'a', text: 'Old Alpha' }, { id: 'b', text: 'Beta' }] } });
   submit('return', { selected: ['a'] });

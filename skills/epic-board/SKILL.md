@@ -61,9 +61,9 @@ A pending item must be actionable without reading the chat:
 - `--details` — Markdown: what exactly to decide or do, why it blocks, the options and their cost.
 - `--ref` (repeatable) — what it touches on the board: `task:<id>`, `step:<task>/<step>`, `branch:<repo>:<branch>`, `doc:<id>`, `decision:<id>`, `waiting:<id>`, or an `https://` link.
 - `--input confirm|single|multi` — confirmation by default, one option or several options. Choice inputs need two or more stable `--option id=text` flags. `--recommend id` marks advice without selecting for the human.
-- `--check` (repeatable) — all-required conditions for submitting any answer; separate from selectable options.
+- `--check` (repeatable) — conditions required to agree; separate from selectable options. A clarification does not check them.
 
-The human answers on the page; the item becomes `answered` and stays unresolved. Review answers only when the user asks in chat (“Check agreed decisions”, `/epic-board:review-answers`), never on your own from a hook or a page submission; then follow `reference/waiting.md`. Never invent a human answer to close a request.
+The human agrees on the page, or sends the item back with a comment and no checklist. Either way it becomes `answered` and stays unresolved. A response with `clarification: true` is not an agreement. Review answers only when the user asks in chat (“Check agreed decisions”, `/epic-board:review-answers`), never on your own from a hook or a page submission; then follow `reference/waiting.md`. Never invent a human answer to close a request.
 
 ## Do not write
 

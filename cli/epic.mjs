@@ -39,6 +39,7 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
                        [--input confirm|single|multi] [--option id=text]... [--recommend id]
   wait <epic> show <id> [--json]              full request, version and responses
   wait <epic> submit <id> --version V --submission-id S [--confirmed | --selected a,b] [--checked c1,c2] [--comment C]
+  wait <epic> clarify <id> --version V --submission-id S --comment C
   wait <epic> resolve <id> --version V --submission-id S --resolution R
   wait <epic> revise <id> --version V --reason R [request flags from add]
   wait <epic> remove <id> --version V          only unanswered requests without history
@@ -119,6 +120,7 @@ const COMMANDS = {
     if (action === 'add') return patch(epic, { waiting: [{ id: itemId, kind: o.kind || 'decision', ...waitingRequest(o), since: now() }] }, o.why);
     if (action === 'done' || action === 'undo') throw new BoardError(400, 'usage', `Use wait ${epic} ${action === 'done' ? `resolve ${itemId} --version V --submission-id S --resolution R after human submission` : `revise ${itemId} --version V --reason R`}`);
     if (action === 'submit') return store.submitWaiting(epic, itemId, defined({ version: need(o.version, '--version'), submissionId: need(o['submission-id'], '--submission-id'), confirmed: o.confirmed, selected: listIds(o.selected), checked: listIds(o.checked), comment: o.comment }), opts);
+    if (action === 'clarify') return store.clarifyWaiting(epic, itemId, { version: need(o.version, '--version'), submissionId: need(o['submission-id'], '--submission-id'), comment: need(o.comment, '--comment') }, opts);
     if (action === 'resolve') return store.resolveWaiting(epic, itemId, { version: need(o.version, '--version'), submissionId: need(o['submission-id'], '--submission-id'), resolution: need(o.resolution, '--resolution') }, opts);
     if (action === 'revise') {
       const version = need(o.version, '--version');
@@ -128,7 +130,7 @@ const COMMANDS = {
       return store.reviseWaiting(epic, itemId, { version, reason, patch: waitingRequest(o, item.input) }, opts);
     }
     if (action === 'remove') return store.removeWaiting(epic, itemId, { version: need(o.version, '--version') }, opts);
-    throw new BoardError(400, 'usage', 'wait <epic> add|show|submit|resolve|revise|remove <id>; run epic.mjs help');
+    throw new BoardError(400, 'usage', 'wait <epic> add|show|submit|clarify|resolve|revise|remove <id>; run epic.mjs help');
   },
   decide: ([epic], o) => patch(epic, { decisions: [defined({ task: o.task, text: need(o.text, '--text'), by: o.by })] }, o.why),
   merge: ([epic], o) => {

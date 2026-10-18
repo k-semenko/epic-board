@@ -64,13 +64,14 @@ function draftHistoryFixture() {
   return { item, draft: drafts.refresh(item) };
 }
 
-test('card, comment, previous drafts and revision history have distinct disclosure identifiers', () => {
+test('card, previous drafts and revision history are separate disclosures, and the comment stays a field', () => {
   const { item, draft } = draftHistoryFixture();
   const html = waiting.renderWaitingCard(item, { draft, expanded: true });
   const parts = [...html.matchAll(/<details\b[^>]*data-wait-part="([^"]+)"[^>]*>/g)].map((match) => match[1]);
-  assert.deepEqual(parts.sort(), ['card', 'comment', 'drafts', 'history']);
+  assert.deepEqual(parts.sort(), ['card', 'drafts', 'history']);
   assert.match(html, /<details class="wait-disclosure" open data-wait-part="card">/);
-  assert.match(html, /<details class="wait-comment"[^>]*data-wait-part="comment"/);
+  assert.match(html, /<textarea name="comment" rows="2"><\/textarea>/);
+  assert.doesNotMatch(html, /data-wait-part="comment"/);
   assert.match(html, /<details class="wait-history"[^>]*data-wait-part="drafts"/);
   assert.match(html, /<details class="wait-history"[^>]*data-wait-part="history"/);
 });
@@ -89,7 +90,7 @@ test('revealHistory opens both previous drafts and revision history while normal
   for (const attributes of revealed) assert.match(attributes, /\bopen\b/);
   assert.match(html, /Previous local answer/);
   assert.match(html, /Original question/);
-  assert.doesNotMatch(html, /<details class="wait-comment" open/);
+  assert.match(html, /<textarea name="comment" rows="2"><\/textarea>/);
   const exported = waiting.renderWaitingCard(item, { draft, expanded: true, revealHistory: true, readOnly: true });
   const exportedHistory = historyTags(exported);
   assert.equal(exportedHistory.length, 1);
@@ -104,8 +105,10 @@ test('renders native choice controls without selecting a recommendation and keep
   assert.match(html, /name="checked"[^>]*value="c"/);
   assert.doesNotMatch(html, / checked/);
   assert.match(html, /Recommended/);
-  assert.match(html, /name="comment"/);
-  assert.match(html, /type="submit"/);
+  assert.match(html, /<textarea name="comment" rows="2">/);
+  assert.match(html, /value="agree"/);
+  assert.match(html, /value="clarify"/);
+  assert.doesNotMatch(html, /<details class="wait-comment"/);
   const multi = waiting.renderWaitingCard(question({ input: { ...choice, type: 'multi' } }));
   assert.equal((multi.match(/name="selected"/g) || []).length, 2);
   assert.equal((multi.match(/type="checkbox"/g) || []).length, 2);
@@ -160,6 +163,24 @@ test('drafts survive polling, localization and storage reload without changing t
   assert.deepEqual(fresh.selected, []);
   assert.equal(fresh.previous[0].comment, 'Draft');
   assert.equal(fresh.previous[0].request.title, 'Choose storage');
+});
+
+test('clarification needs a comment and does not require the checklist or a choice', () => {
+  const drafts = new waiting.DecisionDrafts('epic', null);
+  const item = question({ checklist: [{ id: 'c', text: 'Read plan' }] });
+  assert.throws(() => drafts.prepare(item, 'clarify'), /clarification/i);
+  drafts.update(item, { selected: [], checked: [], comment: '  Why the studio?  ' });
+  const payload = drafts.prepare(item, 'clarify');
+  assert.deepEqual({ ...payload, submissionId: 'id' }, { version: 'v1', submissionId: 'id', comment: 'Why the studio?' });
+  assert.deepEqual(drafts.prepare(item, 'clarify'), payload);
+  assert.throws(() => drafts.prepare(item), /prerequisite/i);
+  const answered = waiting.renderWaitingCard(question({
+    status: 'answered', checklist: [{ id: 'c', text: 'Read plan' }],
+    rounds: [{ revision: 1, version: 'v1', request: { title: 'Choose storage', input: { type: 'confirm' }, checklist: [{ id: 'c', text: 'Read plan' }] }, response: { submissionId: 's', at: '2026-10-16T12:00:00Z', by: 'button', clarification: true, confirmed: false, selected: [], checked: [], comment: 'Why the studio?' } }],
+  }));
+  assert.match(answered, /Clarification requested/);
+  assert.match(answered, /Why the studio\?/);
+  assert.doesNotMatch(answered, /<p>Confirmed<\/p>|Read plan/);
 });
 
 test('submission validates choice and checklist, retains payload for retry, clears only its revision', () => {

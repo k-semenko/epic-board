@@ -18,7 +18,7 @@ server/http ──┘          │                <id>.history.ndjson
 - `validateEpic` runs on every write: ids, URLs, step references, branch names, references from pending items to board objects.
 - `migrate` lifts schema 1 → 2 → 3 on read and persists it at the next write. Schema 1 had a numeric id, `stage`, `glab` and free-text pending items. Schema 3 adds versioned interactive requests and immutable rounds; legacy closures keep their original outcome without inventing a human response. Migrated item versions are deterministic until mutation.
 - `facts` are written only by refresh, under the same lock; network work happens outside the lock.
-- `server/waiting.mjs` validates confirm/single/multi requests and performs lifecycle transitions. Dedicated store actions submit, resolve, revise and remove check the current item version under the same lock. Submit saves an immutable request/response round and waits for agent review; only resolve sets doneAt. Replaying an identical submissionId/payload returns the current state even after review. Generic PATCH can create requests but cannot edit/delete existing requests or lifecycle fields. Checklist and option arrays are replaced whole on revision.
+- `server/waiting.mjs` validates confirm/single/multi requests and performs lifecycle transitions. Dedicated store actions submit, clarify, resolve, revise and remove check the current item version under the same lock. Submit and clarify save an immutable request/response round and wait for agent review; clarify carries the comment only and does not confirm the checklist. Only resolve sets doneAt. Replaying an identical submissionId/payload returns the current state even after review. Generic PATCH can create requests but cannot edit/delete existing requests or lifecycle fields. Checklist and option arrays are replaced whole on revision.
 
 ## Facts — `server/refresh.mjs`
 
@@ -31,7 +31,7 @@ server/http ──┘          │                <id>.history.ndjson
 ## HTTP — `server/http.mjs`
 
 - Serves the page, the vendored `marked` and `DOMPurify`, and a JSON API.
-- Endpoints: list, read, patch, history, rev, refresh, docs, export, waiting submit/resolve/revise/remove (POST `/api/epics/:epic/waiting/:id/:action`), selfcheck, health.
+- Endpoints: list, read, patch, history, rev, refresh, docs, export, waiting submit/clarify/resolve/revise/remove (POST `/api/epics/:epic/waiting/:id/:action`), selfcheck, health.
 - Waiting mutations share the CLI store actions; malformed payloads return 400, stale tokens and invalid transitions return 409. Legacy done/undo return actionable errors.
 - Every request must carry an allowed `Host`, as protection against DNS rebinding.
 - `GET/PUT /api/settings` reads and atomically replaces the shared epic block order in `<data>/settings.json`, separately from epic data and history.
