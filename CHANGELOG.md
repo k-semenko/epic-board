@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Skills resolve the CLI from the plugin directory that contains them. A Grok session binds with `$GROK_SESSION_ID` and `--agent grok`.
+
 ## [0.6.1] - 2026-10-18
 
 ### Added

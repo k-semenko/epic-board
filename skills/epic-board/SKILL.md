@@ -1,11 +1,13 @@
 ---
 name: epic-board
-description: Local board for multi-repository work (an "epic"): tasks from any tracker, steps, branches, merge requests, merge order, items that need a human decision, session plans and stage documents. Use it when work spans more than one repository or several tasks of one epic, when the user asks for the board, the epic status or "where are we", and after compaction if the hook named an epic.
+description: Local board for multi-repository work (an "epic"): tasks from any tracker, steps, branches, merge requests, merge order, items that need a human decision, session plans and stage documents. Use it when work spans more than one repository or several tasks of one epic, when the user asks for the board, the epic status or "where are we", and when a session continues after compaction. Grok session id is the shell variable GROK_SESSION_ID and the agent name is grok. Claude prints the session id from the session-start hook and the agent name is claude.
 ---
 
 # epic-board
 
-CLI: `node "${CLAUDE_PLUGIN_ROOT}/cli/epic.mjs" <command>` (below: `epic.mjs`). Full reference: `reference/cli.md`, data model: `reference/schema.md`, answer review: `reference/waiting.md`, stage documents: `reference/docs.md`. The board is local storage: it never calls a tracker; you write what you know into it.
+CLI: `node "<plugin-root>/cli/epic.mjs" <command>` (below: `epic.mjs`). Full reference: `reference/cli.md`, data model: `reference/schema.md`, answer review: `reference/waiting.md`, stage documents: `reference/docs.md`. The board is local storage: it never calls a tracker; you write what you know into it.
+
+The plugin root is the directory that contains `cli/` and `skills/`. This file is `skills/epic-board/SKILL.md`. Take the root from the absolute path you used to read this file and call that copy of the CLI. If `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` is set in the shell, that value is the root; those variables are set for hook processes and are often unset in the agent shell.
 
 ## Only the CLI
 
@@ -27,11 +29,16 @@ An id from the link that is not in `show --json` is a question for the user. Pen
 
 `epic.mjs service status`. If the service is not installed, offer `epic.mjs service install` (it copies the app next to the data and registers a user service: launchd on macOS, systemd --user on Linux). Do not install without the user's yes. `epic.mjs doctor` shows tools and credentials as the service sees them.
 
+## This session
+
+- **Grok.** Session id is `$GROK_SESSION_ID`. Agent is `grok`. After compaction the session-start note is not in the thread: before the first status or write, `list` and `show` the epic bound to this session id.
+- **Claude.** The session-start hook prints the session id. Agent is `claude`. After compaction the hook prints the epic brief; follow that.
+
 ## Starting work
 
 1. `epic.mjs list` — is there an epic already? An epic id is any short key: a tracker key (`PROJ-12`), a number, a slug.
 2. If not: `epic.mjs new <id> --title … --goal … [--url <link to the epic in the tracker>]`, then `repo` for each repository (`--provider gitlab|github --project <host>/<owner>/<name>` when merge request facts are wanted), `task` for each task (`--url`, `--tracker`, `--role side` for side tasks).
-3. `epic.mjs bind <epic> --session <session_id> --task <task> --agent claude` — the hook prints the session id at start.
+3. `epic.mjs bind <epic> --session <session_id> --task <task> --agent <agent>` with the session id and agent from above.
 4. Before any status report: `epic.mjs refresh <epic>`; take branch and MR facts only from the board.
 5. Ask the user once where stage documents should live and record it: `docs-mode <epic> board` or `docs-mode <epic> linked`.
 
@@ -63,7 +70,7 @@ A pending item must be actionable without reading the chat:
 - `--input confirm|single|multi` — confirmation by default, one option or several options. Choice inputs need two or more stable `--option id=text` flags. `--recommend id` marks advice without selecting for the human.
 - `--check` (repeatable) — conditions required to agree; separate from selectable options. A clarification does not check them.
 
-The human agrees on the page, or sends the item back with a comment and no checklist. Either way it becomes `answered` and stays unresolved. A response with `clarification: true` is not an agreement. Review answers only when the user asks in chat (“Check agreed decisions”, `/epic-board:review-answers`), never on your own from a hook or a page submission; then follow `reference/waiting.md`. Never invent a human answer to close a request.
+The human agrees on the page, or sends the item back with a comment and no checklist. Either way it becomes `answered` and stays unresolved. A response with `clarification: true` is not an agreement. Review answers only when the user asks in chat (“Check agreed decisions”, `/review-answers`, `/epic-board:review-answers`), never on your own from a hook or a page submission; then follow `reference/waiting.md`. Never invent a human answer to close a request.
 
 ## Do not write
 

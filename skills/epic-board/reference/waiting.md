@@ -1,6 +1,6 @@
 # Reviewing answers to pending items
 
-Read this only when the user asks in chat to review answers, for example “Check agreed decisions”, or runs `/epic-board:review-answers`. The human submits an answer on the page; the item becomes `answered` and stays unresolved until you review it. SessionStart, PreCompact and brief are informational: never start or schedule review from a page submission or a hook.
+Read this only when the user asks in chat to review answers, for example “Check agreed decisions”, or runs `/review-answers` or `/epic-board:review-answers`. The human submits an answer on the page; the item becomes `answered` and stays unresolved until you review it. SessionStart, PreCompact and brief are informational: never start or schedule review from a page submission or a hook.
 
 ## Finding answered items
 
