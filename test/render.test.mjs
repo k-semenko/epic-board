@@ -28,6 +28,20 @@ test('brief and report label retained local facts when only the MR can be refres
   assert.match(buildReport(epic, { task: 'WEB-8' }), /eaf756ec85` \(last known local head\)/);
 });
 
+test('brief labels the saved head of a removed branch without a push warning', () => {
+  const epic = sampleEpic();
+  Object.assign(epic.facts['web:feat/payment-form'], { branchMissing: true, unpushed: null, remoteBehind: null, dirty: null });
+  const text = buildBrief(epic);
+  assert.match(text, /web:feat\/payment-form last known eaf756ec85 · behind 120.*branch removed/);
+  assert.doesNotMatch(text, /unpushed|dirty tree|error:/);
+});
+
+test('task report labels the saved head of a removed branch', () => {
+  const epic = sampleEpic();
+  epic.facts['web:feat/payment-form'].branchMissing = true;
+  assert.match(buildReport(epic, { task: 'WEB-8' }), /eaf756ec85` \(last known local head\).*#1393/);
+});
+
 test('task report', () => {
   const md = buildReport(sampleEpic(), { task: 'WEB-8' });
   assert.match(md, /^\*\*Report: \[web\] Payment form\*\*/);

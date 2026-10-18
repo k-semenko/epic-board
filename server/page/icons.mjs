@@ -15,6 +15,7 @@ const PATHS = {
   branch: '<circle cx="5" cy="3.8" r="1.6"/><circle cx="5" cy="12.2" r="1.6"/><circle cx="11" cy="5.5" r="1.6"/><path d="M5 5.4v5.2M11 7.1c0 2.6-2.4 3.4-6 3.6"/>',
   merge: '<circle cx="4.5" cy="3.8" r="1.6"/><circle cx="4.5" cy="12.2" r="1.6"/><circle cx="11.5" cy="12.2" r="1.6"/><path d="M4.5 5.4v5.2M4.5 5.4c0 4 3 5.2 5.4 6.6"/>',
   flag: '<path d="M4 14V2.5M4 3h7.5l-1.8 2.7L11.5 8.5H4"/>',
+  pin: '<path d="M5 2.5h6M6 2.5v4L4 9h8l-2-2.5v-4M8 9v4.5"/>',
   target: '<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/>',
   alert: '<path d="M8 2.5l6 11H2z"/><path d="M8 6.5v3M8 11.6v.2"/>',
   refresh: '<path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.8v3h-3"/>',

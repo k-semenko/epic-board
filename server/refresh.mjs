@@ -18,7 +18,8 @@ export function execRunner(cmd, args, { cwd, timeoutMs = 60000 } = {}) {
   return new Promise((resolve) => {
     execFile(cmd, args, { cwd, env: cleanEnv(), timeout: timeoutMs, maxBuffer: 8 << 20 }, (err, stdout, stderr) => {
       const code = err ? (typeof err.code === 'number' ? err.code : 1) : 0;
-      const text = String(stderr || '') || (err ? (err.killed ? `timeout ${timeoutMs} ms` : err.message) : '');
+      const executionError = err && (err.killed || typeof err.code !== 'number');
+      const text = String(stderr || '') || (executionError ? (err.killed ? `timeout ${timeoutMs} ms` : err.message) : '');
       resolve({ code, stdout: String(stdout || ''), stderr: text });
     });
   });
@@ -103,14 +104,26 @@ async function branchFacts(epic, target, run, location) {
   const repo = epic.repos[target.repo];
   const worktreeExists = liveWorktree(target, location);
   const git = (...args) => run('git', ['--git-dir', location.commonDir, ...args]);
-  const log = await git('log', '-1', '--format=%h%x00%s', '--end-of-options', target.name);
+  const localRef = `refs/heads/${target.name}`;
+  const remoteRef = `refs/remotes/origin/${target.name}`;
+  const local = await git('rev-parse', '--verify', '--quiet', '--end-of-options', localRef);
+  const remote = await git('rev-parse', '--verify', '--quiet', '--end-of-options', remoteRef);
+  for (const ref of [local, remote]) {
+    if (ref.code === 0 || (ref.code === 1 && !ref.stderr.trim())) continue;
+    return { error: `git rev-parse ${target.name}: ${ref.stderr.trim() || ref.code}`, worktreeExists, dirty: null, mr: await mrFacts(repo, target, null, run) };
+  }
+  if (local.code === 1 && remote.code === 1) return {
+    branchMissing: true, unpushed: null, remoteBehind: null, dirty: null, worktreeExists,
+    mr: await mrFacts(repo, target, null, run),
+  };
+  const headRef = local.code === 0 ? localRef : remoteRef;
+  const log = await git('log', '-1', '--format=%h%x00%s', '--end-of-options', headRef);
   if (log.code !== 0) return { error: `git log ${target.name}: ${log.stderr.trim() || log.code}`, worktreeExists, dirty: null, mr: await mrFacts(repo, target, null, run) };
   const [head, subject] = log.stdout.trim().split('\0');
-  const base = await counts(git, `origin/${repo.base}...${target.name}`);
-  const remote = await git('rev-parse', '--verify', '--quiet', '--end-of-options', `refs/remotes/origin/${target.name}`);
-  const own = remote.code === 0 ? await counts(git, `origin/${target.name}...${target.name}`) : null;
+  const base = await counts(git, `refs/remotes/origin/${repo.base}...${headRef}`);
+  const own = local.code === 0 && remote.code === 0 ? await counts(git, `${remoteRef}...${localRef}`) : null;
   let dirty = null;
-  if (worktreeExists) {
+  if (local.code === 0 && worktreeExists) {
     const status = await run('git', ['-C', target.worktree, 'status', '--porcelain']);
     dirty = status.code === 0 ? status.stdout.trim().length > 0 : null;
   }
@@ -121,7 +134,7 @@ async function branchFacts(epic, target, run, location) {
     unpushed: own?.right ?? null,
     remoteBehind: own ? own.left : null,
     dirty, worktreeExists,
-    mr: await mrFacts(repo, target, head, run),
+    mr: await mrFacts(repo, target, local.code === 0 ? head : null, run),
   };
 }
 

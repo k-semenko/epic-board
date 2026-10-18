@@ -6,14 +6,14 @@ import { bundleScript } from '../server/export.mjs';
 const checkedAt = '2026-10-16T11:30:00Z';
 const mrCheckedAt = '2026-10-16T12:00:00Z';
 
-function appHarness(events = []) {
+function appHarness(events = [], lang = 'en') {
   const summary = { innerHTML: '', textContent: '' };
   const document = { addEventListener() {}, querySelector: (selector) => selector === '#pr-summary' ? summary : null };
   const bundle = bundleScript();
   const bootstrap = bundle.lastIndexOf('\nif (EXPORT || location.pathname');
   assert.ok(bootstrap > 0);
   const script = `${bundle.slice(0, bootstrap)}
-    setLang('en', { persist: false });
+    setLang(${JSON.stringify(lang)}, { persist: false });
     renderEpic = async () => {};
     globalThis.app = { branches: branchRows, refresh: runRefresh };
   })();`;
@@ -57,6 +57,40 @@ test('a failed recent local refresh marks the retained head stale', () => {
   const html = appHarness().branches(epic({ error: 'git fetch web: permission denied' }));
   assert.match(html, /<td class="mono stale">abc123/);
   assert.match(html, /permission denied/);
+});
+
+test('a removed branch shows its saved Git snapshot as stale beside the current MR', () => {
+  const saved = epic({
+    branchMissing: true, unpushed: null, remoteBehind: null, worktreeExists: false,
+    mr: { state: 'merged', pipeline: 'success', shaMatchesHead: null, fetchedAt: mrCheckedAt },
+  }, { worktree: '/removed/worktree' });
+  for (const [lang, label, checked] of [['en', 'Branch removed', 'MR checked'], ['ru', 'Ветка удалена', 'MR проверен']]) {
+    const html = appHarness([], lang).branches(saved);
+    assert.match(html, /<td class="mono stale">abc123/);
+    assert.match(html, /<td class="mono stale"><span class="nowrap"/);
+    assert.ok(html.includes(`<div class="muted">${label}</div>`));
+    assert.ok(html.includes(`<div class="muted"><span class="phrase">${checked} <time data-ago="${mrCheckedAt}"`));
+    assert.match(html, /data-ago="2026-10-16T11:30:00Z"/);
+    assert.match(html, /merged <span class="ok">success/);
+    assert.doesNotMatch(html, /Unpushed|Не запушено|Worktree removed|Ворктри удалён|Different head|Не та голова/);
+  }
+});
+
+test('a removed branch without a saved head reports no previous Git check', () => {
+  const html = appHarness().branches(epic({
+    branchMissing: true, head: null, subject: null, behind: null, ahead: null,
+    unpushed: null, remoteBehind: null, fetchedAt: undefined,
+  }));
+  assert.match(html, /<div class="muted">Branch removed<\/div>/);
+  assert.match(html, /Git not checked/);
+  assert.doesNotMatch(html, /Git checked|Unpushed/);
+});
+
+test('a fetch failure after confirmed branch removal remains visible beside the saved snapshot', () => {
+  const html = appHarness().branches(epic({ branchMissing: true, unpushed: null, error: 'git fetch web: permission denied' }));
+  assert.match(html, /<td class="mono stale">abc123/);
+  assert.match(html, /<div class="crit">git fetch web: permission denied<\/div>/);
+  assert.match(html, /Git checked <time data-ago="2026-10-16T11:30:00Z"/);
 });
 
 test('only an explicit SHA mismatch displays a different-head warning', () => {

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-18
+
+### Added
+
+- Pin epics into a separate section at the top of the home page, with pins saved in shared board settings.
+
+### Changed
+
+- Show two epic cards per row on wide screens and one on narrow screens. Cards share the same height, with a single-line title, a two-line goal and ellipses for overflow.
+
+### Fixed
+
+- Clear obsolete push warnings when both local and remote branches are removed, while retaining the dated Git snapshot and refreshing linked merge requests.
+
 ## [0.8.0] - 2026-10-18
 
 ### Added
@@ -125,7 +139,8 @@ First public release.
 - The UI is bilingual (English and Russian).
 - Linux support via `systemd --user`.
 
-[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/k-semenko/epic-board/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/k-semenko/epic-board/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/k-semenko/epic-board/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/k-semenko/epic-board/compare/v0.6.1...v0.6.2
