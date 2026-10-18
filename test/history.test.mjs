@@ -22,6 +22,18 @@ test('refresh facts read as branch and field', () => {
   assert.equal(describeEvent({ op: 'refresh', path: 'facts.web:feat/x.mr.pipeline', before: 'running', after: 'success' }).what, 'MR pipeline');
 });
 
+test('branch removal history uses a translated field label', () => {
+  const event = { op: 'refresh', path: 'facts.web:feat/x.branchMissing', before: null, after: true };
+  for (const [lang, label] of [['en', 'branch removed'], ['ru', 'ветка удалена']]) {
+    setLang(lang, { persist: false });
+    try {
+      assert.deepEqual(describeEvent(event), { where: 'web:feat/x', what: label, change: 'set', before: null, after: 'true' });
+    } finally {
+      setLang('en', { persist: false });
+    }
+  }
+});
+
 test('pending items, decisions, sessions, epic creation', () => {
   assert.deepEqual(describeEvent({ op: 'add', path: 'waiting[mig]', after: { id: 'mig', title: 'Migrate staging' } }), { where: 'needs decision', what: 'item added', change: 'add', before: null, after: 'Migrate staging' });
   assert.equal(describeEvent({ op: 'set', path: 'waiting[mig].doneAt', before: null, after: '2026-10-16T10:00:00Z' }).what, 'done');

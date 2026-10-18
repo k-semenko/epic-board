@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Clear obsolete push warnings when both local and remote branches are removed, while retaining the dated Git snapshot and refreshing linked merge requests.
+
 ## [0.8.0] - 2026-10-18
 
 ### Added

@@ -81,6 +81,7 @@ Rules:
 - `repos[].root` and `commonDir` are optional, captured automatically when registering an available path and backfilled by refresh. They identify the primary checkout and shared Git directory, so removing a linked worktree does not prevent Git refresh. Retargeting `path` replaces the captured identity.
 - A branch in `facts` is keyed `<repo>:<branch>`. Fetch and ref reads use the shared Git directory; cleanliness is checked only in an available branch worktree belonging to that repository.
 - `behind/ahead` compare the branch with `origin/<base>`. `unpushed/remoteBehind` compare it with `origin/<branch>` and stay `null` when that remote ref is absent; distance from the base does not prove unpublished commits.
+- When neither the local nor the remote branch ref exists after a successful fetch, `branchMissing: true` marks removal. The last known head and base counts retain their original `fetchedAt`; `unpushed`, `remoteBehind` and `dirty` become `null`. A surviving remote ref can supply current head/base facts without a local branch, with unknown publication counts. A matching tag never substitutes for a branch.
 - Forge requests use the explicit `provider/project` without requiring a local checkout. When local Git is unavailable, `localUnavailable: true` and `localReason` accompany the last known Git facts and their original `fetchedAt`; `dirty` is unknown. MR facts have their own `fetchedAt`, and `shaMatchesHead` is `null` without a current local head.
 - `facts` is written by refresh only; a PATCH with `facts` is rejected (400).
 

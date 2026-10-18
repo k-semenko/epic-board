@@ -9,6 +9,17 @@ const store = await import('../server/store.mjs');
 const { refreshEpic, execRunner, cleanEnv } = await import('../server/refresh.mjs');
 const repo = makeRepo();
 
+test('the runner distinguishes quiet process exits from launch failures and timeouts', async () => {
+  const quiet = await execRunner(process.execPath, ['-e', 'process.exit(1)']);
+  assert.deepEqual(quiet, { code: 1, stdout: '', stderr: '' });
+  const missing = await execRunner('/nonexistent-epic-board-executable', []);
+  assert.equal(missing.code, 1);
+  assert.match(missing.stderr, /ENOENT/);
+  const timeout = await execRunner(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { timeoutMs: 100 });
+  assert.equal(timeout.code, 1);
+  assert.match(timeout.stderr, /timeout 100 ms/);
+});
+
 store.createEpic({ id: '7', title: 'E' });
 store.patchEpic('7', {
   repos: { r: { path: repo.clone, base: 'master', provider: 'gitlab', project: 'gitlab.example.com/q/r' } },
@@ -37,7 +48,8 @@ test('facts for a branch with worktree, MR and a missing branch', async () => {
   assert.equal(f.mr.pipeline, 'success');
   assert.equal(f.mr.shaMatchesHead, false);
   assert.equal(f.error, null);
-  assert.match(epic.facts['r:gone'].error, /gone/);
+  assert.equal(epic.facts['r:gone'].error, null);
+  assert.equal(epic.facts['r:gone'].branchMissing, true);
   assert.equal(calls.filter((c) => c[0] === 'git' && c.includes('fetch')).length, 1, 'one fetch per repo');
   assert.ok(calls.filter((c) => c[0] === 'git' && c.includes('log')).every((c) => c.includes('--end-of-options')));
   assert.ok(calls.some((c) => c[0] === 'glab' && c.includes('gitlab.example.com/q/r')));
@@ -147,8 +159,8 @@ test('progress events: each repo fetch and each branch start and finish in order
   assert.deepEqual(kinds.slice(0, 2), ['repo:r:start', 'repo:r:ok']);
   assert.ok(kinds.includes('branch:r:feat/x:start'));
   assert.ok(kinds.includes('branch:r:feat/x:ok'));
-  assert.ok(kinds.includes('branch:r:gone:error'));
-  assert.equal(events.find((e) => e.key === 'r:gone' && e.state === 'error').detail.includes('gone'), true);
+  assert.ok(kinds.includes('branch:r:gone:ok'));
+  assert.match(events.find((e) => e.key === 'r:gone' && e.state === 'ok').detail, /branch removed/);
   assert.ok(kinds.indexOf('branch:r:feat/x:start') < kinds.indexOf('branch:r:feat/x:ok'));
   assert.match(events.find((e) => e.key === 'r:feat/x' && e.state === 'ok').detail, /\S/);
 });

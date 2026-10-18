@@ -1547,9 +1547,10 @@ function branchRows(epic) {
       const key = `${b.repo}:${b.name}`;
       const f = epic.facts?.[key];
       const localUnavailable = f?.localUnavailable === true;
-      const stale = localUnavailable || Boolean(f?.error) || !f?.fetchedAt || nowMs() - Date.parse(f.fetchedAt) > STALE_MS;
+      const branchMissing = f?.branchMissing === true;
+      const stale = branchMissing || localUnavailable || Boolean(f?.error) || !f?.fetchedAt || nowMs() - Date.parse(f.fetchedAt) > STALE_MS;
       const mrStale = Boolean(f?.mr?.error) || !f?.mr?.fetchedAt || nowMs() - Date.parse(f.mr.fetchedAt) > STALE_MS;
-      const headMatch = localUnavailable || f?.error ? null : f?.mr?.shaMatchesHead;
+      const headMatch = branchMissing || localUnavailable || f?.error ? null : f?.mr?.shaMatchesHead;
       const comparison = headMatch === false ? ` <span class="warn">${esc(t('br.wrongHead'))}</span>` : headMatch == null ? ` <span class="muted">${esc(t('br.unknownHead'))}</span>` : '';
       const mrChecked = f?.mr?.fetchedAt ? `<div class="${mrStale ? 'stale' : 'muted'}">${phrase('br.mrChecked', { t: agoTag(f.mr.fetchedAt) })}</div>` : '';
       const mr = !b.mr?.iid ? '—' : f?.mr && !f.mr.error
@@ -1560,7 +1561,7 @@ function branchRows(epic) {
         : '—';
       const localStatus = localUnavailable
         ? `<div class="muted">${esc(t('br.localUnavailable'))}${f.localReason ? ` · ${esc(f.localReason)}` : ''}</div>`
-        : f?.error ? `<div class="crit">${esc(f.error)}</div>` : b.worktree && f?.worktreeExists === false ? `<div class="muted">${esc(t('br.worktreeRemoved'))}</div>` : '';
+        : f?.error ? `<div class="crit">${esc(f.error)}</div>` : branchMissing ? `<div class="muted">${esc(t('br.branchMissing'))}</div>` : b.worktree && f?.worktreeExists === false ? `<div class="muted">${esc(t('br.worktreeRemoved'))}</div>` : '';
       rows.push(`<tr data-sid="b-${esc(key)}">
         <td>${esc(b.repo)}<div class="muted">${esc(task.id)}</div></td>
         <td class="mono">${esc(b.name)}</td>
