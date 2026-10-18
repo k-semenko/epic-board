@@ -11,6 +11,6 @@ Epic: $ARGUMENTS
 
 The board rules live in the sibling skill. This file is `skills/review-answers/SKILL.md`; read `../epic-board/SKILL.md` (from this file's directory) first if it is not loaded. Work only through the CLI that skill names. A board link is turned into an epic id as that skill describes.
 
-1. Epic from `$ARGUMENTS` when the user passed one. Otherwise the epic bound to this session: `$GROK_SESSION_ID` in Grok, the session-start hook line in Claude. If neither names an epic, run `list` and ask.
+1. Epic from `$ARGUMENTS` or the user's message when they passed one. Otherwise the epic bound to this session: `$EPIC_BOARD_SESSION_ID` or the session-start hook line in Cursor, the session-start hook line in Claude, `$GROK_SESSION_ID` in Grok. If none names an epic, run `list` and ask.
 2. Follow `../epic-board/reference/waiting.md` (from this file's directory) for every answered item (`waiting for agent` in `show`).
 3. Report one line per item: id, the answer, resolved or revised and why. Nothing answered — say so and stop.

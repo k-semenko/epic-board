@@ -15,27 +15,43 @@ store.patchEpic('4', { sessions: [{ id: 'sid', lastAt: '2026-10-01T00:00:00Z' }]
 
 // A throwaway HOME keeps the hook from finding (and updating) a real installed service.
 const home = mkdtempSync(join(tmpdir(), 'eb-hook-home-'));
-const hook = (file, input, env = {}) => spawnSync(process.execPath, [`hooks/${file}`], { input: JSON.stringify(input), encoding: 'utf8', env: { ...process.env, HOME: home, XDG_CONFIG_HOME: '', XDG_DATA_HOME: '', EPIC_BOARD_HOME: data, ...env } });
-const context = (r) => JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+const hook = (file, input, env = {}) => spawnSync(process.execPath, [`hooks/${file}`], { input: JSON.stringify(input), encoding: 'utf8', env: { ...process.env, HOME: home, XDG_CONFIG_HOME: '', XDG_DATA_HOME: '', EPIC_BOARD_HOME: data, CURSOR_PLUGIN_ROOT: '', ...env } });
+const claudeContext = (r) => JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+const cursorOut = (r) => JSON.parse(r.stdout);
 
 test('compact: brief of the freshest bound epic', () => {
   const r = hook('session-start.mjs', { session_id: 'sid', source: 'compact', cwd: '/tmp' });
   assert.equal(r.status, 0);
-  const text = context(r);
+  const text = claudeContext(r);
   assert.match(text, /Epic 3 · E/);
   assert.match(text, /doing: Coding/);
 });
 
 test('startup bound: one line', () => {
-  const text = context(hook('session-start.mjs', { session_id: 'sid', source: 'startup', cwd: '/tmp' }));
+  const text = claudeContext(hook('session-start.mjs', { session_id: 'sid', source: 'startup', cwd: '/tmp' }));
   assert.equal(text.split('\n').length, 1);
   assert.match(text, /epic 3/);
 });
 
 test('unbound: hint only inside an epic repo', () => {
-  assert.match(context(hook('session-start.mjs', { session_id: 'new', source: 'startup', cwd: '/w/app/sub' })), /node ".+\/cli\/epic\.mjs" bind 3 --session new/);
+  assert.match(claudeContext(hook('session-start.mjs', { session_id: 'new', source: 'startup', cwd: '/w/app/sub' })), /node ".+\/cli\/epic\.mjs" bind 3 --session new --agent claude/);
   assert.equal(hook('session-start.mjs', { session_id: 'new', source: 'startup', cwd: '/elsewhere' }).stdout, '');
   assert.equal(hook('session-start.mjs', { session_id: 'new', source: 'clear', cwd: '/elsewhere' }).stdout, '');
+});
+
+test('cursor session-start: context, env session id, --agent cursor', () => {
+  const env = { CURSOR_PLUGIN_ROOT: '/plugin' };
+  const bound = cursorOut(hook('session-start.mjs', { session_id: 'sid', cwd: '/tmp' }, env));
+  assert.match(bound.additional_context, /epic 3/);
+  assert.equal(bound.env.EPIC_BOARD_SESSION_ID, 'sid');
+  assert.equal(bound.hookSpecificOutput, undefined);
+  const hint = cursorOut(hook('session-start.mjs', { conversation_id: 'new', workspace_roots: ['/w/app/sub'] }, env));
+  assert.match(hint.additional_context, /--agent cursor/);
+  assert.equal(hint.env.EPIC_BOARD_SESSION_ID, 'new');
+  // Outside an epic repo Cursor still exports the session id for bind.
+  const bare = cursorOut(hook('session-start.mjs', { session_id: 'solo', cwd: '/elsewhere' }, env));
+  assert.equal(bare.additional_context, undefined);
+  assert.equal(bare.env.EPIC_BOARD_SESSION_ID, 'solo');
 });
 
 test('pre-compact: instruction for a bound session, nothing otherwise', () => {
@@ -45,8 +61,17 @@ test('pre-compact: instruction for a bound session, nothing otherwise', () => {
   assert.equal(hook('pre-compact.mjs', { session_id: 'nope' }).stdout, '');
 });
 
+test('cursor pre-compact: short user_message', () => {
+  const r = hook('pre-compact.mjs', { conversation_id: 'sid' }, { CURSOR_PLUGIN_ROOT: '/plugin' });
+  assert.equal(r.status, 0);
+  const msg = JSON.parse(r.stdout).user_message;
+  assert.match(msg, /After compact/);
+  assert.match(msg, /show 3 --session sid/);
+  assert.doesNotMatch(msg, /summary instructions/);
+});
+
 test('broken input never fails the session', () => {
-  const r = spawnSync(process.execPath, ['hooks/session-start.mjs'], { input: '{oops', encoding: 'utf8', env: { ...process.env, HOME: home, EPIC_BOARD_HOME: data } });
+  const r = spawnSync(process.execPath, ['hooks/session-start.mjs'], { input: '{oops', encoding: 'utf8', env: { ...process.env, HOME: home, EPIC_BOARD_HOME: data, CURSOR_PLUGIN_ROOT: '' } });
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
 });

@@ -38,7 +38,7 @@ Issues and pull requests are welcome. For anything larger than a small fix, open
 
 Releases are cut by the maintainer:
 
-1. Bump the version in `package.json`, `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
+1. Bump the version in `package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.cursor-plugin/plugin.json` and `.cursor-plugin/marketplace.json`.
 2. Move the `Unreleased` entries in `CHANGELOG.md` under the new version.
 3. Push a tag `vX.Y.Z`. CI publishes the GitHub Release.
 

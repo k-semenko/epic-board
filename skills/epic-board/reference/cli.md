@@ -20,7 +20,7 @@
 | `wait remove` | `wait SHOP-1 remove mistaken --version V` | delete only open requests without response history |
 | `decide` | `decide SHOP-1 --task WEB-31 --text "Cards first" [--by product]` | a decision, append-only |
 | `merge` | `merge SHOP-1 --set '[{"id":"m1","text":"api","branch":"api:feat/x"}]'` | the merge order as a whole; a step may point at a pending item with `"waiting":"<id>"` |
-| `bind` | `bind SHOP-1 --session <sid> --task WEB-31 --agent grok` | bind a session; `--agent`: grok, claude, codex, gemini, … Session id in Grok is `$GROK_SESSION_ID` |
+| `bind` | `bind SHOP-1 --session <sid> --task WEB-31 --agent cursor` | bind a session; `--agent`: cursor, claude, grok, codex, gemini, … Session id: Cursor `$EPIC_BOARD_SESSION_ID`, Claude from the session-start hook, Grok `$GROK_SESSION_ID` |
 | `note` | `note SHOP-1 --session <sid> --doing "…" --next "…"` | session plan |
 | `refresh` | `refresh SHOP-1 [--task WEB-31 \| --branch web:feat/form]` | git facts, plus MR/PR facts for repos with a provider |
 | `show` | `show SHOP-1 [--session <sid>] [--json]` | summary (≤ 25 lines) or JSON |

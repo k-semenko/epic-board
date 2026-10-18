@@ -51,6 +51,7 @@ export const STATE_ICON = { done: 'check', active: 'play', waiting: 'clock', blo
 // Provider marks, simplified to read at 16 px; colour comes from the brand, not the theme.
 const AGENTS = {
   claude: { label: 'Claude', color: '#D97757', svg: '<g stroke-width="1.9"><path d="M8 1.8v12.4M1.8 8h12.4M3.6 3.6l8.8 8.8M12.4 3.6l-8.8 8.8"/></g>' },
+  cursor: { label: 'Cursor', color: 'currentColor', svg: '<path d="M3 2.5l10.5 6.2-4.2 1.2-1.2 4.2z" fill="currentColor" stroke="none"/>' },
   codex: { label: 'Codex', color: '#10A37F', svg: '<path d="M8 1.8l5.4 3.1v6.2L8 14.2l-5.4-3.1V4.9z"/><path d="M8 5.2l2.4 1.4v2.8L8 10.8 5.6 9.4V6.6z"/>' },
   grok: { label: 'Grok', color: 'currentColor', svg: '<circle cx="8" cy="8" r="5.6"/><path d="M3.2 12.8L12.8 3.2"/>' },
   gemini: { label: 'Gemini', color: '#4C8DF6', svg: '<path d="M8 1.5c.6 3.4 3.1 5.9 6.5 6.5-3.4.6-5.9 3.1-6.5 6.5-.6-3.4-3.1-5.9-6.5-6.5 3.4-.6 5.9-3.1 6.5-6.5z" fill="currentColor" stroke="none"/>' },

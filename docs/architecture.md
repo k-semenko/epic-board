@@ -60,8 +60,8 @@ server/http ──┘          │                <id>.history.ndjson
 
 ## Plugin
 
-- `.claude-plugin/` holds the manifests, `skills/epic-board/` holds the instructions for the agent, `skills/review-answers/` the user-run answer review, and `hooks/` holds the hooks.
-- `SessionStart` prints a short brief after compaction or resume, or a hint to bind the session inside a registered repository. It also syncs the service.
-- `PreCompact` asks the summary to point at the board instead of retelling it.
+- `.claude-plugin/` and `.cursor-plugin/` hold the manifests for Claude Code and Cursor. `skills/epic-board/` holds the instructions for the agent, `skills/review-answers/` the user-run answer review, and `hooks/` holds the hooks (`hooks.json` for Claude, `hooks.cursor.json` for Cursor).
+- `SessionStart` / `sessionStart` prints a short brief after compaction or resume (Claude), or a bind hint / bound-epic line (both), and syncs the service. Cursor emits `additional_context` and `EPIC_BOARD_SESSION_ID` in `env` before any service install (fire-and-forget); Claude uses nested `hookSpecificOutput` and can include the sync note in the same payload.
+- `PreCompact` / `preCompact` asks the summarizer to point at the board (Claude plain text) or shows the user a short board reminder (Cursor `user_message`).
 - Answer review starts only after a user request in chat. Hooks and briefs display pending human/agent work and never launch review automatically.
 - Hooks never fail a session: errors go to `<data>/hooks.log`.

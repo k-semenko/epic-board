@@ -286,7 +286,7 @@ export function validateEpic(epic) {
   }
   for (const s of epic.sessions || []) {
     if (s.agent !== undefined && !/^[a-z0-9-]{1,20}$/.test(String(s.agent))) {
-      throw new BoardError(400, 'bad-agent', `session ${s.id}: agent is a lowercase name such as claude, codex, grok`);
+      throw new BoardError(400, 'bad-agent', `session ${s.id}: agent is a lowercase name such as cursor, claude, codex, grok`);
     }
   }
   for (const t of epic.tasks || []) {

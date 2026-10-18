@@ -1,0 +1,25 @@
+{
+  "name": "epic-board",
+  "owner": {
+    "name": "k-semenko",
+    "url": "https://github.com/k-semenko"
+  },
+  "metadata": {
+    "description": "epic-board: a local board for multi-repository work"
+  },
+  "plugins": [
+    {
+      "name": "epic-board",
+      "source": "./",
+      "description": "Local board for multi-repository work: tasks, steps, branches, merge requests, pending decisions, session plans",
+      "version": "0.7.0",
+      "category": "productivity",
+      "tags": [
+        "multi-repo",
+        "dashboard",
+        "git"
+      ],
+      "hooks": "./hooks/hooks.cursor.json"
+    }
+  ]
+}

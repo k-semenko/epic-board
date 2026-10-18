@@ -1,13 +1,13 @@
 ---
 name: epic-board
-description: Local board for multi-repository work (an "epic"): tasks from any tracker, steps, branches, merge requests, merge order, items that need a human decision, session plans and stage documents. Use it when work spans more than one repository or several tasks of one epic, when the user asks for the board, the epic status or "where are we", and when a session continues after compaction. Grok session id is the shell variable GROK_SESSION_ID and the agent name is grok. Claude prints the session id from the session-start hook and the agent name is claude.
+description: Local board for multi-repository work (an "epic"): tasks from any tracker, steps, branches, merge requests, merge order, items that need a human decision, session plans and stage documents. Use it when work spans more than one repository or several tasks of one epic, when the user asks for the board, the epic status or "where are we", and when a session continues after compaction. Cursor session id is $EPIC_BOARD_SESSION_ID (also printed by the session-start hook); agent is cursor. Claude prints the session id from the session-start hook; agent is claude. Grok session id is $GROK_SESSION_ID; agent is grok.
 ---
 
 # epic-board
 
 CLI: `node "<plugin-root>/cli/epic.mjs" <command>` (below: `epic.mjs`). Full reference: `reference/cli.md`, data model: `reference/schema.md`, answer review: `reference/waiting.md`, stage documents: `reference/docs.md`. The board is local storage: it never calls a tracker; you write what you know into it.
 
-The plugin root is the directory that contains `cli/` and `skills/`. This file is `skills/epic-board/SKILL.md`. Take the root from the absolute path you used to read this file and call that copy of the CLI. If `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` is set in the shell, that value is the root; those variables are set for hook processes and are often unset in the agent shell.
+The plugin root is the directory that contains `cli/` and `skills/`. This file is `skills/epic-board/SKILL.md`. Take the root from the absolute path you used to read this file and call that copy of the CLI. If `$CURSOR_PLUGIN_ROOT`, `$CLAUDE_PLUGIN_ROOT` or `$GROK_PLUGIN_ROOT` is set in the shell, that value is the root; those variables are set for hook processes and are often unset in the agent shell.
 
 ## Only the CLI
 
@@ -31,8 +31,9 @@ An id from the link that is not in `show --json` is a question for the user. Pen
 
 ## This session
 
-- **Grok.** Session id is `$GROK_SESSION_ID`. Agent is `grok`. After compaction the session-start note is not in the thread: before the first status or write, `list` and `show` the epic bound to this session id.
+- **Cursor.** Session id is `$EPIC_BOARD_SESSION_ID` (set by the session-start hook; the hook line may also name it). Agent is `cursor`. After compaction the hook does not re-inject the epic brief: before the first status or write, `show` the epic bound to this session id.
 - **Claude.** The session-start hook prints the session id. Agent is `claude`. After compaction the hook prints the epic brief; follow that.
+- **Grok.** Session id is `$GROK_SESSION_ID`. Agent is `grok`. After compaction the session-start note is not in the thread: before the first status or write, `list` and `show` the epic bound to this session id.
 
 ## Starting work
 
