@@ -72,10 +72,10 @@ Rules:
 - `steps[].after`: references `<task>/<step>`. Without `after` a step follows the previous step of its task; write `after` only for cross-task links and forks.
 - `repos[].provider`: `gitlab` (asks `glab mr view`) or `github` (asks `gh pr view`); `project` is `<host>/<owner>/<name>` so the CLI never guesses the host. Without a provider a branch gets git facts only.
 - `waiting[].kind`: `decision | approval | review | action | other`. `refs` support `task:`, `step:`, `branch:`, `doc:`, `decision:`, `waiting:<id>` and `http(s)` links.
-- `input.type`: `confirm` (default), `single` (exactly one selection), `multi` (at least one selection). Choice inputs require at least two options with unique stable IDs and nonempty text; `hint` and `recommended` are optional. A recommendation does not select anything. Every checklist ID must be checked for all input types.
+- `input.type`: `confirm` (default), `single` (exactly one selection), `multi` (at least one selection). Choice inputs require at least two options with unique stable IDs and nonempty text; `hint` and `recommended` are optional. A recommendation does not select anything. Agreement requires every checklist ID for all input types. A clarification submission does not.
 - `status`: `open` waits for a human; `answered` waits for agent review requested in chat; `closed` has an agent outcome. `doneAt` and `resolution` exist only after closure. Both open and answered items block dependencies.
 - `revision` starts at 1; revision 2 and later require a nonempty `revisionReason`. `version` is an opaque token checked under the epic lock and changed on each mutation. Read it immediately before acting.
-- Each immutable `rounds[]` entry contains `{revision, version, request, response, review?}`. `request` snapshots `title`, `details`, `kind`, `task`, `refs`, `input`, `checklist`, `revisionReason` when present. `response` contains `submissionId`, `at`, `by`, explicit `confirmed`, `selected`, `checked`, optional `comment`. `review` is written once with `outcome: accepted|revised`, `at`, `by`, `text`.
+- Each immutable `rounds[]` entry contains `{revision, version, request, response, review?}`. `request` snapshots `title`, `details`, `kind`, `task`, `refs`, `input`, `checklist`, `revisionReason` when present. `response` contains `submissionId`, `at`, `by`, explicit `confirmed`, `selected`, `checked`, optional `comment`, and `clarification: true` when the human sent the item back without agreeing. A clarification has `confirmed: false` and empty `selected` and `checked`. `review` is written once with `outcome: accepted|revised`, `at`, `by`, `text`.
 - Revision archives an answered round with outcome `revised`; reopening a closed item preserves its existing `accepted` review. New revisions start open without a response. The existing checklist and input arrays are retained unless explicitly replaced.
 - Legacy closed items preserve their prior `doneAt`, `checked`, `resolution` and question in `legacyClosure`; no human response is invented. Migrated tokens are deterministic from the epic ID and original item until the first mutation.
 - `repos[].root` and `commonDir` are optional, captured automatically when registering an available path and backfilled by refresh. They identify the primary checkout and shared Git directory, so removing a linked worktree does not prevent Git refresh. Retargeting `path` replaces the captured identity.
@@ -108,6 +108,7 @@ POST `/api/epics/:epic/waiting/:id/<action>` with JSON:
 | Action | Body |
 |---|---|
 | `submit` | `{version, submissionId, confirmed?, selected?, checked?, comment?}`; confirm requires `confirmed:true`; selection/checklist IDs are arrays |
+| `clarify` | `{version, submissionId, comment}`; nonempty comment, no checklist or selection; waits for agent review like submit |
 | `resolve` | `{version, submissionId, resolution}`; current answered round and nonempty outcome required |
 | `revise` | `{version, reason, patch?}`; patch contains request fields only; omitted patch retains the question |
 | `remove` | `{version}`; only open items with no rounds |

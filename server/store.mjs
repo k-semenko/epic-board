@@ -389,6 +389,10 @@ export function submitWaiting(id, itemId, body, opts) {
   return changeWaiting(id, itemId, 'submit', body, opts);
 }
 
+export function clarifyWaiting(id, itemId, body, opts) {
+  return changeWaiting(id, itemId, 'clarify', body, opts);
+}
+
 export function resolveWaiting(id, itemId, body, opts) {
   return changeWaiting(id, itemId, 'resolve', body, opts);
 }

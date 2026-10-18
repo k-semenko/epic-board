@@ -32,8 +32,9 @@ function optionsList(request) {
 function responseMarkup(request, response) {
   const labels = (response.selected || []).map((id) => request.input?.options?.find((option) => option.id === id)?.text || id);
   const conditions = (response.checked || []).map((id) => request.checklist?.find((item) => item.id === id)?.text || id);
+  const lead = response.clarification ? 'w.clarified' : request.input?.type === 'confirm' ? 'w.confirmed' : '';
   return `<div class="wait-answer"><div class="wait-label">${esc(t('w.answer'))} · ${date(response.at)}${response.by ? ` · ${esc(response.by)}` : ''}</div>
-    ${request.input?.type === 'confirm' ? `<p>${esc(t('w.confirmed'))}</p>` : `<ul>${labels.map((label) => `<li>${esc(label)}</li>`).join('')}</ul>`}
+    ${lead ? `<p>${esc(t(lead))}</p>` : `<ul>${labels.map((label) => `<li>${esc(label)}</li>`).join('')}</ul>`}
     ${conditions.length ? `<div class="wait-label">${esc(t('w.prerequisites'))}</div><ul>${conditions.map((text) => `<li>${esc(text)}</li>`).join('')}</ul>` : ''}
     ${response.comment ? `<p class="wait-answer-comment">${esc(response.comment)}</p>` : ''}</div>`;
 }
@@ -74,8 +75,8 @@ function formMarkup(item, draft, stale) {
     <fieldset${stale || draft?.busy ? ' disabled' : ''}>
     ${input.type !== 'confirm' ? `<fieldset><legend>${esc(t(input.type === 'single' ? 'w.chooseSingle' : 'w.chooseMulti'))}</legend><div class="wait-options">${(input.options || []).map((option) => `<label class="wait-option"><input type="${input.type === 'single' ? 'radio' : 'checkbox'}" name="selected" value="${esc(option.id)}"${selected.includes(option.id) && !stale ? ' checked' : ''}><span><span>${esc(option.text)}</span>${option.hint ? `<small>${esc(option.hint)}</small>` : ''}${option.recommended ? `<small>${esc(t('w.recommended'))}</small>` : ''}</span></label>`).join('')}</div></fieldset>` : ''}
     ${item.checklist?.length ? `<fieldset class="wait-prerequisites"><legend>${esc(t('w.prerequisites'))}</legend>${item.checklist.map((condition) => `<label class="wait-option"><input type="checkbox" name="checked" value="${esc(condition.id)}"${checked.includes(condition.id) && !stale ? ' checked' : ''}><span>${esc(condition.text)}</span></label>`).join('')}</fieldset>` : ''}
-    <details class="wait-comment"${comment && !stale ? ' open' : ''} data-wait-part="comment"><summary>${esc(t('w.addComment'))}</summary><textarea name="comment" rows="2" aria-label="${esc(t('w.comment'))}" placeholder="${esc(t('w.optional'))}">${esc(stale ? '' : comment)}</textarea></details>
-    <div class="wait-actions"><button class="primary" type="submit">${esc(t(draft?.busy ? 'w.submitting' : 'w.submit'))}</button></div></fieldset>
+    <label class="wait-comment"><span class="wait-label">${esc(t('w.comment'))}</span><textarea name="comment" rows="2">${esc(stale ? '' : comment)}</textarea></label>
+    <div class="wait-actions"><button class="primary" type="submit" value="agree">${esc(t(draft?.busy && draft.intent !== 'clarify' ? 'w.submitting' : 'w.submit'))}</button><button type="submit" value="clarify">${esc(t(draft?.busy && draft.intent === 'clarify' ? 'w.submitting' : 'w.clarify'))}</button></div></fieldset>
     <p class="wait-error" data-wait-error role="alert"${draft?.error ? '' : ' hidden'}>${esc(draft?.error || '')}</p></form>`;
 }
 
@@ -151,10 +152,21 @@ export class DecisionDrafts {
     return this.items[item.id];
   }
 
-  prepare(item) {
+  prepare(item, intent = 'agree') {
     const draft = this.get(item);
     if (draft.version !== item.version) throw new Error(t('w.stale'));
     if (statusOf(item) !== 'open') throw new Error(t('w.stale'));
+    if (intent === 'clarify') {
+      const comment = draft.comment.trim();
+      if (!comment) throw new Error(t('w.invalidClarification'));
+      // A changed comment is a different request, so the retry id must not be reused.
+      if (draft.intent !== 'clarify' || !draft.payload || draft.payload.comment !== comment) draft.payload = { version: draft.version, submissionId: submissionToken(), comment };
+      draft.intent = 'clarify';
+      this.save();
+      return clone(draft.payload);
+    }
+    if (draft.intent !== 'agree') delete draft.payload;
+    draft.intent = 'agree';
     const type = item.input?.type || 'confirm';
     if (type === 'single' && draft.selected.length !== 1) throw new Error(t('w.invalidSingle'));
     if (type === 'multi' && draft.selected.length < 1) throw new Error(t('w.invalidMulti'));
@@ -164,11 +176,11 @@ export class DecisionDrafts {
     return clone(draft.payload);
   }
 
-  async submit(item, send) {
+  async submit(item, send, intent = 'agree') {
     const draft = this.get(item);
     if (draft.busy) return null;
     try {
-      const payload = this.prepare(item);
+      const payload = this.prepare(item, intent);
       draft.busy = true;
       draft.error = '';
       this.save();

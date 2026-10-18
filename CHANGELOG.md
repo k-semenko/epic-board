@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Send a pending item back for clarification from its card. The comment stays visible, and agreement still requires the checklist.
+
 ## [0.6.0] - 2026-10-17
 
 ### Added

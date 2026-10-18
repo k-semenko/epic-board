@@ -26,7 +26,7 @@ export function waitingAnswer(item) {
   if (!round) return '';
   const { response, request } = round;
   const options = new Map((request.input?.options || []).map((o) => [o.id, o.text]));
-  return [response.confirmed ? 'Confirmed' : '', ...(response.selected || []).map((id) => options.get(id) || id), response.comment].filter(Boolean).join('; ').replace(/\s+/g, ' ');
+  return [response.clarification ? 'Clarification' : '', response.confirmed ? 'Confirmed' : '', ...(response.selected || []).map((id) => options.get(id) || id), response.comment].filter(Boolean).join('; ').replace(/\s+/g, ' ');
 }
 
 // Hook output after compaction: short enough to read in one glance, never more than 25 lines.

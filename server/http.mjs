@@ -170,11 +170,11 @@ export function createBoardServer({ port, run = execRunner } = {}) {
         if (action === 'done' || action === 'undo') {
           throw new BoardError(400, 'waiting-action', `Use waiting/${parts[4]}/${action === 'done' ? 'resolve with version, submissionId and resolution after human submission' : 'revise with version and reason'}`);
         }
-        const mutate = new Map([['submit', store.submitWaiting], ['resolve', store.resolveWaiting], ['revise', store.reviseWaiting], ['remove', store.removeWaiting]]).get(action);
+        const mutate = new Map([['submit', store.submitWaiting], ['clarify', store.clarifyWaiting], ['resolve', store.resolveWaiting], ['revise', store.reviseWaiting], ['remove', store.removeWaiting]]).get(action);
         if (mutate) {
           const body = await readBody(req);
           if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BoardError(400, 'bad-body', 'waiting action body must be an object');
-          return send(res, 200, mutate(id, parts[4], body, { by: action === 'submit' ? 'button' : 'agent' }));
+          return send(res, 200, mutate(id, parts[4], body, { by: action === 'submit' || action === 'clarify' ? 'button' : 'agent' }));
         }
       }
       throw new BoardError(404, 'not-found', 'no such path');

@@ -95,33 +95,44 @@ function answerFor(request, body) {
   return { confirmed, selected, checked, ...(comment ? { comment } : {}) };
 }
 
+function clarificationFor(_request, body) {
+  if (typeof body.comment !== 'string') fail('comment', 'a clarification needs a comment');
+  const comment = body.comment.trim();
+  if (!comment) fail('comment', 'a clarification needs a comment');
+  return { clarification: true, confirmed: false, selected: [], checked: [], comment };
+}
+
 function currentVersion(item, version) {
   text(version, 'version');
   if (item.version !== version) fail('waiting-changed', 'the request changed; reread it before continuing', 409);
 }
 
+// Same submission id replays only an identical answer, including after the agent has reviewed it.
+function recordAnswer(item, body, answerOf, at, by) {
+  const submissionId = text(body.submissionId, 'submissionId');
+  text(body.version, 'version');
+  const previous = item.rounds.find((round) => round.response.submissionId === submissionId);
+  if (previous) {
+    const { at: ignoredAt, by: ignoredBy, submissionId: ignoredId, ...answer } = previous.response;
+    let repeated;
+    try { repeated = answerOf(previous.request, body); }
+    catch (error) {
+      if (!(error instanceof BoardError)) throw error;
+      fail('submission-conflict', 'submissionId was already used for a different response', 409);
+    }
+    if (body.version !== previous.version || JSON.stringify(repeated) !== JSON.stringify(answer)) fail('submission-conflict', 'submissionId was already used for a different response', 409);
+    return item;
+  }
+  currentVersion(item, body.version);
+  if (item.status !== 'open') fail('waiting-state', 'only an open request accepts a new answer', 409);
+  const answer = answerOf(item, body);
+  return { ...item, status: 'answered', version: randomUUID(), rounds: [...item.rounds, { revision: item.revision, version: item.version, request: snapshot(item), response: { submissionId, at, by, ...answer } }] };
+}
+
 export function transitionWaiting(item, action, body, { by = 'cli', at = new Date().toISOString() } = {}) {
   if (!object(body)) fail('bad-waiting', 'waiting action body must be an object');
-  if (action === 'submit') {
-    const submissionId = text(body.submissionId, 'submissionId');
-    text(body.version, 'version');
-    const previous = item.rounds.find((round) => round.response.submissionId === submissionId);
-    if (previous) {
-      const { at: ignoredAt, by: ignoredBy, submissionId: ignoredId, ...answer } = previous.response;
-      let repeated;
-      try { repeated = answerFor(previous.request, body); }
-      catch (error) {
-        if (!(error instanceof BoardError)) throw error;
-        fail('submission-conflict', 'submissionId was already used for a different response', 409);
-      }
-      if (body.version !== previous.version || JSON.stringify(repeated) !== JSON.stringify(answer)) fail('submission-conflict', 'submissionId was already used for a different response', 409);
-      return item;
-    }
-    currentVersion(item, body.version);
-    if (item.status !== 'open') fail('waiting-state', 'only an open request accepts a new answer', 409);
-    const answer = answerFor(item, body);
-    return { ...item, status: 'answered', version: randomUUID(), rounds: [...item.rounds, { revision: item.revision, version: item.version, request: snapshot(item), response: { submissionId, at, by, ...answer } }] };
-  }
+  if (action === 'submit') return recordAnswer(item, body, answerFor, at, by);
+  if (action === 'clarify') return recordAnswer(item, body, clarificationFor, at, by);
   currentVersion(item, body.version);
   if (action === 'remove') {
     if (item.status !== 'open' || item.rounds.length || item.legacyClosure) fail('waiting-state', 'a request with answers or a previous closure cannot be removed', 409);

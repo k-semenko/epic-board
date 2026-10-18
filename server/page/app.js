@@ -1410,7 +1410,8 @@ function bindDecisionForms(id) {
     const item = current.waiting.find((w) => w.id === form.dataset.waitForm);
     if (!item || decisionDrafts.get(item).busy) return;
     readForm(form);
-    const result = decisionDrafts.submit(item, (body) => api(`/api/epics/${enc(id)}/waiting/${enc(item.id)}/submit`, { method: 'POST', body }));
+    const intent = event.submitter?.value === 'clarify' ? 'clarify' : 'agree';
+    const result = decisionDrafts.submit(item, (body) => api(`/api/epics/${enc(id)}/waiting/${enc(item.id)}/${intent === 'clarify' ? 'clarify' : 'submit'}`, { method: 'POST', body }), intent);
     renderWaiting(current);
     try {
       const epic = await result;
