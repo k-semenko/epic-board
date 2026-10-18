@@ -94,7 +94,7 @@ test('the whole epic card is the link, not only the title', () => {
     updatedAt: '2026-10-17T00:00:00.000Z',
   }]);
   const html = epics.innerHTML;
-  const card = html.match(/<li><a href="\/e\/shop" class="epic-link">([\s\S]*?)<\/a>([\s\S]*?)<\/li>/);
+  const card = html.match(/<li\b[^>]*><a href="\/e\/shop" class="epic-link">([\s\S]*?)<\/a>([\s\S]*?)<\/li>/);
   assert.ok(card, html);
   assert.match(card[1], /Shop/);
   assert.match(card[1], /Ship the counter/);

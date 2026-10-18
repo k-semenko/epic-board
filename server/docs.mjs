@@ -3,40 +3,12 @@ import path from 'node:path';
 import { dataDir } from './paths.mjs';
 import { readEpic, patchEpic, writeAtomic, checkId } from './store.mjs';
 import { BoardError } from './errors.mjs';
+import { checkDocPath } from './doc-paths.mjs';
 
 export const DOC_KINDS = ['spec', 'plan', 'log', 'review', 'note'];
 
 export function docsDir(id) {
   return path.join(dataDir(), 'epics', checkId(id), 'docs');
-}
-
-// Symlinks are resolved (macOS /var is /private/var); a missing file is resolved through its folder.
-const real = (p) => {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    try {
-      return path.join(fs.realpathSync(path.dirname(path.resolve(p))), path.basename(p));
-    } catch {
-      return path.resolve(p);
-    }
-  }
-};
-
-// Only the board's own docs folder and the epic's repositories and worktrees may be read or written.
-function allowedRoots(epic) {
-  const roots = [docsDir(epic.id), ...Object.values(epic.repos || {}).map((r) => r.path)];
-  for (const t of epic.tasks || []) for (const b of t.branches || []) if (b.worktree) roots.push(b.worktree);
-  return roots.filter(Boolean).map(real);
-}
-
-function checkPath(epic, file) {
-  const full = real(path.resolve(file));
-  if (!full.endsWith('.md')) throw new BoardError(400, 'not-md', `documents are .md files only: ${file}`);
-  if (!allowedRoots(epic).some((root) => full === root || full.startsWith(root + path.sep))) {
-    throw new BoardError(403, 'outside', `file is outside the epic's folders (repos, worktrees, board documents): ${file}`);
-  }
-  return full;
 }
 
 function checkPlace(epic, { task, step, kind, title }) {
@@ -83,7 +55,7 @@ export function newDoc(id, fields) {
 export function linkDoc(id, fields) {
   const epic = readEpic(id);
   checkPlace(epic, fields);
-  const file = checkPath(epic, fields.path);
+  const file = checkDocPath(epic, fields.path, docsDir(epic.id));
   if (!fs.existsSync(file)) throw new BoardError(404, 'no-file', `no such file: ${fields.path}`);
   return register(id, base(fields, newId(), { path: file, owned: false }));
 }
@@ -91,7 +63,7 @@ export function linkDoc(id, fields) {
 export function importDoc(id, fields) {
   const epic = readEpic(id);
   checkPlace(epic, fields);
-  const source = checkPath(epic, fields.path);
+  const source = checkDocPath(epic, fields.path, docsDir(epic.id));
   if (!fs.existsSync(source)) throw new BoardError(404, 'no-file', `no such file: ${fields.path}`);
   const docId = newId();
   const file = ownedPath(id, fields, docId);
@@ -103,7 +75,7 @@ function findDoc(id, docId) {
   const epic = readEpic(id);
   const doc = (epic.docs || []).find((d) => d.id === docId);
   if (!doc) throw new BoardError(404, 'no-doc', `no document ${docId}`);
-  return { epic, doc, file: checkPath(epic, doc.path) };
+  return { epic, doc, file: checkDocPath(epic, doc.path, docsDir(epic.id)) };
 }
 
 export function readDoc(id, docId) {

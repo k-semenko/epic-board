@@ -10,6 +10,7 @@ import { VERSION } from './version.mjs';
 import * as docs from './docs.mjs';
 import { BoardError } from './errors.mjs';
 import { readSettings, writeSettings } from './settings.mjs';
+import { readBoardSnapshot, linksForEpic } from './links.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -106,7 +107,14 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       }
       if (parts[1] !== 'epics') throw new BoardError(404, 'not-found', 'no such path');
       if (parts.length === 2) {
-        if (m === 'GET') return send(res, 200, store.listEpics().map(summary));
+        if (m === 'GET') {
+          const snapshot = readBoardSnapshot();
+          if (!snapshot.epics.length && snapshot.errors.length) throw new BoardError(500, 'unavailable-board', 'cannot read any epic files');
+          return send(res, 200, [...snapshot.epics].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).map((epic) => {
+            const { relatedEpics, incomplete, readAt } = linksForEpic(snapshot, epic.id);
+            return { ...summary(epic), relatedEpics, incomplete, readAt };
+          }));
+        }
         if (m === 'POST') {
           const body = await readBody(req);
           return send(res, 201, store.createEpic(body, { by: BY.has(body.by) ? body.by : 'agent' }));
@@ -116,6 +124,7 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       const tail = parts.slice(3).join('/');
       if (m === 'GET' && tail === '') return send(res, 200, store.readEpic(id));
       if (m === 'GET' && tail === 'rev') return send(res, 200, { updatedAt: store.readEpic(id).updatedAt });
+      if (m === 'GET' && tail === 'links') return send(res, 200, linksForEpic(readBoardSnapshot(), id));
       if (m === 'GET' && tail === 'history') {
         const limit = url.searchParams.get('limit');
         return send(res, 200, store.readHistory(id, { limit: limit === 'all' ? Infinity : Math.min(Number(limit) || 20, 500) }));

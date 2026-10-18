@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-18
+
+### Added
+
+- Informational links between steps in different epics, with current counterpart states, backlinks and related epics on the home page.
+- Link snapshots in task reports and standalone HTML exports, including missing-target and incomplete-data notices.
+- Delete tasks and steps from the CLI with reference checks and an explicit `--cleanup-refs` option that preserves documents and immutable history.
+
+### Fixed
+
+- Keep external links intact when deleting a local task with the same ID as a foreign epic, and preserve focused controls and drafts during link updates.
+
 ## [0.9.0] - 2026-10-18
 
 ### Added

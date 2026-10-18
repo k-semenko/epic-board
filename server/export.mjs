@@ -1,15 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readEpic, readHistory } from './store.mjs';
-import { allTexts } from './docs.mjs';
+import { checkId, readHistory } from './store.mjs';
+import { docsDir } from './docs.mjs';
 import { readSettings } from './settings.mjs';
+import { checkDocPath } from './doc-paths.mjs';
+import { readBoardSnapshot, linksForEpic } from './links.mjs';
 
 const PAGE = join(dirname(fileURLToPath(import.meta.url)), 'page');
 const VENDOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'vendor');
 const inlineScript = (code) => `<script>\n${code.replace(/<\/script/gi, '<\\/script')}\n</script>`;
 // Order matters: a module may only import the ones listed before it.
-const DEPS = { './i18n.mjs': '__i18n', './lanes.mjs': '__lanes', './icons.mjs': '__icons', './history.mjs': '__history', './markdown.mjs': '__markdown', './section-order.mjs': '__sectionOrder', './section-settings.mjs': '__sectionSettings', './waiting.mjs': '__waiting', './pagination.mjs': '__pagination', './doc-editor.mjs': '__docEditor' };
+const DEPS = { './i18n.mjs': '__i18n', './lanes.mjs': '__lanes', './icons.mjs': '__icons', './links.mjs': '__links', './history.mjs': '__history', './markdown.mjs': '__markdown', './section-order.mjs': '__sectionOrder', './section-settings.mjs': '__sectionSettings', './waiting.mjs': '__waiting', './pagination.mjs': '__pagination', './doc-editor.mjs': '__docEditor' };
 const IMPORT = /^import\s*\{([^}]+)\}\s*from\s*'([^']+)';\s*$/gm;
 const linkImports = (src) => src.replace(IMPORT, (_, list, from) => {
   if (!DEPS[from]) throw new Error(`export bundle: unknown module ${from}`);
@@ -46,10 +48,19 @@ function detachLocalIcons(html) {
 }
 
 export function buildExport(id) {
-  const epic = readEpic(id);
+  const epicId = checkId(id);
+  const snapshot = readBoardSnapshot();
+  const links = linksForEpic(snapshot, epicId);
+  const epic = snapshot.epics.find((value) => String(value.id) === epicId);
   const history = readHistory(id, { limit: Infinity });
   const css = readFileSync(join(PAGE, 'style.css'), 'utf8');
-  const data = { epic, history, docs: allTexts(id), settings: readSettings(), exportedAt: new Date().toISOString() };
+  const docs = [];
+  for (const doc of epic.docs || []) {
+    try {
+      docs.push({ id: doc.id, title: doc.title, text: readFileSync(checkDocPath(epic, doc.path, docsDir(epicId)), 'utf8') });
+    } catch {}
+  }
+  const data = { epic, links, history, docs, settings: readSettings(), exportedAt: new Date().toISOString() };
   return detachLocalIcons(readFileSync(join(PAGE, 'epic.html'), 'utf8'))
     .replace(/<title>[^<]*<\/title>/, `<title>${escHtml(epic.id)} · ${escHtml(epic.title)} · EpicBoard</title>`)
     .replace('<link rel="stylesheet" href="/static/style.css">', () => `<style>\n${css}\n</style>`)
