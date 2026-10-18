@@ -270,7 +270,7 @@ test('overview: mutual step links stay in neighboring columns', () => {
   assert.deepEqual(['base', 'app', 'native', 'ship', '@goal'].map(column), [0, 1, 2, 3, 4]);
   assert.equal(overview.cols, 5);
   assert.ok(overview.edges.some((edge) => edge.from === 'app' && edge.to === 'native'));
-  assert.ok(overview.edges.some((edge) => edge.from === 'native' && edge.to === 'app'));
+  assert.ok(!overview.edges.some((edge) => edge.from === 'native' && edge.to === 'app'));
 });
 
 test('overview: cards of one column stack in rows', () => {

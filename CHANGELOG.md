@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - Keep neighboring task cards one gap apart when their steps depend on each other. A collapsed cycle no longer stretches the first arrow across empty columns.
+- Do not draw a task arrow back to the previous card when a later step waits on the next task. That link stays on the opened task.
 
 ### Changed
 

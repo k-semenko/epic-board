@@ -209,7 +209,8 @@ export function buildOverview(epic) {
   };
   const nodes = lanes.map((l) => ({ ...taskNode(l), col: col.get(l.id) }));
   const side = map.side.map((l) => ({ ...taskNode(l), side: true }));
-  const edges = [...links.values()].filter((e) => col.has(e.from));
+  // The map is one arrow per task. A later step of the earlier task may wait on the next task; that return stays on the step list.
+  const edges = [...links.values()].filter((e) => col.has(e.from) && (!col.has(e.to) || col.get(e.to) >= col.get(e.from)));
 
   const mergeBranches = new Set(map.merge.map((m) => m.branch).filter(Boolean));
   const merged = lanes.filter((l) => l.branches.some((b) => mergeBranches.has(b))).map((l) => l.id);
