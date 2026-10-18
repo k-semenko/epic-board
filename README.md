@@ -4,7 +4,7 @@
 
 A local board for work that spans several repositories and several tasks at once — an *epic*. It keeps in one place what usually lives in chat scrollback and in your head: which task is at which step, which branch belongs to what, which merge request is green, what has to be merged first, and what is waiting for a human decision.
 
-It ships as a [Claude Code](https://code.claude.com) plugin and a [Cursor](https://cursor.com) plugin: the agent writes to the board as work happens and reads it back after a context compaction, so a long multi-repo task survives `/compact` and new sessions. You can use the board and its CLI without an agent too.
+It ships as a [Claude Code](https://code.claude.com), [Cursor](https://cursor.com) and [Codex](https://developers.openai.com/codex) plugin: the agent writes to the board as work happens and reads it back after a context compaction, so a long multi-repo task survives `/compact` and new sessions. You can use the board and its CLI without an agent too.
 
 - **Any tracker.** Tasks have any id (`PROJ-12`, `#42`, `web-login`) and a link to wherever they live. The board never calls a tracker: it is storage you write to.
 - **Facts from git, not from memory.** `refresh` runs `git fetch` once per repository and recounts every branch: head, distance from the base, unpushed commits, dirty worktree. With `glab` or `gh` it also reads merge request / pull request state and pipeline.
@@ -41,6 +41,21 @@ To stay on a release instead of following the default branch: `/plugin marketpla
 In Cursor: **Customize → Plugins → From GitHub Repository**, add `k-semenko/epic-board`, then install `epic-board`. Or for a local clone, copy or sync the repo into `~/.cursor/plugins/local/epic-board` and reload the window.
 
 Then ask the agent to install the epic-board service, or run `node cli/epic.mjs service install` from the clone (or from the installed plugin root). Bind sessions with `--agent cursor`; the session id is `$EPIC_BOARD_SESSION_ID` from the session-start hook.
+
+### As a Codex plugin
+
+Add the marketplace and install the plugin:
+
+```sh
+codex plugin marketplace add k-semenko/epic-board
+codex plugin add epic-board@epic-board
+```
+
+Restart Codex or reopen the chat to load the plugin. Review and trust its hooks through `/hooks` where supported. Invoke `$epic-board:epic-board` to use the board and `$epic-board:review-answers` to review submitted answers; answer review requires an explicit user request.
+
+Bind sessions with `--agent codex`; the session id is `$CODEX_THREAD_ID` in the shell or `session_id` in the session-start hook. The hook restores the epic brief on resume and after compaction. The first service installation needs your separate approval: ask the agent to install it, or run `node cli/epic.mjs service install` from the clone or installed plugin root yourself. Enabled session-start hooks update an existing service after plugin upgrades.
+
+For a local checkout, use `codex plugin marketplace add /absolute/path/to/epic-board` instead.
 
 ### From source
 

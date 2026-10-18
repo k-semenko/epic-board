@@ -1,6 +1,6 @@
 {
   "name": "epic-board",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Local board for multi-repository work: tasks from any tracker, steps, branches, merge requests, decisions that need a human, session plans and stage documents.",
   "author": {
     "name": "k-semenko",

@@ -1,0 +1,22 @@
+{
+  "name": "epic-board",
+  "version": "0.8.0",
+  "description": "Local board for multi-repository work: tasks from any tracker, steps, branches, merge requests, decisions that need a human, session plans and stage documents.",
+  "author": {
+    "name": "k-semenko",
+    "url": "https://github.com/k-semenko"
+  },
+  "homepage": "https://github.com/k-semenko/epic-board",
+  "repository": "https://github.com/k-semenko/epic-board",
+  "license": "MIT",
+  "keywords": ["multi-repo", "dashboard", "epic", "merge-request", "workflow"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.codex.json",
+  "interface": {
+    "displayName": "epic-board",
+    "shortDescription": "Track multi-repository work on a local board",
+    "developerName": "k-semenko",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"]
+  }
+}

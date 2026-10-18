@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-18
+
+### Added
+
+- Codex plugin manifest, local marketplace and SessionStart hook that restores the epic brief on resume and after compaction.
+- Codex skill metadata, with `$epic-board:review-answers` restricted to explicit invocation.
+
+### Changed
+
+- Skills cover Codex session binding with `$CODEX_THREAD_ID` and `--agent codex`.
+- Codex examples use fully qualified plugin skill names.
+
 ## [0.7.0] - 2026-10-18
 
 ### Added
@@ -113,7 +125,10 @@ First public release.
 - The UI is bilingual (English and Russian).
 - Linux support via `systemd --user`.
 
-[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/k-semenko/epic-board/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/k-semenko/epic-board/compare/v0.6.2...v0.7.0
+[0.6.2]: https://github.com/k-semenko/epic-board/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/k-semenko/epic-board/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/k-semenko/epic-board/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/k-semenko/epic-board/compare/v0.5.0...v0.5.1
