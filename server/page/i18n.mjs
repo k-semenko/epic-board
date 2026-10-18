@@ -1,5 +1,11 @@
 // UI strings in both languages; a key missing in one language falls back to English.
 const en = {
+  'links.title': 'Cross-epic links', 'links.outgoing': 'Related to:', 'links.incoming': 'Used in:',
+  'links.none': 'No cross-epic links for this step', 'links.related': 'Related epics:',
+  'links.missing': 'not found', 'links.unavailableTarget': 'unavailable', 'links.badge': 'Cross-epic links: {n}',
+  'links.unavailable': 'Links unavailable', 'links.indexUnavailable': 'Epic list unavailable',
+  'links.stale': 'Could not refresh links; last known state at', 'links.indexStale': 'Could not refresh epics; last known state at',
+  'links.incomplete': 'Backlinks may be incomplete', 'links.checked': 'Links checked at', 'links.snapshot': 'Snapshot at',
   'h.waitStage': 'stage', 'h.waitRevision': 'question revision', 'h.waitSubmitted': 'answer submitted', 'h.waitReviewed': 'agent reviewed',
   "w.type.confirm": "Confirmation",
   "w.type.single": "Single choice",
@@ -120,6 +126,12 @@ const en = {
 };
 
 const ru = {
+  'links.title': 'Связи между эпиками', 'links.outgoing': 'Связано с:', 'links.incoming': 'Используется в:',
+  'links.none': 'У этого шага нет связей с другими эпиками', 'links.related': 'Связанные эпики:',
+  'links.missing': 'не найдено', 'links.unavailableTarget': 'недоступно', 'links.badge': 'Связи с другими эпиками: {n}',
+  'links.unavailable': 'Связи недоступны', 'links.indexUnavailable': 'Список эпиков недоступен',
+  'links.stale': 'Не удалось обновить связи; последнее известное состояние на', 'links.indexStale': 'Не удалось обновить эпики; последнее известное состояние на',
+  'links.incomplete': 'Обратные ссылки могут быть неполными', 'links.checked': 'Связи проверены на', 'links.snapshot': 'Снимок на',
   'h.waitStage': 'этап', 'h.waitRevision': 'редакция вопроса', 'h.waitSubmitted': 'ответ отправлен', 'h.waitReviewed': 'агент проверил',
   "w.type.confirm": "Подтверждение",
   "w.type.single": "Один вариант",

@@ -9,6 +9,8 @@ import { boardUrl } from '../server/paths.mjs';
 import { buildExport } from '../server/export.mjs';
 import * as docs from '../server/docs.mjs';
 import { BoardError } from '../server/errors.mjs';
+import { readBoardSnapshot, linksForEpic } from '../server/links.mjs';
+import { parseStepRef } from '../server/step-refs.mjs';
 
 const OPTIONS = {
   title: { type: 'string' }, goal: { type: 'string' }, url: { type: 'string' }, path: { type: 'string' }, base: { type: 'string' },
@@ -22,7 +24,7 @@ const OPTIONS = {
   check: { type: 'string', multiple: true }, checked: { type: 'string' }, resolution: { type: 'string' },
   task: { type: 'string' }, by: { type: 'string' }, set: { type: 'string' }, session: { type: 'string' },
   doing: { type: 'string' }, next: { type: 'string' }, agent: { type: 'string' }, branch: { type: 'string' }, why: { type: 'string' },
-  json: { type: 'boolean' }, delete: { type: 'boolean' }, out: { type: 'string' }, repo: { type: 'string' },
+  json: { type: 'boolean' }, delete: { type: 'boolean' }, 'cleanup-refs': { type: 'boolean' }, out: { type: 'string' }, repo: { type: 'string' },
 };
 
 const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value clears the field)
@@ -31,7 +33,9 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
   new <epic> --title T [--goal G] [--url U]    create an epic (id: letters, digits, . _ -)
   repo <epic> <name> --path P [--base main] [--provider gitlab|github --project host/owner/name]
   task <epic> <task> --title T [--url U] [--tracker Jira] [--status S] [--role main|side]
+  task <epic> <task> --delete [--cleanup-refs]
   step <epic> <task>/<step> [--title T] [--state done|active|todo|blocked|waiting] [--after t/s,...] [--label L] [--note N]
+  step <epic> <task>/<step> --delete [--cleanup-refs]
   branch <epic> <task> <repo> <branch> [--worktree P] [--mr N] [--delete]
   open-item <epic> <task> add <text> | done <id>
   wait <epic> add <id> --title T [--kind decision|approval|review|action|other] [--details MD] [--task T]
@@ -58,6 +62,12 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
   doctor [--repo PATH]                         tools, credentials and paths as this machine sees them
   service install|uninstall|status             run the board as a user service (launchd / systemd)
 
+Deletion refuses incoming references by default. --cleanup-refs detaches dependencies,
+documents, waiting/session links and orphan branch links in merge order; document files,
+append-only decisions and waiting history are retained. Waiting versions change; statuses stay.
+If a document loses its last allowed worktree root, import/relink it or retain the root first.
+Task/step --delete cannot be combined with edit flags. --cleanup-refs requires --delete.
+
 Every change accepts --why "<reason>", which goes into the history.`;
 
 const now = () => new Date().toISOString();
@@ -69,6 +79,31 @@ const need = (value, what) => {
 const patch = (epic, body, why) => store.patchEpic(epic, body, { by: 'cli', why: why || '' });
 // "-" clears a field: the merge patch treats null as removal.
 const orNull = (v) => (v === '-' ? null : v);
+
+const deleting = (o) => {
+  if (o['cleanup-refs'] && !o.delete) throw new BoardError(400, 'usage', '--cleanup-refs requires --delete');
+  if (o.delete) {
+    const edits = Object.keys(o).filter((key) => !['delete', 'cleanup-refs', 'why', 'json'].includes(key));
+    if (edits.length) throw new BoardError(400, 'usage', `--delete cannot be combined with edit flags: ${edits.map((key) => `--${key}`).join(', ')}`);
+  }
+  return o.delete;
+};
+const deletionOptions = (o) => ({ cleanupRefs: o['cleanup-refs'] || false, by: 'cli', why: o.why || '' });
+
+function warnAfter(epic, task, step, after) {
+  const targets = new Set((after || []).map((value) => parseStepRef(value, epic)).filter((ref) => ref && !ref.local).map((ref) => ref.address));
+  if (!targets.size) return;
+  try {
+    const links = linksForEpic(readBoardSnapshot(), epic);
+    for (const edge of links.outgoing) {
+      if (edge.source.task === task && edge.source.step === step && targets.has(edge.target.address) && edge.status !== 'resolved') {
+        console.error(`warning: ${edge.target.address}: ${edge.status}`);
+      }
+    }
+  } catch (error) {
+    console.error(`warning: cannot check external links: ${error.detail || error.message}`);
+  }
+}
 
 const listIds = (value) => value === undefined ? [] : value.split(',').map((s) => s.trim()).filter(Boolean);
 const waitingRequest = (o, currentInput) => {
@@ -97,11 +132,22 @@ const COMMANDS = {
     return o.url ? patch(epic, { url: o.url }, o.why) : created;
   },
   repo: ([epic, name], o) => patch(epic, { repos: { [need(name, 'repo name')]: defined({ path: o.path, base: o.base, provider: orNull(o.provider), project: orNull(o.project) }) } }, o.why),
-  task: ([epic, task], o) => patch(epic, { tasks: [defined({ id: need(task, 'task id'), title: o.title, url: orNull(o.url), tracker: orNull(o.tracker), role: o.role, status: orNull(o.status), statusCheckedAt: o.status ? now() : undefined })] }, o.why),
+  task: ([epic, task], o) => {
+    need(task, 'task id');
+    if (deleting(o)) return store.deleteTask(epic, task, deletionOptions(o));
+    return patch(epic, { tasks: [defined({ id: task, title: o.title, url: orNull(o.url), tracker: orNull(o.tracker), role: o.role, status: orNull(o.status), statusCheckedAt: o.status ? now() : undefined })] }, o.why);
+  },
   step: ([epic, ref], o) => {
+    const remove = deleting(o);
+    if (remove && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/[\w.-]{1,64}$/.test(need(ref, '<task>/<step>'))) {
+      throw new BoardError(400, 'usage', 'step reference must be <task>/<step> with valid task and step ids');
+    }
     const [task, step] = need(ref, '<task>/<step>').split('/');
+    if (remove) return store.deleteStep(epic, task, step, deletionOptions(o));
     const after = o.after === undefined ? undefined : o.after === '-' ? null : o.after.split(',').map((s) => s.trim()).filter(Boolean);
-    return patch(epic, { tasks: [{ id: task, steps: [defined({ id: need(step, 'step id'), title: o.title, state: o.state, after, label: orNull(o.label), note: orNull(o.note) })] }] }, o.why);
+    const result = patch(epic, { tasks: [{ id: task, steps: [defined({ id: need(step, 'step id'), title: o.title, state: o.state, after, label: orNull(o.label), note: orNull(o.note) })] }] }, o.why);
+    if (after !== undefined) warnAfter(epic, task, step, after);
+    return result;
   },
   branch: ([epic, task, repo, name], o) => patch(epic, { tasks: [{ id: need(task, 'task id'), branches: [defined({ repo: need(repo, 'repo'), name: need(name, 'branch name'), worktree: orNull(o.worktree), mr: o.mr ? { iid: Number(o.mr) } : undefined, $delete: o.delete || undefined })] }] }, o.why),
   'open-item': ([epic, task, action, value], o) => {
@@ -159,7 +205,13 @@ const COMMANDS = {
     return { text: Object.keys(results).map((key) => branchLine(key, next.facts[key], null)).join('\n') || 'no branches', epic: next };
   },
   show: ([epic], o) => (o.json ? store.readEpic(epic) : { text: buildBrief(store.readEpic(epic), { session: o.session }) }),
-  report: ([epic], o) => ({ text: buildReport(store.readEpic(epic), { task: need(o.task, '--task') }) }),
+  report: ([epic], o) => {
+    const task = need(o.task, '--task');
+    const id = store.checkId(epic);
+    const snapshot = readBoardSnapshot();
+    const links = linksForEpic(snapshot, id);
+    return { text: buildReport(snapshot.epics.find((value) => String(value.id) === id), { task, links }) };
+  },
   url: ([epic]) => ({ text: boardUrl(store.checkId(epic)) }),
   doc: ([action, epic, a, b], o) => {
     const place = (ref) => {
@@ -205,6 +257,7 @@ async function main() {
   const fn = COMMANDS[command ?? 'help'];
   if (!fn) throw new BoardError(400, 'usage', `no command "${command}"; run "epic.mjs help"`);
   const { values, positionals } = parseArgs({ args: rest, options: OPTIONS, allowPositionals: true, strict: true });
+  if (values['cleanup-refs'] && !['task', 'step'].includes(command)) throw new BoardError(400, 'usage', '--cleanup-refs requires task or step --delete');
   const out = await fn(positionals, values);
   if (values.json) console.log(JSON.stringify(out.epic ?? out, null, 2));
   else if (out?.text !== undefined) console.log(out.text);
