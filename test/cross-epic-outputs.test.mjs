@@ -169,11 +169,11 @@ test('report escapes names and labels and exposes resolution errors and incomple
   const epic = { id: 'own', tasks: [{ id: 't', title: 'Task', steps: [{ id: 's', title: 'Step', state: 'done' }] }] };
   const endpoint = { epic: 'own', task: 't', step: 's', address: 'own/t/s', epicTitle: 'Own', title: '<img> [Task](javascript:bad)', state: 'done', url: 'http://localhost:4747/e/own#t-t/s' };
   const links = {
-    outgoing: [{ source: endpoint, target: { ...endpoint, epic: 'foreign', address: 'foreign/t/s', title: '[target](javascript:bad)', epicTitle: '<svg>', url: 'http://localhost:4747/e/foreign#t-t/s' }, label: '<script>\n**label**', status: 'missing-step' }],
+    outgoing: [{ source: endpoint, target: { ...endpoint, epic: 'foreign', address: 'foreign/t/s', title: '[target](javascript:bad)', epicTitle: '<svg>', url: 'http://localhost:4747/e/foreign#t-t/s' }, label: '<sCrIpT>\n**label**', status: 'missing-step' }],
     incoming: [], incomplete: true, errors: [{ id: 'broken', status: 'unavailable' }], readAt: '2026-10-18T12:00:00.000Z',
   };
   const text = buildReport(epic, { task: 't', links });
-  assert.doesNotMatch(text, /<img>|<svg>|<script>|\[Task\]\(javascript|\[target\]\(javascript|\*\*label\*\*/);
+  assert.doesNotMatch(text, /<img>|<svg>|<script>|\[Task\]\(javascript|\[target\]\(javascript|\*\*label\*\*/i);
   assert.match(text, /&lt;img&gt;/);
   assert.match(text, /\\\[Task\\\]/);
   assert.match(text, /missing-step/);
