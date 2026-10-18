@@ -328,19 +328,22 @@ function bindSideCarousel() {
   }, { passive: false });
 }
 
-// Quarter-circle corners. A radius of a few pixels still reads as a square elbow.
+// Quarter-circle corners. The stroke leaves the card sideways, then turns up in the gap.
 function roundedSkip(xLeave, yLeave, xTip, yTip, arch) {
   const dir = xTip >= xLeave ? 1 : -1;
+  const yOut = yLeave - 36;
   const roomX = Math.abs(xTip - xLeave);
-  const roomY = Math.min(Math.abs(yLeave - arch), Math.abs(yTip - arch));
-  const R = Math.max(12, Math.min(36, roomX / 4, (roomY - 4) / 2));
+  const roomY = Math.min(yOut - arch, yTip - arch);
+  const R = Math.max(12, Math.min(36, roomX / 5, (roomY - 8) / 2));
   const k = R * 0.5523;
-  const xL = xLeave;
-  const xR = xTip - dir * R;
   const n = (v) => Math.round(v * 10) / 10;
+  const xRise = xLeave + dir * R;
+  const xLane = xLeave + dir * 2 * R;
+  const xDrop = xTip - dir * R;
+  const xLaneEnd = xTip - dir * 2 * R;
   const yTop = arch + R;
   const yBot = yTip - R;
-  return `M${n(xL)},${n(yLeave)} V${n(yTop)} C${n(xL)},${n(yTop - k)} ${n(xL + dir * (R - k))},${n(arch)} ${n(xL + dir * R)},${n(arch)} H${n(xR - dir * R)} C${n(xR - dir * (R - k))},${n(arch)} ${n(xR)},${n(arch + k)} ${n(xR)},${n(yTop)} V${n(yBot)} C${n(xR)},${n(yBot + k)} ${n(xTip - dir * k)},${n(yTip)} ${n(xTip)},${n(yTip)}`;
+  return `M${n(xLeave)},${n(yOut)} C${n(xLeave + dir * k)},${n(yOut)} ${n(xRise)},${n(yOut - R + k)} ${n(xRise)},${n(yOut - R)} V${n(yTop)} C${n(xRise)},${n(yTop - k)} ${n(xLane - dir * k)},${n(arch)} ${n(xLane)},${n(arch)} H${n(xLaneEnd)} C${n(xLaneEnd + dir * k)},${n(arch)} ${n(xDrop)},${n(arch + k)} ${n(xDrop)},${n(yTop)} V${n(yBot)} C${n(xDrop)},${n(yBot + k)} ${n(xTip - dir * k)},${n(yTip)} ${n(xTip)},${n(yTip)}`;
 }
 
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
