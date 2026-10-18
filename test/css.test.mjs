@@ -33,7 +33,8 @@ test('style.css has balanced braces and no orphan selectors', () => {
   assert.match(css, /#map > \.overview\.has-side\.map-h-m \{[^}]*height: 400px/);
   assert.match(css, /#map > \.overview\.has-side\.map-h-l \{[^}]*height: calc\(100dvh - var\(--map-l-cut, 128px\)\)/);
   assert.match(css, /\.tl-svg:has\(\.tl-node\.selected\) \.tl-node:not\(\.selected\)[^{]*\{[^}]*opacity: \.5/);
-  assert.doesNotMatch(css, /\.ov-svg:has\(\.ov-card\.selected\)/);
+  assert.match(css, /\.ov-svg:has\(\.ov-card\.selected\) \.tl-edge:not\(\.lit\)[^{]*\{[^}]*opacity: \.16/);
+  assert.match(css, /\.ov-svg:has\(\.ov-card\.selected\) \.tl-edge\.lit[^{]*\{[^}]*stroke-width: 2\.1/);
   assert.match(css, /\.ov-info \{[^}]*top: 9px/);
   assert.match(css, /\.ov-info \{[^}]*right: 8px/);
   assert.match(css, /\.ov-info \{[^}]*width: 20px/);
