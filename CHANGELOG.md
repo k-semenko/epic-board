@@ -10,6 +10,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Send a pending item back for clarification from its card. The comment stays visible, and agreement still requires the checklist.
 
+### Fixed
+
+- Keep neighboring task cards one gap apart when their steps depend on each other. A collapsed cycle no longer stretches the first arrow across empty columns.
+
 ## [0.6.0] - 2026-10-17
 
 ### Added

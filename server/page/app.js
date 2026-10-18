@@ -330,25 +330,65 @@ function bindSideCarousel() {
 
 // Arrows are drawn between whole tasks; the step-level links live in the opened task.
 function renderOverview(ov, open) {
-  const width = OV.pad * 2 + ov.cols * OV.w + (ov.cols - 1) * OV.gapX;
-  const height = OV.pad * 2 + ov.rows * OV.h + (ov.rows - 1) * OV.gapY;
   const at = new Map(ov.nodes.map((n) => [n.id, n]));
-  const edges = ov.edges.filter((e) => at.has(e.from) && at.has(e.to)).map((e) => {
+  const drawn = ov.edges.filter((e) => at.has(e.from) && at.has(e.to));
+  const routed = drawn.map((e) => {
     const a = at.get(e.from);
     const b = at.get(e.to);
-    const x1 = ovX(a.col) + OV.w;
-    const y1 = ovY(a.row) + OV.h / 2;
-    const x2 = ovX(b.col);
-    const y2 = ovY(b.row) + OV.h / 2;
-    const bend = Math.max(20, (x2 - x1) / 2);
-    const d = y1 === y2 ? `M${x1},${y1} L${x2 - 2},${y2}` : `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2 - 2},${y2}`;
-    const label = e.labels.length ? `<text class="tl-label" x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle">${esc(e.labels.join(', '))}</text>` : '';
-    return `<path class="tl-edge${e.labels.length ? ' cross' : ''}" d="${d}" marker-end="url(#ov-arrow)"/>${label}`;
+    const span = b.col - a.col;
+    if (span === 1) return { e, a, b, span };
+    // Verticals stay in the column gap. The arrow still arrives on the facing side.
+    const xUp = span > 1 ? ovX(a.col) + OV.w + 2 : ovX(a.col) - 2;
+    const tip = span > 1 ? ovX(b.col) - 2 : ovX(b.col) + OV.w;
+    const xDown = span > 1 ? tip - 24 : tip + 26;
+    return { e, a, b, span, xUp, xDown, tip, x0: Math.min(xUp, xDown), x1: Math.max(xUp, xDown) };
+  });
+  const skips = routed.filter((r) => r.span !== 1).sort((p, q) => p.x0 - q.x0 || p.x1 - q.x1);
+  const lanes = [];
+  for (const skip of skips) {
+    const lane = lanes.find((taken) => taken.every(([from, to]) => skip.x1 < from - 12 || skip.x0 > to + 12));
+    if (lane) lane.push([skip.x0, skip.x1]);
+    else lanes.push([[skip.x0, skip.x1]]);
+    skip.slot = lane ? lanes.indexOf(lane) : lanes.length - 1;
+  }
+  // A bezier between card centers still crosses the cards in between, so skips use the gutter.
+  const laneGap = 12;
+  const aboveCard = 16;
+  const topRoom = 10;
+  const gutter = lanes.length ? topRoom + aboveCard + (lanes.length - 1) * laneGap - OV.pad : 0;
+  const yOf = (row) => OV.pad + gutter + row * (OV.h + OV.gapY);
+  const width = OV.pad * 2 + ov.cols * OV.w + (ov.cols - 1) * OV.gapX;
+  const height = OV.pad * 2 + gutter + ov.rows * OV.h + (ov.rows - 1) * OV.gapY;
+  const archOf = (slot) => yOf(0) - aboveCard - slot * laneGap;
+  const edges = routed.map((r) => {
+    const y1 = yOf(r.a.row) + OV.h / 2;
+    const y2 = yOf(r.b.row) + OV.h / 2;
+    let d;
+    let caption = '';
+    if (r.span === 1) {
+      const x1 = ovX(r.a.col) + OV.w;
+      const x2 = ovX(r.b.col);
+      const bend = Math.max(20, (x2 - x1) / 2);
+      d = y1 === y2 ? `M${x1},${y1} L${x2 - 2},${y2}` : `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2 - 2},${y2}`;
+      if (r.e.labels.length) caption = `<text class="tl-label" x="${(x1 + x2) / 2}" y="${(y1 + y2) / 2 - 6}" text-anchor="middle">${esc(r.e.labels.join(', '))}</text>`;
+    } else {
+      const arch = archOf(r.slot);
+      // Land above the neighbour arrow so the two strokes do not share the gap.
+      const approach = y2 - 36;
+      const sign = r.xDown >= r.xUp ? 1 : -1;
+      const tipSign = r.tip >= r.xDown ? 1 : -1;
+      const radius = Math.min(8, Math.abs(r.xDown - r.xUp) / 3, Math.abs(y1 - arch) / 2, Math.abs(approach - arch) / 2, Math.abs(r.tip - r.xDown) / 2);
+      d = radius < 4
+        ? `M${r.xUp},${y1} V${arch} H${r.xDown} V${approach} H${r.tip}`
+        : `M${r.xUp},${y1} V${arch + radius} Q${r.xUp},${arch} ${r.xUp + sign * radius},${arch} H${r.xDown - sign * radius} Q${r.xDown},${arch} ${r.xDown},${arch + radius} V${approach - radius} Q${r.xDown},${approach} ${r.xDown + tipSign * radius},${approach} H${r.tip}`;
+    }
+    const tip = r.e.labels.length ? `<title>${esc(r.e.labels.join(', '))}</title>` : '';
+    return `<path class="tl-edge${r.e.labels.length ? ' cross' : ''}" d="${d}" marker-end="url(#ov-arrow)">${tip}</path>${caption}`;
   }).join('');
   const cards = ov.nodes.map((n) => {
     const attrs = n.kind === 'goal' ? '' : ` role="button" tabindex="0" data-open="${esc(n.id)}" aria-expanded="${open === n.id}"`;
     const info = n.kind === 'task' ? `<button type="button" class="icon-btn info-btn ov-info" data-info="${esc(n.id)}" aria-label="${esc(t('task.more', { id: n.id }))}">${icon('info')}</button>` : '';
-    return `<foreignObject x="${ovX(n.col)}" y="${ovY(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
+    return `<foreignObject x="${ovX(n.col)}" y="${yOf(n.row)}" width="${OV.w}" height="${OV.h}"><div xmlns="http://www.w3.org/1999/xhtml" class="ov-card k-${n.kind} ${cardState(n)}${open === n.id ? ' selected' : ''}"${attrs}>${info}${cardBody(n)}</div></foreignObject>`;
   }).join('');
   const chainTitle = ov.side.length ? `<h3 class="ov-section-title">${esc(t('map.chain'))}</h3>` : '';
   const canLocate = [...ov.nodes, ...ov.side].some((n) => n.kind === 'task' && (n.current.length || n.id === open));

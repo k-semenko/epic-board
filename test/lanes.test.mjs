@@ -252,6 +252,27 @@ test('overview: step links collapse into one labelled arrow per task pair', () =
   assert.ok(!edges.some((e) => e.startsWith('API-7>@goal')), 'a task feeding another task does not also point at the goal');
 });
 
+test('overview: mutual step links stay in neighboring columns', () => {
+  const epic = {
+    title: 'Mobile', goal: 'Shipped',
+    tasks: [
+      { id: 'base', title: 'Base', steps: [{ id: 'git', title: 'Repo', state: 'todo' }] },
+      { id: 'app', title: 'App', steps: [
+        { id: 'init', title: 'Init', state: 'todo', after: ['base/git'] },
+        { id: 'api', title: 'API', state: 'todo', after: ['native/tls'] },
+      ] },
+      { id: 'native', title: 'Native', steps: [{ id: 'tls', title: 'TLS', state: 'todo', after: ['app/init'] }] },
+      { id: 'ship', title: 'Ship', steps: [{ id: 'cut', title: 'Cut', state: 'todo', after: ['app/api', 'base/git'] }] },
+    ],
+  };
+  const overview = buildOverview(epic);
+  const column = (id) => overview.nodes.find((node) => node.id === id).col;
+  assert.deepEqual(['base', 'app', 'native', 'ship', '@goal'].map(column), [0, 1, 2, 3, 4]);
+  assert.equal(overview.cols, 5);
+  assert.ok(overview.edges.some((edge) => edge.from === 'app' && edge.to === 'native'));
+  assert.ok(overview.edges.some((edge) => edge.from === 'native' && edge.to === 'app'));
+});
+
 test('overview: cards of one column stack in rows', () => {
   const epic = sampleEpic();
   epic.tasks.push({ id: 'WEB-9', title: '[web] Catalog', role: 'main', steps: [{ id: 'c', title: 'Catalog', state: 'todo', after: ['API-7/meta'] }] });
