@@ -4,14 +4,14 @@
 
 A local board for work that spans several repositories and several tasks at once — an *epic*. It keeps in one place what usually lives in chat scrollback and in your head: which task is at which step, which branch belongs to what, which merge request is green, what has to be merged first, and what is waiting for a human decision.
 
-It ships as a [Claude Code](https://code.claude.com) plugin: the agent writes to the board as work happens and reads it back after a context compaction, so a long multi-repo task survives `/compact` and new sessions. You can use the board and its CLI without an agent too.
+It ships as a [Claude Code](https://code.claude.com) plugin and a [Cursor](https://cursor.com) plugin: the agent writes to the board as work happens and reads it back after a context compaction, so a long multi-repo task survives `/compact` and new sessions. You can use the board and its CLI without an agent too.
 
 - **Any tracker.** Tasks have any id (`PROJ-12`, `#42`, `web-login`) and a link to wherever they live. The board never calls a tracker: it is storage you write to.
 - **Facts from git, not from memory.** `refresh` runs `git fetch` once per repository and recounts every branch: head, distance from the base, unpushed commits, dirty worktree. With `glab` or `gh` it also reads merge request / pull request state and pipeline.
 - **Needs decision.** Items that block on a person carry what exactly to decide or do, links to the tasks, steps, branches and documents involved, and confirmation, single-choice or multiple-choice responses. Every checklist condition is required to agree. A comment alone can send the item back for clarification. Either submission waits for agent review; closure records the agent outcome and keeps the answer history.
 - **A map of the epic.** Tasks as cards with cross-task dependencies, the opened task as a strip of steps, the merge order and the goal.
 - **Stage documents.** Specs, plans, logs and reviews next to their step: kept on the board or linked from a repository, viewable and editable on the page, with versions.
-- **Session plans.** Each agent session records what it is doing and what comes next; the board shows Claude, Codex, Grok and Gemini sessions side by side.
+- **Session plans.** Each agent session records what it is doing and what comes next; the board shows Claude, Cursor, Codex, Grok and Gemini sessions side by side.
 - **Export.** One self-contained, read-only HTML file to hand to someone who has no board.
 - **English and Russian** interface.
 - **Block order.** Open the gear in an epic's header → “Block order”, drag the blocks and save. The order applies to every epic on the board and is included in HTML exports.
@@ -36,6 +36,12 @@ node "$(ls -d ~/.claude/plugins/cache/epic-board/epic-board/*/ | sort -V | tail 
 
 To stay on a release instead of following the default branch: `/plugin marketplace add k-semenko/epic-board#v0.5.0`.
 
+### As a Cursor plugin
+
+In Cursor: **Customize → Plugins → From GitHub Repository**, add `k-semenko/epic-board`, then install `epic-board`. Or for a local clone, copy or sync the repo into `~/.cursor/plugins/local/epic-board` and reload the window.
+
+Then ask the agent to install the epic-board service, or run `node cli/epic.mjs service install` from the clone (or from the installed plugin root). Bind sessions with `--agent cursor`; the session id is `$EPIC_BOARD_SESSION_ID` from the session-start hook.
+
 ### From source
 
 ```sh
@@ -45,7 +51,7 @@ npm test
 node cli/epic.mjs service install      # or: npm start, to run in the foreground
 ```
 
-To load the plugin from the clone: `/plugin marketplace add /path/to/epic-board`.
+To load the Claude Code plugin from the clone: `/plugin marketplace add /path/to/epic-board`. For Cursor, use the local-plugins path above.
 
 ### Try it without installing anything
 

@@ -21,6 +21,15 @@ if (!entry) fail('.claude-plugin/marketplace.json has no plugins[] entry');
 if (entry.version !== undefined) found.push([`.claude-plugin/marketplace.json plugins[${entry.name}].version`, entry.version]);
 if (market.metadata?.version !== undefined) found.push(['.claude-plugin/marketplace.json metadata.version', market.metadata.version]);
 
+const cursorPlugin = readJson('.cursor-plugin/plugin.json');
+found.push(['.cursor-plugin/plugin.json version', cursorPlugin.version]);
+
+const cursorMarket = readJson('.cursor-plugin/marketplace.json');
+const cursorEntry = (cursorMarket.plugins ?? []).find((p) => p.name === cursorPlugin.name) ?? (cursorMarket.plugins ?? [])[0];
+if (!cursorEntry) fail('.cursor-plugin/marketplace.json has no plugins[] entry');
+if (cursorEntry.version !== undefined) found.push([`.cursor-plugin/marketplace.json plugins[${cursorEntry.name}].version`, cursorEntry.version]);
+if (cursorMarket.metadata?.version !== undefined) found.push(['.cursor-plugin/marketplace.json metadata.version', cursorMarket.metadata.version]);
+
 const problems = [];
 for (const [where, v] of found) {
   if (typeof v !== 'string' || !SEMVER.test(v)) problems.push(`${where} is not a semver string: ${JSON.stringify(v)}`);

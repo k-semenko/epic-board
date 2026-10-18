@@ -1,18 +1,19 @@
-import { readInput, findSessionEpic, epicForCwd, run, CLI } from './lib.mjs';
+import { readInput, findSessionEpic, epicForCwd, run, CLI, sessionId, cwdOf, agentName, emitSessionContext, isCursor } from './lib.mjs';
 import { buildBrief } from '../server/brief.mjs';
 import { boardUrl } from '../server/paths.mjs';
 
-run(async () => {
-  const input = readInput();
-  const notes = [];
+async function syncNotes() {
   try {
     const { syncIfOutdated } = await import('../server/service.mjs');
     const updated = await syncIfOutdated();
-    if (updated) notes.push(updated);
+    return updated ? [updated] : [];
   } catch (e) {
-    notes.push(`epic-board: service update failed (${e.message}); run ${CLI} service install`);
+    return [`epic-board: service update failed (${e.message}); run ${CLI} service install`];
   }
-  const sid = input.session_id;
+}
+
+function boardNotes(input, sid) {
+  const notes = [];
   const bound = sid ? findSessionEpic(sid) : null;
   if (bound && (input.source === 'compact' || input.source === 'resume')) {
     notes.push(`${buildBrief(bound.epic, { session: sid })}\nThe board is the source of truth for this epic; update it through ${CLI} (skill epic-board).`);
@@ -20,8 +21,22 @@ run(async () => {
     notes.push(`epic-board: session bound to epic ${bound.epic.id}, board ${boardUrl(bound.epic.id)}`);
   } else if (sid) {
     // After /clear the session id is new, so it is treated like any unbound session.
-    const epic = epicForCwd(input.cwd);
-    if (epic) notes.push(`epic-board: session ${sid}; if this work belongs to epic ${epic.id}, bind it: ${CLI} bind ${epic.id} --session ${sid} --agent claude`);
+    const epic = epicForCwd(cwdOf(input));
+    if (epic) notes.push(`epic-board: session ${sid}; if this work belongs to epic ${epic.id}, bind it: ${CLI} bind ${epic.id} --session ${sid} --agent ${agentName()}`);
   }
-  if (notes.length) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: notes.join('\n') } }));
+  return notes;
+}
+
+run(async () => {
+  const input = readInput();
+  const sid = sessionId(input);
+  // Cursor sessionStart is fire-and-forget: emit before any service install can delay stdout.
+  if (isCursor()) {
+    const notes = boardNotes(input, sid);
+    emitSessionContext(notes.join('\n') || null, { sessionId: sid });
+    await syncNotes();
+    return;
+  }
+  const notes = [...(await syncNotes()), ...boardNotes(input, sid)];
+  if (notes.length) emitSessionContext(notes.join('\n'));
 });

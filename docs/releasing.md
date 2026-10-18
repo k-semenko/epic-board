@@ -93,6 +93,8 @@ ssh -t runner-host "sudo RUNNER_TOKEN=$RUNNER_TOKEN bash /tmp/setup-runner.sh --
    - `package.json` → `version`
    - `.claude-plugin/plugin.json` → `version`
    - `.claude-plugin/marketplace.json` → `plugins[0].version` and `metadata.version`, if present
+   - `.cursor-plugin/plugin.json` → `version`
+   - `.cursor-plugin/marketplace.json` → `plugins[0].version` and `metadata.version`, if present
 2. In `CHANGELOG.md`, move the `[Unreleased]` entries under `## [X.Y.Z] - YYYY-MM-DD`.
 3. Check locally:
 

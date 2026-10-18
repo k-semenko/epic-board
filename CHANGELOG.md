@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-18
+
+### Added
+
+- Cursor plugin manifests (`.cursor-plugin/`) and hooks that inject board context on session start. Cursor sets `$EPIC_BOARD_SESSION_ID` from `sessionStart`.
+
+### Changed
+
+- Skills also cover Cursor: bind with `$EPIC_BOARD_SESSION_ID` / the session-start hook and `--agent cursor`. After compaction, re-`show` the bound epic (Cursor does not re-inject the brief).
+
 ## [0.6.2] - 2026-10-18
 
 ### Changed
