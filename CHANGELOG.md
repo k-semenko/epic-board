@@ -6,9 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-10-18
+
 ### Changed
 
 - Skills resolve the CLI from the plugin directory that contains them. A Grok session binds with `$GROK_SESSION_ID` and `--agent grok`.
+- Ignore macOS `.DS_Store` files in every directory.
 
 ## [0.6.1] - 2026-10-18
 
