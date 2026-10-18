@@ -6,7 +6,7 @@ tmpHome();
 const store = await import('../server/store.mjs');
 const oldAt = '2026-10-15T10:00:00.000Z';
 const newAt = '2026-10-16T10:00:00.000Z';
-const previous = { head: 'abc123', behind: 2, ahead: 3, dirty: true, worktreeExists: true, mr: { state: 'opened', pipeline: 'running', shaMatchesHead: true, error: null } };
+const previous = { head: 'abc123', behind: 2, ahead: 3, unpushed: 1, remoteBehind: 0, dirty: true, worktreeExists: true, mr: { state: 'opened', pipeline: 'running', shaMatchesHead: true, error: null } };
 const create = (id) => {
   store.createEpic({ id, title: id });
   store.writeFacts(id, { 'r:feature': previous }, { at: oldAt });
@@ -19,8 +19,31 @@ test('fresh MR facts are saved independently of a Git error', () => {
   assert.equal(facts.head, 'abc123');
   assert.equal(facts.fetchedAt, oldAt);
   assert.equal(facts.error, 'git fetch: offline');
+  assert.equal(facts.unpushed, 1);
+  assert.equal(facts.remoteBehind, 0);
   assert.equal(facts.mr.state, 'merged');
   assert.equal(facts.mr.pipeline, 'success');
+  assert.equal(facts.mr.fetchedAt, newAt);
+});
+
+test('confirmed branch removal preserves only the dated snapshot and clears obsolete publication state', () => {
+  create('branch-missing');
+  store.writeFacts('branch-missing', { 'r:feature': { localUnavailable: true, localReason: 'Checkout removed' } }, { at: newAt });
+  const epic = store.writeFacts('branch-missing', { 'r:feature': {
+    branchMissing: true, unpushed: null, remoteBehind: null, dirty: null, worktreeExists: false,
+    mr: { state: 'merged', shaMatchesHead: true, error: null },
+  } }, { at: newAt });
+  const facts = epic.facts['r:feature'];
+  assert.equal(facts.head, previous.head);
+  assert.equal(facts.fetchedAt, oldAt);
+  assert.equal(facts.branchMissing, true);
+  assert.equal(facts.unpushed, null);
+  assert.equal(facts.remoteBehind, null);
+  assert.equal(facts.dirty, null);
+  assert.equal(facts.error, null);
+  assert.equal(facts.localUnavailable, undefined);
+  assert.equal(facts.localReason, undefined);
+  assert.equal(facts.mr.shaMatchesHead, null);
   assert.equal(facts.mr.fetchedAt, newAt);
 });
 

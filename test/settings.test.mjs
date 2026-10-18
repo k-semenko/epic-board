@@ -15,6 +15,7 @@ test('missing settings use default section order and page sizes without writing 
     epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
     mapHeight: null,
+    pinnedEpics: [],
   });
   assert.equal(existsSync(file), false);
 });
@@ -22,8 +23,8 @@ test('missing settings use default section order and page sizes without writing 
 test('saved order survives subsequent reads and the latest save replaces it', () => {
   const first = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
   const latest = { epicSectionOrder: ['history', 'decisions', 'sessions', 'branches', 'map', 'waiting'] };
-  const firstSaved = { ...first, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null };
-  const latestSaved = { ...latest, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null };
+  const firstSaved = { ...first, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null, pinnedEpics: [] };
+  const latestSaved = { ...latest, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null, pinnedEpics: [] };
   assert.deepEqual(writeSettings(first), firstSaved);
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), firstSaved);
   assert.deepEqual(readSettings(), firstSaved);
@@ -36,6 +37,7 @@ test('saving only page sizes creates default section order and persists globally
     epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 10, decisions: 15, history: 5 },
     mapHeight: null,
+    pinnedEpics: [],
   };
   assert.deepEqual(writeSettings({ epicPageSizes: { waiting: 10, decisions: 15 } }), settings);
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), settings);
@@ -47,7 +49,7 @@ test('partial settings updates preserve unmentioned fields and page sizes', () =
     epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 10, decisions: 15, history: 10 },
   };
-  const stored = { ...first, mapHeight: null };
+  const stored = { ...first, mapHeight: null, pinnedEpics: [] };
   assert.deepEqual(writeSettings(first), stored);
   const resized = { ...stored, epicPageSizes: { waiting: 15, decisions: 15, history: 10 } };
   assert.deepEqual(writeSettings({ epicPageSizes: { waiting: 15 } }), resized);
@@ -66,7 +68,7 @@ test('saving settings creates a missing data directory', (t) => {
   process.env.EPIC_BOARD_HOME = nestedHome;
   t.after(() => { process.env.EPIC_BOARD_HOME = home; });
   const settings = { epicSectionOrder: ['branches', 'waiting', 'map', 'sessions', 'decisions', 'history'] };
-  const saved = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null };
+  const saved = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null, pinnedEpics: [] };
   assert.deepEqual(writeSettings(settings), saved);
   assert.deepEqual(JSON.parse(readFileSync(join(nestedHome, 'settings.json'), 'utf8')), saved);
 });
@@ -77,12 +79,14 @@ test('older partial orders retain known positions and append missing sections', 
     epicSectionOrder: ['history', 'map', 'waiting', 'branches', 'sessions', 'decisions'],
     epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
     mapHeight: null,
+    pinnedEpics: [],
   });
   writeFileSync(file, '{}');
   assert.deepEqual(readSettings(), {
     epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
     epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
     mapHeight: null,
+    pinnedEpics: [],
   });
 });
 
@@ -95,6 +99,56 @@ test('stored page sizes retain valid blocks and default missing or malformed val
   assert.deepEqual(readSettings().epicPageSizes, { waiting: 10, decisions: 5, history: 15 });
   writeFileSync(file, JSON.stringify({ epicPageSizes: { waiting: '10', decisions: 15, history: 20 } }));
   assert.deepEqual(readSettings().epicPageSizes, { waiting: 5, decisions: 15, history: 5 });
+});
+
+test('pinned epics persist in order and an empty array removes all pins', () => {
+  const pinnedEpics = ['42', 'PROJ-12', 'gh.341', 'A'.repeat(64)];
+  assert.deepEqual(writeSettings({ pinnedEpics }).pinnedEpics, pinnedEpics);
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).pinnedEpics, pinnedEpics);
+  assert.deepEqual(readSettings().pinnedEpics, pinnedEpics);
+  assert.deepEqual(writeSettings({ pinnedEpics: [] }).pinnedEpics, []);
+  assert.deepEqual(readSettings().pinnedEpics, []);
+});
+
+test('pin updates preserve other settings and other updates preserve pins', () => {
+  const first = {
+    epicSectionOrder: ['history', 'map', 'waiting', 'branches', 'sessions', 'decisions'],
+    epicPageSizes: { waiting: 10, decisions: 15, history: 10 },
+    mapHeight: 'l',
+  };
+  writeSettings(first);
+  const pinned = { ...first, pinnedEpics: ['42', 'missing-epic'] };
+  assert.deepEqual(writeSettings({ pinnedEpics: ['42', 'missing-epic'] }), pinned);
+  const resized = { ...pinned, epicPageSizes: { waiting: 5, decisions: 15, history: 10 }, mapHeight: 's' };
+  assert.deepEqual(writeSettings({ epicPageSizes: { waiting: 5 }, mapHeight: 's' }), resized);
+  assert.deepEqual(readSettings(), resized);
+});
+
+test('stored pins retain unique valid IDs and default malformed values without rewriting storage', () => {
+  const cases = [
+    [null, []],
+    ['42', []],
+    [42, []],
+    [{ id: '42' }, []],
+    [[], []],
+    [['42', 'PROJ-12', '42', 42, null, {}, '../bad', '.hidden', 'A'.repeat(65), 'gh.341'], ['42', 'PROJ-12', 'gh.341']],
+  ];
+  for (const [pinnedEpics, expected] of cases) {
+    const stored = JSON.stringify({ pinnedEpics });
+    writeFileSync(file, stored);
+    assert.deepEqual(readSettings().pinnedEpics, expected);
+    assert.equal(readFileSync(file, 'utf8'), stored);
+  }
+});
+
+test('invalid pin updates preserve the existing settings file', () => {
+  writeSettings({ mapHeight: 'l' });
+  const before = readFileSync(file, 'utf8');
+  const invalid = [undefined, null, '42', 42, {}, [42], [''], ['.hidden'], ['../bad'], ['a/b'], ['a b'], ['A'.repeat(65)], ['42', '42'], ['42', null], [, '42'], [new String('42')]];
+  for (const pinnedEpics of invalid) {
+    assert.throws(() => writeSettings({ pinnedEpics }), { status: 400, code: 'bad-settings' }, JSON.stringify(pinnedEpics));
+    assert.equal(readFileSync(file, 'utf8'), before);
+  }
 });
 
 test('invalid saves preserve existing settings', () => {

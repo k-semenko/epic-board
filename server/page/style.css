@@ -58,8 +58,11 @@ tr:last-child td { border-bottom: 0; }
 .steps .note { display: block; color: var(--muted); font-size: 12.5px; }
 .open { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 14px; }
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-.steps li.done { color: var(--muted); } .cards { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-.cards li { padding: 0; }
+.steps li.done { color: var(--muted); } .cards { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.cards li { padding: 0; position: relative; display: grid; min-width: 0; container-type: inline-size; }
+@media (max-width: 760px) {
+  .cards { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Map: one lane per task, steps wrap like words so long chains stay readable at any width. */
 .map { display: grid; gap: 10px; }
@@ -335,10 +338,19 @@ svg.i.inl { color: var(--muted); margin: 0 .3em; }
 .day + .day { margin-top: 18px; }
 .day-head { display: flex; align-items: center; gap: 10px; }
 .day-head::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.cards li .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; }
-.epic-link { display: grid; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: inherit; }
+.cards li .meta { display: flex; flex-wrap: wrap; align-content: start; gap: 4px 14px; font-size: 12.5px; height: calc(4.5em + 8px); }
+.epic-link { display: grid; grid-template-rows: 1.5em 3em auto; align-content: start; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; color: inherit; overflow-wrap: anywhere; }
 .epic-link:hover { text-decoration: none; border-color: var(--accent); }
-.epic-link strong { color: var(--accent); font-size: 15px; }
+.epic-link strong { color: var(--accent); font-size: 15px; padding-right: 32px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.epic-link > .muted { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+@container (min-width: 340px) {
+  .cards li .meta { height: calc(3em + 4px); }
+}
+@container (min-width: 580px) {
+  .cards li .meta { height: 1.5em; }
+}
+.epic-pin { position: absolute; top: 7px; right: 7px; width: 30px; height: 30px; padding: 0; justify-content: center; color: var(--muted); }
+.epic-pin[aria-pressed="true"] { color: var(--accent); background: var(--chip); }
 .wait-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
 .wait-meta > span:not(.phrase) { display: inline-flex; align-items: center; }
 .phrase { display: inline; white-space: nowrap; }

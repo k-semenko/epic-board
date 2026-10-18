@@ -97,7 +97,8 @@ test('a missing local branch does not prevent a current MR query', async (t) => 
   store.writeFacts('deleted-branch', { 'r:gone': { head: 'oldhead', mr: { state: 'opened' } } }, { at: previousAt });
   const { epic } = await refreshEpic('deleted-branch', { run: runner() });
   const fact = epic.facts['r:gone'];
-  assert.match(fact.error, /gone/);
+  assert.equal(fact.error, null);
+  assert.equal(fact.branchMissing, true);
   assert.equal(fact.fetchedAt, previousAt);
   assert.equal(fact.mr.state, 'merged');
   assert.notEqual(fact.mr.fetchedAt, previousAt);
@@ -148,4 +149,93 @@ test('a new branch without a remote has unknown publication counts', async (t) =
   const { epic } = await refreshEpic('new-local-branch', { run: runner() });
   assert.equal(epic.facts['r:local-only'].ahead, 2);
   assert.equal(epic.facts['r:local-only'].unpushed, null);
+});
+
+test('deleting both branch refs clears saved publication warnings and preserves the dated head', async (t) => {
+  const repo = fixture(t, 'deleted-both', (r) => ({ path: r.clone }));
+  const first = (await refreshEpic('deleted-both', { run: runner() })).epic.facts['r:feat/x'];
+  assert.equal(first.unpushed, 1);
+  assert.equal(first.dirty, true);
+  repo.git(repo.clone, 'push', '-q', 'origin', '--delete', 'feat/x');
+  repo.git(repo.clone, 'worktree', 'remove', '--force', repo.worktree);
+  repo.git(repo.clone, 'branch', '-D', 'feat/x');
+  const events = [];
+  const { epic } = await refreshEpic('deleted-both', { run: runner(), onProgress: (event) => events.push(event) });
+  const fact = epic.facts['r:feat/x'];
+  assert.equal(fact.unpushed, null);
+  assert.equal(fact.remoteBehind, null);
+  assert.equal(fact.dirty, null);
+  assert.equal(fact.worktreeExists, false);
+  assert.equal(fact.branchMissing, true);
+  assert.equal(fact.error, null);
+  assert.equal(fact.head, first.head);
+  assert.equal(fact.fetchedAt, first.fetchedAt);
+  assert.equal(fact.mr.state, 'merged');
+  assert.equal(fact.mr.shaMatchesHead, null);
+  assert.ok(events.some((event) => event.type === 'branch' && event.state === 'ok'));
+  assert.ok(store.readHistory('deleted-both').some((event) => event.path === 'facts.r:feat/x.branchMissing' && event.after === true));
+
+  repo.git(repo.clone, 'tag', 'feat/x', 'master');
+  const tagged = (await refreshEpic('deleted-both', { run: runner() })).epic.facts['r:feat/x'];
+  assert.equal(tagged.branchMissing, true);
+  assert.equal(tagged.head, first.head);
+  assert.equal(tagged.unpushed, null);
+
+  repo.git(repo.clone, 'branch', 'feat/x', first.head);
+  const restored = (await refreshEpic('deleted-both', { run: runner() })).epic.facts['r:feat/x'];
+  assert.equal(restored.branchMissing, undefined);
+  assert.equal(restored.head, first.head);
+  assert.equal(restored.unpushed, null);
+  assert.equal(restored.error, null);
+});
+
+test('a surviving remote ref refreshes the head without retaining local publication counts', async (t) => {
+  const repo = fixture(t, 'remote-ref', (r) => ({ path: r.clone }));
+  await refreshEpic('remote-ref', { run: runner() });
+  const remoteHead = repo.git(repo.clone, 'rev-parse', '--short', 'refs/remotes/origin/feat/x');
+  repo.git(repo.clone, 'worktree', 'remove', '--force', repo.worktree);
+  repo.git(repo.clone, 'branch', '-D', 'feat/x');
+  const fact = (await refreshEpic('remote-ref', { run: runner() })).epic.facts['r:feat/x'];
+  assert.equal(fact.error, null);
+  assert.equal(fact.branchMissing, undefined);
+  assert.equal(fact.head, remoteHead);
+  assert.equal(fact.ahead, 1);
+  assert.equal(fact.unpushed, null);
+  assert.equal(fact.remoteBehind, null);
+  assert.equal(fact.mr.shaMatchesHead, null);
+});
+
+test('a ref read failure preserves the saved publication counts without reporting branch removal', async (t) => {
+  fixture(t, 'ref-read-error', (r) => ({ path: r.clone }));
+  const first = (await refreshEpic('ref-read-error', { run: runner() })).epic.facts['r:feat/x'];
+  const run = runner();
+  const { epic } = await refreshEpic('ref-read-error', { run: (cmd, args, opts) => {
+    if (cmd === 'git' && args.includes('rev-parse')) return { code: 128, stdout: '', stderr: 'cannot read refs' };
+    return run(cmd, args, opts);
+  } });
+  const fact = epic.facts['r:feat/x'];
+  assert.match(fact.error, /cannot read refs/);
+  assert.equal(fact.branchMissing, undefined);
+  assert.equal(fact.head, first.head);
+  assert.equal(fact.fetchedAt, first.fetchedAt);
+  assert.equal(fact.unpushed, 1);
+  assert.equal(fact.remoteBehind, 0);
+});
+
+test('a timed out remote ref check cannot confirm removal when the local ref is absent', async (t) => {
+  fixture(t, 'ref-timeout', (r) => ({ path: r.clone }));
+  const first = (await refreshEpic('ref-timeout', { run: runner() })).epic.facts['r:feat/x'];
+  const run = runner();
+  const { epic } = await refreshEpic('ref-timeout', { run: (cmd, args, opts) => {
+    if (cmd === 'git' && args.includes('rev-parse')) return {
+      code: 1, stdout: '', stderr: args.includes('refs/heads/feat/x') ? '' : 'timeout 60000 ms',
+    };
+    return run(cmd, args, opts);
+  } });
+  const fact = epic.facts['r:feat/x'];
+  assert.equal(fact.branchMissing, undefined);
+  assert.match(fact.error, /timeout 60000 ms/);
+  assert.equal(fact.head, first.head);
+  assert.equal(fact.fetchedAt, first.fetchedAt);
+  assert.equal(fact.unpushed, 1);
 });

@@ -114,6 +114,8 @@ function dayLabel(iso) {
 }
 
 let allEpics = [];
+let pinnedEpics = new Set();
+let savingPin = false;
 
 function renderEpicList() {
   const q = ($('#q')?.value || '').trim().toLowerCase();
@@ -122,25 +124,30 @@ function renderEpicList() {
     $('#epics').innerHTML = `<p class="muted">${allEpics.length ? esc(t('index.none')) : t('index.empty')}</p>`;
     return;
   }
+  const sorted = [...found].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const pinned = sorted.filter((e) => pinnedEpics.has(e.id));
   const groups = new Map();
-  for (const e of [...found].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))) {
+  for (const e of sorted) {
+    if (pinnedEpics.has(e.id)) continue;
     const label = dayLabel(e.createdAt);
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(e);
   }
-  $('#epics').innerHTML = [...groups].map(([label, list]) => `<section class="day"><h2 class="day-head">${esc(label)}</h2><ul class="cards">${list.map(epicCard).join('')}</ul></section>`).join('');
+  const sections = pinned.length ? [[t('index.pinned'), pinned], ...groups] : [...groups];
+  $('#epics').innerHTML = sections.map(([label, list]) => `<section class="day"><h2 class="day-head">${esc(label)}</h2><ul class="cards">${list.map(epicCard).join('')}</ul></section>`).join('');
 }
 
-// The whole card is the link. Padding sits on the anchor, so the goal and the meta row open the epic too.
+// Keep the pin button outside the link so toggling it never opens the epic.
 function epicCard(e) {
+  const pinned = pinnedEpics.has(e.id);
+  const pinLabel = esc(t(pinned ? 'index.unpin' : 'index.pin', { title: e.title }));
   const waiting = e.waiting
     ? `<span class="warn">${icon('clock')}${esc(t('index.waiting', { n: e.waiting }))}</span>`
     : `<span class="muted">${icon('check')}${esc(t('index.nothing'))}</span>`;
-  return `<li><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a></li>`;
+  return `<li><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a><button type="button" class="icon-btn epic-pin" data-pin="${esc(e.id)}" aria-pressed="${pinned}" aria-label="${pinLabel}" title="${pinLabel}"${savingPin ? ' disabled' : ''}>${icon('pin')}</button></li>`;
 }
 
-async function renderIndex() {
-  allEpics = await api('/api/epics');
+function renderIndexContent() {
   const sum = (k) => allEpics.reduce((n, e) => n + (e[k] || 0), 0);
   $('#stats').innerHTML = [
     ['board', 'stat.epics', allEpics.length],
@@ -149,6 +156,38 @@ async function renderIndex() {
     ['clock', 'stat.waiting', sum('waiting')],
   ].map(([i, label, n]) => `<div class="stat"><span class="stat-label">${icon(i)}${esc(t(label))}</span><span class="stat-value">${n}</span></div>`).join('');
   renderEpicList();
+}
+
+async function renderIndex() {
+  const [epics, settings] = await Promise.all([api('/api/epics'), api('/api/settings')]);
+  allEpics = epics;
+  pinnedEpics = new Set(settings.pinnedEpics || []);
+  renderIndexContent();
+}
+
+function bindEpicPins() {
+  $('#epics').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-pin]');
+    if (!button || savingPin) return;
+    const hadFocus = document.activeElement === button;
+    const id = button.dataset.pin;
+    const next = new Set(pinnedEpics);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    savingPin = true;
+    for (const pin of $('#epics').querySelectorAll('[data-pin]')) pin.disabled = true;
+    try {
+      const settings = await api('/api/settings', { method: 'PUT', body: { pinnedEpics: [...next] } });
+      pinnedEpics = new Set(settings.pinnedEpics);
+    } catch (e) {
+      alertBox(e.message);
+    } finally {
+      const restoreFocus = hadFocus && (document.activeElement === button || document.activeElement === document.body);
+      savingPin = false;
+      renderEpicList();
+      if (restoreFocus) [...$('#epics').querySelectorAll('[data-pin]')].find((pin) => pin.dataset.pin === id)?.focus({ preventScroll: true });
+    }
+  });
 }
 
 function fillIcons(root = document) {
@@ -1547,9 +1586,10 @@ function branchRows(epic) {
       const key = `${b.repo}:${b.name}`;
       const f = epic.facts?.[key];
       const localUnavailable = f?.localUnavailable === true;
-      const stale = localUnavailable || Boolean(f?.error) || !f?.fetchedAt || nowMs() - Date.parse(f.fetchedAt) > STALE_MS;
+      const branchMissing = f?.branchMissing === true;
+      const stale = branchMissing || localUnavailable || Boolean(f?.error) || !f?.fetchedAt || nowMs() - Date.parse(f.fetchedAt) > STALE_MS;
       const mrStale = Boolean(f?.mr?.error) || !f?.mr?.fetchedAt || nowMs() - Date.parse(f.mr.fetchedAt) > STALE_MS;
-      const headMatch = localUnavailable || f?.error ? null : f?.mr?.shaMatchesHead;
+      const headMatch = branchMissing || localUnavailable || f?.error ? null : f?.mr?.shaMatchesHead;
       const comparison = headMatch === false ? ` <span class="warn">${esc(t('br.wrongHead'))}</span>` : headMatch == null ? ` <span class="muted">${esc(t('br.unknownHead'))}</span>` : '';
       const mrChecked = f?.mr?.fetchedAt ? `<div class="${mrStale ? 'stale' : 'muted'}">${phrase('br.mrChecked', { t: agoTag(f.mr.fetchedAt) })}</div>` : '';
       const mr = !b.mr?.iid ? '—' : f?.mr && !f.mr.error
@@ -1560,7 +1600,7 @@ function branchRows(epic) {
         : '—';
       const localStatus = localUnavailable
         ? `<div class="muted">${esc(t('br.localUnavailable'))}${f.localReason ? ` · ${esc(f.localReason)}` : ''}</div>`
-        : f?.error ? `<div class="crit">${esc(f.error)}</div>` : b.worktree && f?.worktreeExists === false ? `<div class="muted">${esc(t('br.worktreeRemoved'))}</div>` : '';
+        : f?.error ? `<div class="crit">${esc(f.error)}</div>` : branchMissing ? `<div class="muted">${esc(t('br.branchMissing'))}</div>` : b.worktree && f?.worktreeExists === false ? `<div class="muted">${esc(t('br.worktreeRemoved'))}</div>` : '';
       rows.push(`<tr data-sid="b-${esc(key)}">
         <td>${esc(b.repo)}<div class="muted">${esc(task.id)}</div></td>
         <td class="mono">${esc(b.name)}</td>
@@ -1895,8 +1935,9 @@ async function bootEpic() {
 async function bootIndex() {
   applyI18n();
   fillIcons();
-  bindLang(renderIndex);
+  bindLang(renderIndexContent);
   $('#q')?.addEventListener('input', renderEpicList);
+  bindEpicPins();
   await renderIndex();
 }
 

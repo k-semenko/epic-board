@@ -59,7 +59,7 @@ test('export snapshots the shared section order and page sizes for offline viewi
   try {
     const html = buildExport('42');
     const data = JSON.parse(html.match(/window\.__EPIC_EXPORT__ = (.*?);<\/script>/s)[1]);
-    assert.deepEqual(data.settings, { ...settings, mapHeight: null });
+    assert.deepEqual(data.settings, { ...settings, mapHeight: null, pinnedEpics: [] });
   } finally {
     rmSync(file);
   }

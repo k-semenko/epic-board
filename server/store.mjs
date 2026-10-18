@@ -409,7 +409,7 @@ export function reopenWaiting() {
   throw new BoardError(400, 'waiting-action', 'use wait revise with version and a reason');
 }
 
-const WATCHED = ['head', 'behind', 'ahead', 'unpushed', 'remoteBehind', 'dirty', 'mr.state', 'mr.draft', 'mr.pipeline', 'error', 'localUnavailable'];
+const WATCHED = ['head', 'behind', 'ahead', 'unpushed', 'remoteBehind', 'dirty', 'mr.state', 'mr.draft', 'mr.pipeline', 'error', 'localUnavailable', 'branchMissing'];
 const pick = (obj, dotted) => dotted.split('.').reduce((v, k) => (v == null ? undefined : v[k]), obj);
 
 // A failed refresh keeps the last good facts and their fetchedAt, so the page can show them as stale.
@@ -433,7 +433,12 @@ export function writeFacts(id, results, { at = new Date().toISOString(), repoLoc
       if (repoName !== undefined && (!epic.repos?.[repoName] || epic.repos[repoName].path !== repoLocations[repoName].path)) continue;
       const prev = facts[key] || null;
       let next;
-      if (result.localUnavailable === true) {
+      if (result.branchMissing === true) {
+        next = { ...(prev || {}), ...result, error: null };
+        delete next.errorAt;
+        delete next.localUnavailable;
+        delete next.localReason;
+      } else if (result.localUnavailable === true) {
         next = { ...(prev || {}), error: null, localUnavailable: true, localReason: result.localReason || 'Local repository is unavailable', dirty: null, worktreeExists: false };
         delete next.errorAt;
       } else if (result.error) {
@@ -453,7 +458,7 @@ export function writeFacts(id, results, { at = new Date().toISOString(), repoLoc
       // Git and forge requests have separate successful timestamps.
       if (result.mr === null) next.mr = null;
       else if (result.mr) next.mr = result.mr.error ? { ...(prev?.mr || {}), error: result.mr.error, errorAt: at } : { ...result.mr, fetchedAt: at };
-      if (next.mr && (result.error || result.localUnavailable === true)) next.mr = { ...next.mr, shaMatchesHead: null };
+      if (next.mr && (result.error || result.localUnavailable === true || result.branchMissing === true)) next.mr = { ...next.mr, shaMatchesHead: null };
       for (const field of WATCHED) {
         const before = pick(prev, field) ?? null;
         const after = pick(next, field) ?? null;
