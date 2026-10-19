@@ -51,6 +51,8 @@ test('newer compares versions numerically', () => {
   assert.equal(svc.newer('0.5.0', '0.5.0'), false);
   assert.equal(svc.newer('0.4.9', '0.5.0'), false);
   assert.equal(svc.newer('1.0.0', null), true);
+  assert.equal(svc.newer('0.10.0', '0.5.1'), true, 'not a string comparison');
+  assert.equal(svc.newer('0.5.1', '0.10.0'), false);
 });
 
 test('linux install writes the unit, keeps config and restarts; sync only moves forward', async () => {
@@ -78,6 +80,23 @@ test('linux install writes the unit, keeps config and restarts; sync only moves 
   assert.equal(svc.installedVersion(app), VERSION);
   assert.match(svc.uninstall({ exec, env, platform: 'linux' }), /data kept/);
   assert.equal(existsSync(join(home, '.config/systemd/user/epic-board.service')), false);
+});
+
+test('pluginBehind: only a newer copy of an installed service counts', () => {
+  const home = mkdtempSync(join(tmpdir(), 'eb-home-'));
+  const env = { HOME: home };
+  const app = join(home, '.local/share/epic-board/app');
+  mkdirSync(app, { recursive: true });
+  writeFileSync(join(app, 'installed.json'), JSON.stringify({ version: '99.0.0' }));
+  assert.equal(svc.pluginBehind({ env, platform: 'linux' }), null, 'no unit, no service');
+  mkdirSync(join(home, '.config/systemd/user'), { recursive: true });
+  writeFileSync(join(home, '.config/systemd/user/epic-board.service'), '');
+  assert.deepEqual(svc.pluginBehind({ env, platform: 'linux' }), { plugin: VERSION, service: '99.0.0' });
+  writeFileSync(join(app, 'installed.json'), JSON.stringify({ version: VERSION }));
+  assert.equal(svc.pluginBehind({ env, platform: 'linux' }), null);
+  writeFileSync(join(app, 'installed.json'), '{broken');
+  assert.equal(svc.pluginBehind({ env, platform: 'linux' }), null);
+  assert.equal(svc.pluginBehind({ env, platform: 'win32' }), null);
 });
 
 test('a failed restart is retried by the next sync', async () => {
