@@ -13,7 +13,9 @@ let filters = { source: '', severity: '', mark: '' };
 let undo = null;
 let toastTimer = 0;
 let knownIds = new Set();
-let pending = null; // { id, value } waits for an optional "why?" before marking
+let pending = null;
+const SEVERITIES = ['fire', 'important', 'normal', 'noise'];
+let groupBy = (() => { try { return localStorage.getItem('epic-board.feedGroup') === 'severity' ? 'severity' : 'source'; } catch { return 'source'; } })(); // { id, value } waits for an optional "why?" before marking
 
 const MARKS = [
   { value: 'important', key: '1', label: 'feed.mark.important', icon: 'thumbUp' },
@@ -29,22 +31,40 @@ function isUnmarked(item) {
   return !item.mark || item.changedSinceMark;
 }
 
-function visible() {
+function filtered() {
   let list = items.filter((item) => (tab === 'unmarked' ? isUnmarked(item) : Boolean(item.mark)));
   if (filters.source) list = list.filter((item) => item.source === filters.source);
   if (filters.severity) list = list.filter((item) => item.severity === filters.severity);
   if (tab === 'history' && filters.mark) list = list.filter((item) => item.mark?.value === filters.mark);
-  if (tab === 'unmarked') {
-    // Same order the page draws: fires, then one group per source; keyboard focus indexes into it.
-    const fire = list.filter((item) => item.severity === 'fire');
-    const bySource = new Map();
-    for (const item of list.filter((x) => x.severity !== 'fire')) {
-      if (!bySource.has(item.source)) bySource.set(item.source, []);
-      bySource.get(item.source).push(item);
+  const at = (item) => String(tab === 'history' ? item.mark?.at || item.updatedAt : item.ts || item.updatedAt);
+  return list.sort((a, b) => at(b).localeCompare(at(a)));
+}
+
+// Groups in drawing order. By source, fires still sit on top in their own group so they are never buried.
+function groups() {
+  const list = filtered();
+  const out = [];
+  if (groupBy === 'severity') {
+    for (const sev of SEVERITIES) {
+      const part = list.filter((item) => item.severity === sev);
+      if (part.length) out.push({ key: sev, label: t(`feed.sev.${sev}`), items: part, sev, noise: sev !== 'fire' });
     }
-    return [...fire, ...[...bySource.values()].flat()];
+    return out;
   }
-  return list.sort((a, b) => String(b.mark?.at || b.updatedAt).localeCompare(String(a.mark?.at || a.updatedAt)));
+  const fire = list.filter((item) => item.severity === 'fire');
+  if (fire.length) out.push({ key: 'fire', label: t('feed.fire'), items: fire, sev: 'fire', noise: false });
+  const bySource = new Map();
+  for (const item of list.filter((x) => x.severity !== 'fire')) {
+    if (!bySource.has(item.source)) bySource.set(item.source, []);
+    bySource.get(item.source).push(item);
+  }
+  for (const [source, part] of bySource) out.push({ key: source, label: source, items: part, noise: true });
+  return out;
+}
+
+// Keyboard focus indexes into exactly what the page draws.
+function visible() {
+  return groups().flatMap((group) => group.items);
 }
 
 function ago(iso) {
@@ -67,6 +87,9 @@ function renderFilters() {
     <label>${esc(t('feed.filter.severity'))}
       <select data-filter="severity"><option value="">${esc(t('feed.filter.all'))}</option>${['fire', 'important', 'normal', 'noise'].map((s) => `<option value="${s}" ${filters.severity === s ? 'selected' : ''}>${esc(t(`feed.sev.${s}`))}</option>`).join('')}</select>
     </label>
+    <div class="feed-groupby"><span>${esc(t('feed.groupBy'))}</span><div class="view-nav" role="radiogroup">
+      ${['source', 'severity'].map((key) => `<button type="button" role="radio" aria-checked="${groupBy === key}" class="${groupBy === key ? 'is-active' : ''}" data-group-by="${key}">${esc(t(`feed.groupBy.${key}`))}</button>`).join('')}
+    </div></div>
     ${tab === 'history' ? `<label>${esc(t('feed.filter.mark'))}
       <select data-filter="mark"><option value="">${esc(t('feed.filter.all'))}</option>${MARKS.map((m) => `<option value="${m.value}" ${filters.mark === m.value ? 'selected' : ''}>${esc(t(m.label))}</option>`).join('')}</select>
     </label>` : ''}`;
@@ -144,9 +167,9 @@ function rowHtml(item, index) {
   const body = item.body || '';
   return `<li class="feed-row feed-card sev-${esc(item.severity)}${active}${sel}" data-id="${esc(item.id)}" data-index="${index}">
     <header class="feed-card-head">${headHtml(item)}</header>
-    <h3 class="feed-title"><button type="button" class="feed-open" data-open>${esc(item.title)}</button></h3>
-    ${body ? `<div class="feed-preview markdown${isLong(body) ? ' is-clamped' : ''}" data-open>${renderMarkdown(body).html}</div>` : ''}
-    ${body && isLong(body) ? `<button type="button" class="feed-readmore" data-open>${esc(t('feed.readMore'))}</button>` : ''}
+    <h3 class="feed-title">${esc(item.title)}</h3>
+    ${body ? `<div class="feed-preview markdown${isLong(body) ? ' is-clamped' : ''}">${renderMarkdown(body).html}</div>` : ''}
+    ${body && isLong(body) ? `<span class="feed-readmore">${esc(t('feed.readMore'))}</span>` : ''}
     <div class="feed-comment" hidden><input type="text" data-i18n-ph="feed.why" placeholder="${esc(t('feed.why'))}"></div>
     <footer class="feed-card-foot">
       <div class="feed-refs">${tab === 'history' ? markNote(item) : ''}${refChips(item)}</div>
@@ -190,28 +213,16 @@ function renderList() {
     root.innerHTML = `<p class="feed-empty">${esc(t('feed.empty'))}<br><span class="muted">${esc(t('feed.emptyNoise', { n: noiseToday }))}</span><br><button type="button" data-open-how>${esc(t('feed.how'))}</button></p>`;
     return;
   }
-  if (tab === 'unmarked') {
-    const fire = list.filter((item) => item.severity === 'fire');
-    const bySource = new Map();
-    for (const item of list.filter((item) => item.severity !== 'fire')) {
-      if (!bySource.has(item.source)) bySource.set(item.source, []);
-      bySource.get(item.source).push(item);
-    }
-    let html = '';
-    let index = 0;
-    if (fire.length) {
-      html += `<section class="feed-group"><header class="day-head"><h2>${esc(t('feed.fire'))} · ${fire.length}</h2></header><ul class="list feed-rows">${fire.map((item) => rowHtml(item, index++)).join('')}</ul></section>`;
-    }
-    for (const [source, group] of bySource) {
-      html += `<section class="feed-group" data-source="${esc(source)}"><header class="day-head">
-        <h2>${esc(source)} · ${group.length}</h2>
-        <button type="button" class="feed-group-noise" data-noise-group="${esc(source)}">${icon('trash')}<span>${esc(t('feed.allNoise'))}</span></button>
-      </header><ul class="list feed-rows">${group.map((item) => rowHtml(item, index++)).join('')}</ul></section>`;
-    }
-    root.innerHTML = html;
-  } else {
-    root.innerHTML = `<ul class="list feed-rows">${list.map((item, index) => rowHtml(item, index)).join('')}</ul>`;
+  let html = '';
+  let index = 0;
+  for (const group of groups()) {
+    const noise = tab === 'unmarked' && group.noise;
+    html += `<section class="feed-group"${group.sev ? ` data-sev="${esc(group.sev)}"` : ''}><header class="day-head">
+      <h2>${group.sev ? `<span class="feed-sev sev-${esc(group.sev)}"></span>` : ''}${esc(group.label)} · ${group.items.length}</h2>
+      ${noise ? `<button type="button" class="feed-group-noise" data-noise-group="${esc(group.key)}">${icon('trash')}<span>${esc(t('feed.allNoise'))}</span></button>` : ''}
+    </header><ul class="list feed-rows">${group.items.map((item) => rowHtml(item, index++)).join('')}</ul></section>`;
   }
+  root.innerHTML = html;
   focus = Math.min(focus, Math.max(0, list.length - 1));
   root.querySelector(`[data-index="${focus}"]`)?.classList.add('is-focus');
   void renderProfile();
@@ -335,6 +346,16 @@ document.querySelector('.view-nav[role="tablist"]').addEventListener('click', (e
   renderList();
 });
 
+$('#feed-filters').addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-group-by]');
+  if (!btn) return;
+  groupBy = btn.dataset.groupBy;
+  try { localStorage.setItem('epic-board.feedGroup', groupBy); } catch { /* per-viewer convenience only */ }
+  focus = 0;
+  renderFilters();
+  renderList();
+});
+
 $('#feed-filters').addEventListener('change', (event) => {
   const sel = event.target.closest('[data-filter]');
   if (!sel) return;
@@ -347,8 +368,9 @@ $('#feed-list').addEventListener('click', async (event) => {
   const row = event.target.closest('[data-id]');
   if (row) focus = Number(row.dataset.index);
   if (event.target.closest('[data-noise-group]')) {
-    const source = event.target.closest('[data-noise-group]').dataset.noiseGroup;
-    const ids = visible().filter((item) => item.source === source && item.severity !== 'fire').map((item) => item.id);
+    const key = event.target.closest('[data-noise-group]').dataset.noiseGroup;
+    const group = groups().find((g) => g.key === key);
+    const ids = (group?.items || []).filter((item) => item.severity !== 'fire').map((item) => item.id);
     await markIds(ids, 'noise');
     return;
   }
@@ -358,7 +380,10 @@ $('#feed-list').addEventListener('click', async (event) => {
     await requestMark(item, value);
     return;
   }
-  if (event.target.closest('[data-open]') && !event.target.closest('a')) {
+  if (event.target.closest('[data-unmark], [data-delete], a, input, button, .feed-comment')) {
+    // handled below or by the browser
+  } else if (row && !String(globalThis.getSelection?.() || '')) {
+    // Selecting text to copy it must not open the dialog.
     openItem(row.dataset.id);
     return;
   }

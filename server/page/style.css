@@ -664,6 +664,10 @@ button.primary:hover { filter: brightness(1.08); }
 .feed-dot.sev-noise { background: var(--muted); }
 .feed-source { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 .list li.feed-card, .feed-card { display: grid; align-items: stretch; gap: 8px; padding: 12px 14px 10px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--sev, var(--line)); border-radius: 10px; }
+.list li.feed-card { cursor: pointer; transition: border-color .12s, background .12s; }
+.list li.feed-card:hover { background: color-mix(in srgb, var(--chip) 45%, var(--surface)); }
+.feed-card .feed-card-foot, .feed-card a, .feed-card button, .feed-card input { cursor: auto; }
+.feed-card a, .feed-card button { cursor: pointer; }
 .feed-card.sev-fire { --sev: var(--crit); }
 .feed-card.sev-important { --sev: var(--warn); }
 .feed-card.sev-normal { --sev: var(--accent); }
@@ -697,7 +701,7 @@ button.primary:hover { filter: brightness(1.08); }
 .feed-preview h1, .feed-preview h2, .feed-preview h3, .feed-preview h4 { font-size: 13.5px; margin: 6px 0 2px; }
 .feed-item-body h1, .feed-item-body h2, .feed-item-body h3, .feed-item-body h4 { font-size: 15px; margin: 16px 0 6px; }
 .feed-preview blockquote, .feed-item-body blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); }
-.feed-readmore { all: unset; justify-self: start; cursor: pointer; font-size: 12.5px; color: var(--accent); }
+.feed-readmore { all: unset; pointer-events: none; justify-self: start; cursor: pointer; font-size: 12.5px; color: var(--accent); }
 .feed-readmore:hover, .feed-readmore:focus-visible { text-decoration: underline; }
 .feed-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; padding-top: 6px; border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); }
 .feed-mark-note { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin-right: 6px; }
@@ -707,6 +711,15 @@ button.primary:hover { filter: brightness(1.08); }
 .feed-group-noise svg.i { width: 13px; height: 13px; margin: 0; }
 .feed-group header.day-head::after { order: 1; }
 .feed-item-dialog { position: fixed; inset: 0; margin: auto; width: min(760px, calc(100vw - 32px)); height: fit-content; max-height: 88vh; border: 0; padding: 0; background: transparent; color: inherit; }
+/* The page under an open dialog stays still; the wheel scrolls only the dialog. */
+html:has(dialog[open]) { overflow: hidden; }
+.feed-item { overscroll-behavior: contain; }
+.feed-groupby { display: flex; align-items: flex-end; gap: 8px; }
+.feed-groupby > span { font-size: 12.5px; color: var(--muted); align-self: center; }
+.feed-groupby .view-nav { margin: 0; height: 34px; box-sizing: border-box; flex-wrap: nowrap; }
+.feed-groupby .view-nav button { white-space: nowrap; }
+.feed-group h2 { display: inline-flex; align-items: center; gap: 6px; }
+.feed-group h2 .feed-sev::before { width: 8px; height: 8px; }
 .feed-item-dialog::backdrop { background: rgba(0, 0, 0, .5); }
 .feed-item { width: 100%; max-height: 88vh; gap: 12px; }
 .feed-item .modal-head { flex-wrap: nowrap; }
