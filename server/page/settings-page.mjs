@@ -53,9 +53,21 @@ function renderGroups() {
   )).join('');
 }
 
+function durationText(value) {
+  if (value === 0 || value === '0') return '∞';
+  const unit = { d: 'settings.dayUnit', h: 'settings.hourUnit', m: 'settings.minuteUnit' }[String(value).slice(-1)];
+  return unit ? `${String(value).slice(0, -1)}${t(unit)}` : String(value);
+}
+
+// Defaults read like the controls they belong to, not like stored JSON.
 function defaultLabel(entry) {
   const value = entry.default;
-  return value === null || value === undefined ? '∅' : typeof value === 'string' ? value : JSON.stringify(value);
+  if (entry.type === 'order') return value.map((id) => t(`sec.${id}`)).join(' → ');
+  if (entry.type === 'record') return Object.entries(value).map(([id, n]) => `${t(`sec.${id}`)} ${n}`).join(' · ');
+  if (entry.type === 'duration') return durationText(value);
+  if (entry.type === 'bool') return t(value ? 'settings.on' : 'settings.off');
+  if (value === null || value === undefined) return t('settings.auto');
+  return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
 function renderOrder(entry) {
@@ -75,7 +87,7 @@ function renderRecord(entry) {
   const value = draft[entry.key] || {};
   return `<div class="settings-record" data-key="${esc(entry.key)}">${Object.keys(fields).map((id) => `
     <label class="settings-field-inline"><span>${esc(t(`sec.${id}`))}</span>
-      <select data-record-field="${esc(id)}">${fields[id].values.map((option) => `<option value="${option}" ${value[id] === option ? 'selected' : ''}>${option}</option>`).join('')}</select>
+      <select class="settings-select" data-record-field="${esc(id)}">${fields[id].values.map((option) => `<option value="${option}" ${value[id] === option ? 'selected' : ''}>${option}</option>`).join('')}</select>
     </label>`).join('')}</div>`;
 }
 
@@ -96,15 +108,15 @@ function renderField(entry) {
   else if (entry.type === 'record') control = renderRecord(entry);
   else if (entry.type === 'enum') control = renderEnum(entry);
   else if (entry.type === 'bool') {
-    control = `<label class="settings-toggle"><input type="checkbox" data-bool ${draft[entry.key] ? 'checked' : ''}> ${esc(t(entry.label))}</label>`;
+    control = `<label class="settings-toggle"><input type="checkbox" role="switch" data-bool ${draft[entry.key] ? 'checked' : ''}><span>${esc(t(draft[entry.key] ? 'settings.on' : 'settings.off'))}</span></label>`;
   } else if (entry.type === 'duration') {
     const chips = ['7d', '14d', '30d', '180d', '0'];
     control = `<div class="settings-duration" data-key="${esc(entry.key)}">${chips.map((chip) => `
-      <button type="button" class="chip${draft[entry.key] === chip || (chip === '0' && draft[entry.key] === 0) ? ' is-active' : ''}" data-duration="${chip}">${chip === '0' ? '∞' : chip.replace('d', t('settings.dayUnit'))}</button>`).join('')}
-      <input type="text" data-duration-input value="${esc(draft[entry.key] === 0 ? '0' : draft[entry.key] ?? '')}" spellcheck="false">
+      <button type="button" class="chip${draft[entry.key] === chip || (chip === '0' && draft[entry.key] === 0) ? ' is-active' : ''}" data-duration="${chip}">${durationText(chip)}</button>`).join('')}
+      <input type="text" class="settings-input settings-duration-input" data-duration-input data-i18n-ph="settings.durationHint" placeholder="${esc(t('settings.durationHint'))}" value="${esc(draft[entry.key] === 0 ? '0' : draft[entry.key] ?? '')}" spellcheck="false">
     </div>`;
   } else {
-    control = `<input type="text" data-text value="${esc(typeof draft[entry.key] === 'string' ? draft[entry.key] : JSON.stringify(draft[entry.key]))}">`;
+    control = `<input type="text" class="settings-input" data-text value="${esc(typeof draft[entry.key] === 'string' ? draft[entry.key] : JSON.stringify(draft[entry.key]))}">`;
   }
   return `<section class="settings-item${changed ? ' is-changed' : ''}" data-setting="${esc(entry.key)}">
     <header class="settings-item-head">
@@ -146,12 +158,20 @@ async function load() {
   saved = { ...state.values };
   draft = structuredClone(saved);
   const available = groups();
-  const linked = registry.find((entry) => entry.key === decodeURIComponent(location.hash.slice(1)));
-  if (linked) group = linked.group;
   if (!available.includes(group)) group = available[0] || 'epic';
-  render();
-  if (linked) document.querySelector(`[data-key="${CSS.escape(linked.key)}"]`)?.scrollIntoView({ block: 'center' });
+  if (!showLinked()) render();
 }
+
+// Search links land on `/settings#<key>`: open that key's group and bring it into view.
+function showLinked() {
+  const linked = registry.find((entry) => entry.key === decodeURIComponent(location.hash.slice(1)));
+  if (!linked) return false;
+  group = linked.group;
+  render();
+  document.querySelector(`[data-setting="${CSS.escape(linked.key)}"]`)?.scrollIntoView({ block: 'center' });
+  return true;
+}
+addEventListener('hashchange', showLinked);
 
 async function save() {
   const patch = {};
