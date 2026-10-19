@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 import * as store from '../server/store.mjs';
 import { refreshEpic } from '../server/refresh.mjs';
 import { buildBrief, branchLine } from '../server/brief.mjs';
@@ -11,6 +11,8 @@ import * as docs from '../server/docs.mjs';
 import { BoardError } from '../server/errors.mjs';
 import { readBoardSnapshot, linksForEpic } from '../server/links.mjs';
 import { parseStepRef } from '../server/step-refs.mjs';
+import { readSettingsState, writeSettings, parseConfigValue, SETTINGS_REGISTRY, SETTINGS_BY_KEY } from '../server/settings.mjs';
+import * as feed from '../server/feed.mjs';
 
 const OPTIONS = {
   title: { type: 'string' }, goal: { type: 'string' }, url: { type: 'string' }, path: { type: 'string' }, base: { type: 'string' },
@@ -25,6 +27,9 @@ const OPTIONS = {
   task: { type: 'string' }, by: { type: 'string' }, set: { type: 'string' }, session: { type: 'string' },
   doing: { type: 'string' }, next: { type: 'string' }, agent: { type: 'string' }, branch: { type: 'string' }, why: { type: 'string' },
   json: { type: 'boolean' }, delete: { type: 'boolean' }, 'cleanup-refs': { type: 'boolean' }, out: { type: 'string' }, repo: { type: 'string' },
+  group: { type: 'string' }, source: { type: 'string' }, since: { type: 'string' }, unmarked: { type: 'boolean' },
+  severity: { type: 'string' }, mark: { type: 'string' },
+  'dry-run': { type: 'boolean' }, 'text-file': { type: 'string' },
 };
 
 const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value clears the field)
@@ -61,6 +66,17 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
   export <epic> [--out file.html]
   doctor [--repo PATH]                         tools, credentials and paths as this machine sees them
   service install|uninstall|status             run the board as a user service (launchd / systemd)
+  config list [--group G] [--json]             board settings from the registry
+  config get <key> [--json]
+  config set <key> <value>                     value by type (14d, true, JSON for lists)
+  config reset <key>                           restore the registry default
+  feed add <file|-> [--json]                   upsert feed items (object or array)
+  feed list [--unmarked] [--source X] [--since 1d] [--severity S] [--mark M|none] [--json]
+  feed mark <id…> important|unimportant|noise [--comment C]
+  feed unmark <id…> | feed delete <id…>
+  feed summary [--json] | feed prune [--dry-run]
+  feed profile --source X [--json] | feed profile set --source X --text-file F
+  feed profile show --source X
 
 Deletion refuses incoming references by default. --cleanup-refs detaches dependencies,
 documents, waiting/session links and orphan branch links in merge order; document files,
@@ -249,6 +265,86 @@ const COMMANDS = {
     if (action === 'uninstall') return { text: service.uninstall() };
     if (action === 'status') return { text: await service.status() };
     throw new BoardError(400, 'usage', 'service install|uninstall|status');
+  },
+  config: ([action, key, ...rest], o) => {
+    const state = readSettingsState();
+    if (action === 'list') {
+      const rows = SETTINGS_REGISTRY.filter((entry) => !o.group || entry.group === o.group);
+      if (o.json) return { rev: state.rev, values: Object.fromEntries(rows.map((entry) => [entry.key, state.values[entry.key]])) };
+      return {
+        text: rows.map((entry) => `${entry.key} = ${JSON.stringify(state.values[entry.key])}`).join('\n') || 'no settings',
+      };
+    }
+    const entry = SETTINGS_BY_KEY[need(key, 'settings key')];
+    if (!entry) throw new BoardError(400, 'bad-settings', `unknown settings key ${key}`);
+    if (action === 'get') {
+      const value = state.values[entry.key];
+      return o.json ? { key: entry.key, value, rev: state.rev } : { text: typeof value === 'string' ? value : JSON.stringify(value) };
+    }
+    if (action === 'set') {
+      const raw = need(rest.join(' '), 'value');
+      const saved = writeSettings({ [entry.key]: parseConfigValue(entry, raw) }, { rev: state.rev });
+      return o.json ? saved : { text: `${entry.key} = ${JSON.stringify(saved.values[entry.key])}` };
+    }
+    if (action === 'reset') {
+      const saved = writeSettings({ [entry.key]: null }, { rev: state.rev });
+      return o.json ? saved : { text: `${entry.key} = ${JSON.stringify(saved.values[entry.key])}` };
+    }
+    throw new BoardError(400, 'usage', 'config list|get|set|reset');
+  },
+  feed: ([action, ...rest], o) => {
+    if (action === 'add') {
+      const file = need(rest[0], 'feed add <file|->');
+      const text = file === '-' ? readFileSync(0, 'utf8') : readFileSync(file, 'utf8');
+      let payload;
+      try { payload = JSON.parse(text); } catch { throw new BoardError(400, 'bad-json', 'feed add file is not JSON'); }
+      const result = feed.addFeedItems(payload);
+      if (o.json) return result;
+      const warn = result.warnings.length ? `\nwarnings: ${result.warnings.map((w) => w.warning).join('; ')}` : '';
+      return { text: `ok: ${result.items.length} item(s)${warn}` };
+    }
+    if (action === 'list') {
+      const items = feed.listFeedItems({ unmarked: o.unmarked, source: o.source, since: o.since, severity: o.severity, mark: o.mark });
+      return o.json ? items : { text: items.map((item) => `${item.id} · ${item.severity} · ${item.title}${item.mark ? ` · ${item.mark.value}` : ''}`).join('\n') || 'no items' };
+    }
+    if (action === 'mark') {
+      const value = rest.at(-1);
+      const ids = rest.slice(0, -1);
+      if (!ids.length) throw new BoardError(400, 'usage', 'feed mark <id…> important|unimportant|noise');
+      const items = feed.markFeedItems(ids, value, { comment: o.comment });
+      return o.json ? items : { text: `ok: marked ${items.length}` };
+    }
+    if (action === 'unmark') {
+      const items = feed.unmarkFeedItems(rest);
+      return o.json ? items : { text: `ok: unmarked ${items.length}` };
+    }
+    if (action === 'delete') {
+      const items = feed.deleteFeedItems(rest);
+      return o.json ? items : { text: `ok: deleted ${items.length}` };
+    }
+    if (action === 'summary') {
+      const summary = feed.feedSummary();
+      return o.json ? summary : { text: `unmarked ${summary.unmarked} (fire ${summary.fire}) · total ${summary.total}` };
+    }
+    if (action === 'prune') {
+      const result = feed.pruneFeed({ dryRun: o['dry-run'] });
+      return o.json ? result : { text: result.map((row) => `${row.source}: removed ${row.removed.length}, kept ${row.kept}`).join('\n') || 'nothing to prune' };
+    }
+    if (action === 'profile') {
+      const sub = rest[0];
+      if (sub === 'set') {
+        const text = readFileSync(need(o['text-file'], '--text-file'), 'utf8');
+        const saved = feed.setFeedProfile(need(o.source, '--source'), text);
+        return o.json ? saved : { text: `ok: profile ${saved.source}` };
+      }
+      if (sub === 'show') {
+        const shown = feed.showFeedProfile(need(o.source, '--source'));
+        return o.json ? shown : { text: shown.text || '(empty)' };
+      }
+      const aggregates = feed.feedProfileAggregates(need(o.source, '--source'));
+      return o.json ? aggregates : { text: JSON.stringify(aggregates, null, 2) };
+    }
+    throw new BoardError(400, 'usage', 'feed add|list|mark|unmark|delete|summary|prune|profile');
   },
 };
 

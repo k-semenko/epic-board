@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f141a" media="(prefers-color-scheme: dark)">
+<title>Settings · EpicBoard</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/static/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-in">
+  <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>EpicBoard</a>
+  <div class="top-search"><label class="search"><span data-icon="search"></span><input id="q" type="search" data-i18n-ph="search.placeholder" autocomplete="off"></label><div id="search-results" class="search-results" hidden></div></div>
+  <a href="/feed" class="icon-btn topbar-feed" data-i18n-aria="nav.feed" data-i18n-title="nav.feed"><span data-icon="inbox"></span><span id="feed-badge" class="feed-badge" hidden></span></a>
+  <a href="/settings" aria-current="page" class="icon-btn topbar-settings" aria-current="page" data-i18n-aria="settings.title" data-i18n-title="settings.title"><span data-icon="settings"></span></a>
+  <button type="button" id="lang" class="lang-btn">RU</button>
+</div></nav>
+<main class="wrap settings-page">
+  <header class="head"><h1 data-i18n="settings.title">Settings</h1></header>
+  <p id="settings-error" class="crit" role="alert" hidden></p>
+  <div class="settings-layout">
+    <nav id="settings-groups" class="settings-groups" aria-label="Settings groups"></nav>
+    <div id="settings-fields" class="settings-fields"></div>
+  </div>
+  <div id="settings-draft" class="settings-draft" hidden>
+    <span data-i18n="settings.draft">Unsaved changes</span>
+    <button type="button" id="settings-discard" data-i18n="settings.discard">Discard</button>
+    <button type="button" class="primary" id="settings-save"><span data-icon="save"></span><span data-i18n="settings.save">Save</span></button>
+  </div>
+</main>
+<script type="module" src="/static/settings-page.mjs"></script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f141a" media="(prefers-color-scheme: dark)">
+<title>Tasks · EpicBoard</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/static/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/tasks.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-in">
+  <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>EpicBoard</a>
+  <div class="top-search"><label class="search"><span data-icon="search"></span><input id="q" type="search" data-i18n-ph="tasks.search" data-i18n-aria="tasks.search" autocomplete="off"></label></div>
+  <a href="/feed" class="icon-btn topbar-feed" data-i18n-aria="nav.feed" data-i18n-title="nav.feed"><span data-icon="inbox"></span><span id="feed-badge" class="feed-badge" hidden></span></a>
+  <a href="/settings" class="icon-btn topbar-settings" data-i18n-aria="settings.title" data-i18n-title="settings.title"><span data-icon="settings"></span></a>
+  <button type="button" id="lang" class="lang-btn">RU</button>
+</div></nav>
+<main class="wrap tasks-page">
+  <header class="head">
+    <div><h1 data-i18n="nav.tasks">Tasks</h1>
+      <nav class="view-nav" data-i18n-aria="nav.views" aria-label="Views">
+        <a href="/" data-i18n="nav.epics">Epics</a>
+        <a href="/tasks" aria-current="page" data-i18n="nav.tasks">Tasks</a>
+        <a href="/feed" data-i18n="nav.feed">Feed</a>
+      </nav>
+    </div>
+  </header>
+  <div class="tasks-filters">
+    <label><span data-i18n="tasks.epic">Epic</span><select id="tasks-epic"></select></label>
+    <label><span data-i18n="tasks.status">Tracker status</span><select id="tasks-status"></select></label>
+    <label><span data-i18n="tasks.sort">Sort</span><select id="tasks-sort"></select></label>
+    <label class="tasks-waiting-filter"><input id="tasks-waiting" type="checkbox"><span data-i18n="tasks.onlyWaiting">Needs decision only</span></label>
+  </div>
+  <p id="tasks-message" class="tasks-message muted" role="status" aria-live="polite" data-i18n="loading">Loading…</p>
+  <p id="tasks-summary" class="tasks-summary muted" role="status" aria-live="polite"></p>
+  <div id="tasks-list" class="tasks-list"></div>
+</main>
+<script type="module" src="/static/tasks.mjs"></script>
+</body>
+</html>

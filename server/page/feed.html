@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f3f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f141a" media="(prefers-color-scheme: dark)">
+<title>Feed · EpicBoard</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml" media="(prefers-color-scheme: light)">
+<link rel="icon" href="/static/favicon-dark.svg" type="image/svg+xml" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="topbar"><div class="topbar-in">
+  <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>EpicBoard</a>
+  <div class="top-search"><label class="search"><span data-icon="search"></span><input id="q" type="search" data-i18n-ph="search.placeholder" autocomplete="off"></label><div id="search-results" class="search-results" hidden></div></div>
+  <a href="/feed" aria-current="page" class="icon-btn topbar-feed" data-i18n-aria="nav.feed" data-i18n-title="nav.feed"><span data-icon="inbox"></span><span id="feed-badge" class="feed-badge" hidden></span></a>
+  <a href="/settings" class="icon-btn topbar-settings" data-i18n-aria="settings.title" data-i18n-title="settings.title"><span data-icon="settings"></span></a>
+  <button type="button" id="lang" class="lang-btn">RU</button>
+</div></nav>
+<main class="wrap feed-page">
+  <header class="head">
+    <div>
+      <h1 data-i18n="feed.title">Feed</h1>
+      <nav class="view-nav" data-i18n-aria="nav.views" aria-label="Views">
+        <a href="/" data-i18n="nav.epics">Epics</a>
+        <a href="/tasks" data-i18n="nav.tasks">Tasks</a>
+        <a href="/feed" aria-current="page" data-i18n="nav.feed">Feed</a>
+      </nav>
+    </div>
+    <div class="feed-head-tools">
+      <div class="view-nav" role="tablist">
+        <button type="button" class="is-active" data-tab="unmarked" data-i18n="feed.unmarked">Unseen</button>
+        <button type="button" data-tab="history" data-i18n="feed.history">History</button>
+      </div>
+      <button type="button" id="feed-how-open"><span data-icon="info"></span><span data-i18n="feed.how">How to write</span></button>
+    </div>
+  </header>
+  <div id="feed-new" class="feed-new" hidden></div>
+  <div id="feed-filters" class="tasks-filters feed-filters"></div>
+  <div class="feed-layout">
+    <div id="feed-list" class="feed-list"></div>
+    <aside id="feed-profile" class="feed-profile" hidden></aside>
+  </div>
+  <div id="feed-toast" class="feed-toast" hidden></div>
+  <dialog id="feed-how"><div class="modal feed-how">
+    <header class="modal-head"><h3 data-i18n="feed.howTitle">Using the feed</h3><button type="button" class="icon-btn" data-how-close aria-label="Close"><span data-icon="close"></span></button></header>
+    <div class="view-nav" role="tablist">
+      <button type="button" class="is-active" data-how-tab="people" data-i18n="feed.howPeople">For people</button>
+      <button type="button" data-how-tab="ai" data-i18n="feed.howAi">Giving it to AI</button>
+    </div>
+    <section data-how-panel="people"><div id="feed-guide" class="markdown feed-guide"></div></section>
+    <section data-how-panel="ai" hidden>
+      <p class="muted" data-i18n="feed.howHint">The board does not poll sources. An agent or script pushes items through the CLI. Paste this into the agent.</p>
+      <pre id="feed-how-prompt" class="feed-prompt"></pre>
+      <footer class="modal-foot"><button type="button" class="primary" id="feed-how-copy" data-i18n="feed.copy">Copy</button></footer>
+      <div id="feed-ai-interface" class="markdown feed-guide"></div>
+    </section>
+  </div></dialog>
+  <dialog id="feed-item" class="feed-item-dialog"><div class="modal feed-item"></div></dialog>
+  <dialog id="feed-help" class="feed-help"><div class="modal"><header class="modal-head"><h3 data-i18n="feed.helpTitle">Keyboard</h3><button type="button" class="icon-btn" data-help-close aria-label="Close"><span data-icon="close"></span></button></header><pre id="feed-help-body"></pre></div></dialog>
+</main>
+<script src="/vendor/marked.min.js"></script>
+<script src="/vendor/purify.min.js"></script>
+<script type="module" src="/static/feed-page.mjs"></script>
+</body>
+</html>

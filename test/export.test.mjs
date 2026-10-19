@@ -34,7 +34,7 @@ test('export is a self-contained html page with the epic and its history', () =>
   const parsed = JSON.parse(data[1]);
   assert.equal(parsed.epic.id, '42');
   assert.ok(parsed.history.length >= 2);
-  assert.deepEqual(parsed.settings.epicPageSizes, { waiting: 5, decisions: 5, history: 5 });
+  assert.deepEqual(parsed.settings['epic.pageSizes'], { waiting: 5, decisions: 5, history: 5 });
   assert.equal(parsed.docs.find((d) => d.id === exportedDoc.id).text, '# Спека\n');
   assert.ok(parsed.exportedAt);
   assert.equal(html.split('</script>').length - 1, html.split('<script').length - 1, 'a title cannot close the data script early');
@@ -52,14 +52,21 @@ test('unknown epic is 404', () => {
 test('export snapshots the shared section order and page sizes for offline viewing', () => {
   const file = join(process.env.EPIC_BOARD_HOME, 'settings.json');
   const settings = {
-    epicSectionOrder: ['history', 'map', 'waiting', 'branches', 'sessions', 'decisions'],
-    epicPageSizes: { waiting: 15, decisions: 10, history: 5 },
+    schema: 2,
+    rev: 1,
+    'epic.sectionOrder': ['history', 'map', 'waiting', 'branches', 'sessions', 'decisions'],
+    'epic.pageSizes': { waiting: 15, decisions: 10, history: 5 },
   };
   writeFileSync(file, JSON.stringify(settings));
   try {
     const html = buildExport('42');
     const data = JSON.parse(html.match(/window\.__EPIC_EXPORT__ = (.*?);<\/script>/s)[1]);
-    assert.deepEqual(data.settings, { ...settings, mapHeight: null, pinnedEpics: [] });
+    assert.deepEqual(data.settings, {
+      'epic.sectionOrder': settings['epic.sectionOrder'],
+      'epic.pageSizes': settings['epic.pageSizes'],
+      'epic.mapHeight': null,
+      'epic.pinned': [],
+    });
   } finally {
     rmSync(file);
   }
