@@ -1,4 +1,4 @@
-import { bindShell, api, esc, t, fillChrome } from './shell.mjs';
+import { bindShell, api, esc, t, fillChrome, locale } from './shell.mjs';
 import { renderMarkdown } from './markdown.mjs';
 import { icon } from './icons.mjs';
 
@@ -72,42 +72,114 @@ function renderFilters() {
     </label>` : ''}`;
 }
 
-function rowHtml(item, index) {
-  const active = index === focus ? ' is-focus' : '';
-  const sel = selected.has(item.id) ? ' is-selected' : '';
-  const refs = (item.refs || []).slice(0, 4).map((r) => {
-    if (r.startsWith('epic:')) return `<a class="chip" href="/e/${esc(r.slice(5))}">${esc(r.slice(5))}</a>`;
+function refChips(item) {
+  return (item.refs || []).map((r) => {
+    if (r.startsWith('epic:')) return `<a class="chip" href="/e/${esc(r.slice(5))}">${icon('board')}${esc(r.slice(5))}</a>`;
     const task = r.match(/^task:([^/]+)\/(.+)$/);
-    if (task) return `<a class="chip" href="/e/${esc(task[1])}#t-${esc(task[2])}">${esc(task[2])}</a>`;
+    if (task) return `<a class="chip" href="/e/${esc(task[1])}#t-${esc(task[2])}">${icon('list')}${esc(task[2])}</a>`;
     if (/^https?:\/\//.test(r)) {
       let host = r;
       try { host = new URL(r).host; } catch {}
-      return `<a class="chip" href="${esc(r)}" target="_blank" rel="noopener">${icon('link')}${esc(host)}</a>`;
+      return `<a class="chip" href="${esc(r)}" target="_blank" rel="noopener" title="${esc(r)}">${icon('link')}${esc(host)}</a>`;
     }
     return '';
   }).join('');
-  return `<li class="feed-row${active}${sel}" data-id="${esc(item.id)}" data-index="${index}">
-    <button type="button" class="feed-dot sev-${esc(item.severity)}" aria-label="${esc(item.severity)}"></button>
-    <div class="feed-main">
-      <div class="feed-line">
-        <span class="feed-source">${esc(item.source)}</span>
-        ${item.channel ? `<span class="muted">${esc(item.channel)}</span>` : ''}
-        <strong>${esc(item.title)}</strong>
-        ${item.body ? `<button type="button" class="feed-more" data-toggle-body title="${esc(t('feed.showText'))}" aria-label="${esc(t('feed.showText'))}">${icon('file')}</button>` : ''}
-        <span class="muted">${esc(ago(item.updatedAt))}</span>
-        ${item.count > 1 ? `<span class="chip">×${item.count}</span>` : ''}
-        ${item.changedSinceMark ? `<span class="chip">${esc(t('feed.changed'))}</span>` : ''}
-        <span class="feed-refs">${refs}</span>
-      </div>
-      <div class="feed-body" hidden></div>
-      <div class="feed-comment" hidden><input type="text" data-i18n-ph="feed.why" placeholder="${esc(t('feed.why'))}"></div>
-    </div>
-    <div class="feed-actions">
-      ${tab === 'history' ? actionButton('data-unmark', 'undo', t('feed.unmark')) : ''}
-      ${MARKS.map((m) => actionButton(`data-mark="${m.value}"`, m.icon, `${t(m.label)} · ${m.key}`, item.mark?.value === m.value)).join('')}
-      ${tab === 'history' ? actionButton('data-delete', 'close', t('feed.delete')) : ''}
-    </div>
+}
+
+const sameDay = (a, b) => a.toDateString() === b.toDateString();
+
+// Created time reads as "today, 14:32" so a glance tells how fresh the signal is.
+function stamp(iso) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const now = new Date();
+  const time = at.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(at, now)) return t('feed.today', { time });
+  if (sameDay(at, yesterday)) return t('feed.yesterday', { time });
+  return `${at.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })}, ${time}`;
+}
+
+function stampTitle(item) {
+  const full = (iso) => new Date(iso).toLocaleString(locale());
+  const lines = [t('feed.created', { at: full(item.ts) })];
+  if (item.updatedAt && item.updatedAt !== item.ts) lines.push(t('feed.updated', { at: full(item.updatedAt), ago: ago(item.updatedAt) }));
+  if (item.count > 1) lines.push(t('feed.repeats', { n: item.count }));
+  return lines.join('\n');
+}
+
+const LONG_BODY = 320;
+const isLong = (body) => body.length > LONG_BODY || body.split('\n').length > 5;
+
+function headHtml(item) {
+  return `<span class="feed-sev sev-${esc(item.severity)}">${esc(t(`feed.sev.${item.severity}`))}</span>
+    <span class="feed-source">${esc(item.source)}</span>
+    ${item.channel ? `<span class="feed-channel">${esc(item.channel)}</span>` : ''}
+    <span class="feed-card-meta">
+      ${item.changedSinceMark ? `<span class="chip chip-warn">${esc(t('feed.changed'))}</span>` : ''}
+      ${item.count > 1 ? `<span class="chip" title="${esc(t('feed.repeats', { n: item.count }))}">×${item.count}</span>` : ''}
+      <time datetime="${esc(item.ts)}" title="${esc(stampTitle(item))}">${esc(stamp(item.ts))}</time>
+    </span>`;
+}
+
+function actionsHtml(item, { labels = false } = {}) {
+  const btn = (attrs, iconName, label, active) => labels
+    ? `<button type="button" class="feed-act-wide${active ? ' is-active' : ''}" ${attrs}>${icon(iconName)}<span>${esc(label)}</span></button>`
+    : actionButton(attrs, iconName, label, active);
+  return `${tab === 'history' ? btn('data-unmark', 'undo', t('feed.unmark')) : ''}
+    ${MARKS.map((m) => btn(`data-mark="${m.value}"`, m.icon, labels ? t(m.label) : `${t(m.label)} · ${m.key}`, item.mark?.value === m.value)).join('')}
+    ${tab === 'history' ? btn('data-delete', 'close', t('feed.delete')) : ''}`;
+}
+
+function markNote(item) {
+  if (!item.mark) return '';
+  const label = MARKS.find((m) => m.value === item.mark.value);
+  return `<span class="feed-mark-note">${label ? icon(label.icon) : ''}${esc(label ? t(label.label) : item.mark.value)}${item.mark.comment ? ` · ${esc(item.mark.comment)}` : ''}</span>`;
+}
+
+function rowHtml(item, index) {
+  const active = index === focus ? ' is-focus' : '';
+  const sel = selected.has(item.id) ? ' is-selected' : '';
+  const body = item.body || '';
+  return `<li class="feed-row feed-card sev-${esc(item.severity)}${active}${sel}" data-id="${esc(item.id)}" data-index="${index}">
+    <header class="feed-card-head">${headHtml(item)}</header>
+    <h3 class="feed-title"><button type="button" class="feed-open" data-open>${esc(item.title)}</button></h3>
+    ${body ? `<div class="feed-preview markdown${isLong(body) ? ' is-clamped' : ''}" data-open>${renderMarkdown(body).html}</div>` : ''}
+    ${body && isLong(body) ? `<button type="button" class="feed-readmore" data-open>${esc(t('feed.readMore'))}</button>` : ''}
+    <div class="feed-comment" hidden><input type="text" data-i18n-ph="feed.why" placeholder="${esc(t('feed.why'))}"></div>
+    <footer class="feed-card-foot">
+      <div class="feed-refs">${tab === 'history' ? markNote(item) : ''}${refChips(item)}</div>
+      <div class="feed-actions">${actionsHtml(item)}</div>
+    </footer>
   </li>`;
+}
+
+// The full item opens in a dialog: long chat summaries are read there, and marked without leaving it.
+let openId = null;
+
+function openItem(id) {
+  const item = items.find((x) => x.id === id);
+  if (!item) return;
+  openId = id;
+  pending = null;
+  const dlg = $('#feed-item');
+  dlg.querySelector('.modal').innerHTML = `
+    <header class="modal-head feed-card-head">${headHtml(item)}<button type="button" class="icon-btn" data-item-close aria-label="${esc(t('close'))}">${icon('close')}</button></header>
+    <h2 class="feed-item-title">${esc(item.title)}</h2>
+    <p class="muted feed-item-times">${esc(stampTitle(item)).replaceAll('\n', ' · ')}</p>
+    ${item.body ? `<div class="markdown feed-item-body">${renderMarkdown(item.body).html}</div>` : `<p class="muted">${esc(t('feed.noBody'))}</p>`}
+    ${item.refs?.length ? `<div class="feed-refs">${refChips(item)}</div>` : ''}
+    ${tab === 'history' && item.mark ? `<p>${markNote(item)}</p>` : ''}
+    <div class="feed-comment" hidden><input type="text" placeholder="${esc(t('feed.why'))}"></div>
+    <footer class="modal-foot feed-item-foot">${actionsHtml(item, { labels: true })}</footer>`;
+  if (!dlg.open) dlg.showModal();
+}
+
+function closeItem() {
+  openId = null;
+  const dlg = $('#feed-item');
+  if (dlg.open) dlg.close();
 }
 
 function renderList() {
@@ -133,7 +205,7 @@ function renderList() {
     for (const [source, group] of bySource) {
       html += `<section class="feed-group" data-source="${esc(source)}"><header class="day-head">
         <h2>${esc(source)} · ${group.length}</h2>
-        <button type="button" data-noise-group="${esc(source)}">${esc(t('feed.allNoise'))}</button>
+        <button type="button" class="feed-group-noise" data-noise-group="${esc(source)}">${icon('trash')}<span>${esc(t('feed.allNoise'))}</span></button>
       </header><ul class="list feed-rows">${group.map((item) => rowHtml(item, index++)).join('')}</ul></section>`;
     }
     root.innerHTML = html;
@@ -209,6 +281,7 @@ async function markIds(ids, value, comment) {
   if (!ids.length) return;
   const previous = ids.map((id) => ({ id, mark: items.find((item) => item.id === id)?.mark || null }));
   pending = null;
+  if (openId && ids.includes(openId)) closeItem();
   await postFeed('mark', { ids, value, comment });
   showToast(previous);
   await load();
@@ -232,7 +305,8 @@ function rowOf(id) {
 
 // A mark that disagrees with the connector asks "why?" first; Enter sends it, Esc or the same mark again skips it.
 async function requestMark(item, value) {
-  const field = rowOf(item.id)?.querySelector('.feed-comment');
+  const scope = openId === item.id ? $('#feed-item') : rowOf(item.id);
+  const field = scope?.querySelector('.feed-comment');
   const input = field?.querySelector('input');
   const typed = field && !field.hidden ? input.value.trim() : '';
   const again = pending && pending.id === item.id && pending.value === value;
@@ -284,11 +358,8 @@ $('#feed-list').addEventListener('click', async (event) => {
     await requestMark(item, value);
     return;
   }
-  if (event.target.closest('[data-toggle-body]')) {
-    const body = row.querySelector('.feed-body');
-    const item = items.find((x) => x.id === row.dataset.id);
-    body.hidden = !body.hidden;
-    if (!body.hidden) body.innerHTML = renderMarkdown(item.body || '').html;
+  if (event.target.closest('[data-open]') && !event.target.closest('a')) {
+    openItem(row.dataset.id);
     return;
   }
   if (event.target.closest('[data-unmark]')) {
@@ -303,13 +374,21 @@ $('#feed-list').addEventListener('click', async (event) => {
   }
 });
 
-$('#feed-list').addEventListener('dblclick', (event) => {
-  const row = event.target.closest('[data-id]');
-  if (!row) return;
-  const body = row.querySelector('.feed-body');
-  const item = items.find((x) => x.id === row.dataset.id);
-  body.hidden = !body.hidden;
-  if (!body.hidden) body.innerHTML = renderMarkdown(item.body || '').html;
+// Clicks and keys inside the item dialog act on the open item, like on its card.
+$('#feed-item').addEventListener('click', async (event) => {
+  if (event.target === $('#feed-item') || event.target.closest('[data-item-close]')) { closeItem(); return; }
+  const item = items.find((x) => x.id === openId);
+  if (!item) return;
+  const markBtn = event.target.closest('[data-mark]');
+  if (markBtn) { await requestMark(item, markBtn.dataset.mark); return; }
+  if (event.target.closest('[data-unmark]')) { closeItem(); await postFeed('unmark', { ids: [item.id] }); await load(); return; }
+  if (event.target.closest('[data-delete]') && confirm(t('feed.confirmDelete'))) { closeItem(); await postFeed('delete', { ids: [item.id] }); await load(); }
+});
+$('#feed-item').addEventListener('close', () => { openId = null; pending = null; });
+$('#feed-item').addEventListener('keydown', async (event) => {
+  const input = event.target.closest('.feed-comment input');
+  if (!input || !pending) return;
+  if (event.key === 'Enter') { event.preventDefault(); await markIds([pending.id], pending.value, input.value.trim() || undefined); }
 });
 
 $('#feed-new').addEventListener('click', (event) => {
@@ -340,6 +419,15 @@ $('#feed-list').addEventListener('keydown', async (event) => {
 
 document.addEventListener('keydown', async (event) => {
   if (/input|textarea/i.test(document.activeElement?.tagName)) return;
+  if (openId) {
+    const mark = MARKS.find((m) => m.key === event.key);
+    const item = items.find((x) => x.id === openId);
+    if (mark && item) {
+      event.preventDefault();
+      await requestMark(item, mark.value);
+    }
+    return;
+  }
   const list = visible();
   if (event.key === 'j') { focus = Math.min(list.length - 1, focus + 1); renderList(); }
   if (event.key === 'k') { focus = Math.max(0, focus - 1); renderList(); }
@@ -350,10 +438,7 @@ document.addEventListener('keydown', async (event) => {
     else selected.add(item.id);
     renderList();
   }
-  if (event.key === 'Enter') {
-    const row = document.querySelector('.feed-row.is-focus');
-    row?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-  }
+  if (event.key === 'Enter' && currentItem()) openItem(currentItem().id);
   if (event.key === 'c') {
     const row = document.querySelector('.feed-row.is-focus .feed-comment');
     if (row) { row.hidden = false; row.querySelector('input').focus(); }

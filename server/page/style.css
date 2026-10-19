@@ -655,28 +655,79 @@ button.primary:hover { filter: brightness(1.08); }
 .feed-group { margin-bottom: 18px; }
 .feed-group header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
 .feed-group h2 { margin: 0; font-size: 12px; }
-.feed-rows.list { gap: 6px; }
+.feed-rows.list { gap: 10px; }
 .feed-rows > li { display: grid; }
-.feed-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
-.feed-row.is-focus { background: var(--chip); }
-.feed-row.is-selected { box-shadow: inset 3px 0 0 var(--accent); }
 .feed-dot { width: 8px; height: 8px; border-radius: 50%; border: 0; margin-top: 8px; padding: 0; }
 .feed-dot.sev-fire { background: var(--crit); }
 .feed-dot.sev-important { background: var(--warn); }
 .feed-dot.sev-normal { background: var(--accent); }
 .feed-dot.sev-noise { background: var(--muted); }
-.feed-line { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; font-size: 14px; }
 .feed-source { font-family: var(--mono); font-size: 12px; color: var(--muted); }
-.feed-actions { display: flex; gap: 2px; align-self: center; opacity: .55; transition: opacity .12s; }
+.list li.feed-card, .feed-card { display: grid; align-items: stretch; gap: 8px; padding: 12px 14px 10px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--sev, var(--line)); border-radius: 10px; }
+.feed-card.sev-fire { --sev: var(--crit); }
+.feed-card.sev-important { --sev: var(--warn); }
+.feed-card.sev-normal { --sev: var(--accent); }
+.feed-card.sev-noise { --sev: var(--line); }
+.feed-card.is-focus { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); border-left-color: var(--sev, var(--accent)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+.feed-card.is-selected { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.feed-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12.5px; color: var(--muted); }
+.feed-sev { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+.feed-sev::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.feed-sev.sev-fire { color: var(--crit); }
+.feed-sev.sev-important { color: var(--warn); }
+.feed-sev.sev-normal { color: var(--accent); }
+.feed-sev.sev-noise { color: var(--muted); }
+.feed-channel::before { content: "· "; }
+.feed-card-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.feed-card-meta time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip-warn { color: var(--warn); }
+.feed-title { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 600; }
+.feed-open { all: unset; cursor: pointer; overflow-wrap: anywhere; }
+.feed-open:hover, .feed-open:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.feed-preview { font-size: 13.5px; line-height: 1.55; color: color-mix(in srgb, var(--fg) 82%, var(--muted)); cursor: pointer; overflow-wrap: anywhere; }
+.feed-preview > :first-child { margin-top: 0; }
+.feed-preview > :last-child { margin-bottom: 0; }
+.feed-preview p, .feed-preview ul, .feed-preview ol { margin: 0 0 6px; }
+.feed-preview.is-clamped { max-height: 7.8em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent); }
+.feed-preview pre, .feed-item-body pre { margin: 6px 0; padding: 8px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.feed-preview table, .feed-item-body table { border-collapse: collapse; margin: 6px 0; font-size: 12.5px; }
+.feed-preview td, .feed-preview th, .feed-item-body td, .feed-item-body th { border: 1px solid var(--line); padding: 3px 8px; text-align: left; }
+.list li.feed-card li, .feed-item-body li { display: list-item; background: none; border: 0; border-radius: 0; padding: 0; margin: 2px 0; }
+.feed-preview ul, .feed-preview ol, .feed-item-body ul, .feed-item-body ol { padding-left: 20px; }
+.feed-preview h1, .feed-preview h2, .feed-preview h3, .feed-preview h4 { font-size: 13.5px; margin: 6px 0 2px; }
+.feed-item-body h1, .feed-item-body h2, .feed-item-body h3, .feed-item-body h4 { font-size: 15px; margin: 16px 0 6px; }
+.feed-preview blockquote, .feed-item-body blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); }
+.feed-readmore { all: unset; justify-self: start; cursor: pointer; font-size: 12.5px; color: var(--accent); }
+.feed-readmore:hover, .feed-readmore:focus-visible { text-decoration: underline; }
+.feed-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; padding-top: 6px; border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); }
+.feed-mark-note { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin-right: 6px; }
+.feed-mark-note svg.i { width: 13px; height: 13px; margin: 0; }
+.feed-group-noise { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 6px; color: var(--muted); background: transparent; border: 1px solid var(--line); order: 2; }
+.feed-group-noise:hover { color: var(--crit, #c44); border-color: currentColor; }
+.feed-group-noise svg.i { width: 13px; height: 13px; margin: 0; }
+.feed-group header.day-head::after { order: 1; }
+.feed-item-dialog { position: fixed; inset: 0; margin: auto; width: min(760px, calc(100vw - 32px)); height: fit-content; max-height: 88vh; border: 0; padding: 0; background: transparent; color: inherit; }
+.feed-item-dialog::backdrop { background: rgba(0, 0, 0, .5); }
+.feed-item { width: 100%; max-height: 88vh; gap: 12px; }
+.feed-item .modal-head { flex-wrap: nowrap; }
+.feed-item .feed-card-meta { margin-left: auto; }
+.feed-item .feed-item-title { text-transform: none; letter-spacing: 0; color: var(--fg); font-weight: 650; margin: 0; font-size: 19px; line-height: 1.35; overflow-wrap: anywhere; }
+.feed-item-times { margin: -4px 0 0; font-size: 12px; }
+.feed-item-body { font-size: 14.5px; line-height: 1.65; overflow-wrap: anywhere; }
+.feed-item-body > :first-child { margin-top: 0; }
+.feed-item-foot { justify-content: flex-end; flex-wrap: wrap; position: sticky; bottom: -16px; padding: 10px 0 2px; background: var(--surface); border-top: 1px solid var(--line); }
+.feed-act-wide { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 12px; border-radius: 8px; }
+.feed-act-wide svg.i { width: 15px; height: 15px; margin: 0; }
+.feed-act-wide.is-active { border-color: var(--accent); color: var(--accent); }
+.feed-act-wide[data-mark="noise"]:hover, .feed-act-wide[data-delete]:hover { color: var(--crit, #c44); border-color: currentColor; }
+.feed-card .feed-comment input { margin-top: 0; }
+.feed-actions { display: flex; gap: 2px; flex: none; opacity: .6; transition: opacity .12s; }
 .feed-row.is-focus .feed-actions, .feed-row:hover .feed-actions, .feed-row:focus-within .feed-actions { opacity: 1; }
 .feed-act { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--muted); border-radius: 6px; }
 .feed-act:hover, .feed-act:focus-visible { background: var(--chip); color: var(--fg); }
 .feed-act.is-active { color: var(--accent); }
 .feed-act svg.i { width: 17px; height: 17px; margin: 0; stroke-width: 1.4; }
 .feed-act[data-mark="noise"]:hover, .feed-act[data-delete]:hover { color: var(--crit, #c44); }
-.feed-more { all: unset; cursor: pointer; display: inline-flex; color: var(--muted); border-radius: 4px; }
-.feed-more:hover, .feed-more:focus-visible { color: var(--fg); }
-.feed-more svg.i { width: 14px; height: 14px; margin: 0; }
 .feed-refs { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 .feed-refs .chip { display: inline-flex; align-items: center; gap: 3px; text-decoration: none; font-size: 11.5px; }
 .feed-refs .chip svg.i { width: 11px; height: 11px; margin: 0; }

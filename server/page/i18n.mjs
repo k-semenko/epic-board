@@ -120,7 +120,7 @@ const en = {
   'feed.filter.source': 'Source', 'feed.filter.severity': 'Severity', 'feed.filter.mark': 'Mark', 'feed.filter.all': 'All',
   'feed.sev.fire': 'Fire', 'feed.sev.important': 'Important', 'feed.sev.normal': 'Normal', 'feed.sev.noise': 'Noise',
   'feed.noProfile': 'No profile yet', 'feed.helpTitle': 'Keyboard',
-  'feed.showText': 'Show text', 'feed.how': 'How to use', 'feed.howTitle': 'Using the feed', 'feed.howPeople': 'For people', 'feed.howAi': 'Giving it to AI',
+  'feed.showText': 'Show text', 'feed.readMore': 'Read in full', 'feed.noBody': 'No text, only the title.', 'feed.today': 'today, {time}', 'feed.yesterday': 'yesterday, {time}', 'feed.created': 'Created {at}', 'feed.updated': 'updated {at} ({ago} ago)', 'feed.repeats': 'sent {n} times', 'feed.how': 'How to use', 'feed.howTitle': 'Using the feed', 'feed.howPeople': 'For people', 'feed.howAi': 'Giving it to AI',
   'feed.guide': `**What this is.** Agents and scripts drop signals here: mentions, alerts, run results. The board polls nothing by itself; every item came from a connector.
 
 **Going through it.** Each row ends with three buttons:
@@ -353,7 +353,7 @@ const ru = {
   'feed.filter.source': 'Источник', 'feed.filter.severity': 'Важность', 'feed.filter.mark': 'Отметка', 'feed.filter.all': 'Все',
   'feed.sev.fire': 'Пожар', 'feed.sev.important': 'Важно', 'feed.sev.normal': 'Обычно', 'feed.sev.noise': 'Мусор',
   'feed.noProfile': 'Профиля ещё нет', 'feed.helpTitle': 'Клавиатура',
-  'feed.showText': 'Показать текст', 'feed.how': 'Как пользоваться', 'feed.howTitle': 'Как пользоваться лентой', 'feed.howPeople': 'Для людей', 'feed.howAi': 'Как отдать AI',
+  'feed.showText': 'Показать текст', 'feed.readMore': 'Читать полностью', 'feed.noBody': 'Текста нет, только заголовок.', 'feed.today': 'сегодня, {time}', 'feed.yesterday': 'вчера, {time}', 'feed.created': 'Создано {at}', 'feed.updated': 'обновлено {at} ({ago} назад)', 'feed.repeats': 'пришло {n} раза', 'feed.how': 'Как пользоваться', 'feed.howTitle': 'Как пользоваться лентой', 'feed.howPeople': 'Для людей', 'feed.howAi': 'Как отдать AI',
   'feed.guide': `**Что это.** Сюда агенты и скрипты складывают сигналы: упоминания, алерты, итоги прогонов. Сама доска ничего не опрашивает — каждый пункт прислал какой-то коннектор.
 
 **Разбор.** В конце каждой строки три кнопки:
