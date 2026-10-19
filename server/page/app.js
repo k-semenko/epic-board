@@ -238,7 +238,7 @@ function cardBody(n) {
   return `<div class="ov-top"><span class="mono">${esc(n.id)}</span>${n.status ? `<span class="chip">${esc(n.status)}</span>` : ''}</div>
     <div class="ov-title" title="${esc(n.fullTitle)}">${esc(n.title)}</div>
     <div class="ov-progress"><span class="bar"><i style="width:${pct}%"></i></span><span class="mono">${n.progress.done}/${n.progress.total}</span></div>
-    ${n.side ? '' : now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
+    ${now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
 }
 
 function cardState(n) {
@@ -516,11 +516,14 @@ function renderDetail(map, open) {
   const list = (items, empty) => (items.length ? `<ul class="links">${items.join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
   const links = `<div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>`;
   const steps = lane ? lane.steps : map.merge.map((m) => ({ id: `m${m.n}`, title: `${m.n}. ${m.text}`, state: m.waiting ? 'waiting' : 'todo', note: m.branch, deps: [] }));
+  // Merge uses the same right-hand card as a task step (Depends on / Leads to), not a strip under the title.
+  const below = lane
+    ? stepSplit(lane, links)
+    : `<div class="step-split"><div></div><div class="step-info">${links}</div></div>`;
   return `<section class="detail${lane ? '' : ' detail-merge'}" id="detail" aria-label="${esc(t('detail.aria'))}">
     <header class="detail-head">${heading}${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
-    ${lane ? '' : links}
     ${renderTimeline(detailLayout(map, open))}
-    ${lane ? stepSplit(lane, links) : ''}
+    ${below}
     <div class="lanes-narrow">${narrowFlow(steps)}</div>
   </section>`;
 }
@@ -1582,10 +1585,23 @@ async function renderEpic(id) {
   currentHistory = history;
   current = epic;
   document.title = `${epic.id} · ${epic.title} · EpicBoard`;
-  $('#title').innerHTML = `<span class="mono muted">${esc(epic.id)}</span> · ${esc(epic.title)}${epic.url ? ` ${external(epic.url, '')}` : ''}`;
+  const epicId = $('#epic-id');
+  if (epicId) {
+    epicId.hidden = false;
+    epicId.textContent = epic.id;
+  }
+  $('#title').innerHTML = `${esc(epic.title)}${epic.url ? ` ${external(epic.url, '')}` : ''}`;
   $('#goal').textContent = epic.goal || '';
   const stamps = Object.values(epic.facts || {}).map((f) => f.fetchedAt).filter(Boolean).sort();
-  $('#updated').innerHTML = stamps.length ? t('epic.factsUpdated', { a: agoText(stamps.at(-1)), b: agoText(epic.updatedAt) }) : t('epic.edited', { a: agoText(epic.updatedAt) });
+  const plainAgo = (iso) => t('ago', { t: ago(iso) });
+  const stampTip = stamps.length
+    ? t('epic.factsUpdated', { a: plainAgo(stamps.at(-1)), b: plainAgo(epic.updatedAt) })
+    : t('epic.edited', { a: plainAgo(epic.updatedAt) });
+  const updated = $('#updated');
+  updated.hidden = false;
+  updated.setAttribute('aria-label', stampTip);
+  updated.title = stampTip;
+  updated.innerHTML = icon('clock');
   renderMapArea(epic);
   renderWaiting(epic);
   $('#branches').innerHTML = branchRows(epic);
