@@ -28,6 +28,7 @@ const OPTIONS = {
   doing: { type: 'string' }, next: { type: 'string' }, agent: { type: 'string' }, branch: { type: 'string' }, why: { type: 'string' },
   json: { type: 'boolean' }, delete: { type: 'boolean' }, 'cleanup-refs': { type: 'boolean' }, out: { type: 'string' }, repo: { type: 'string' },
   group: { type: 'string' }, source: { type: 'string' }, since: { type: 'string' }, unmarked: { type: 'boolean' },
+  severity: { type: 'string' }, mark: { type: 'string' },
   'dry-run': { type: 'boolean' }, 'text-file': { type: 'string' },
 };
 
@@ -70,7 +71,7 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
   config set <key> <value>                     value by type (14d, true, JSON for lists)
   config reset <key>                           restore the registry default
   feed add <file|-> [--json]                   upsert feed items (object or array)
-  feed list [--unmarked] [--source X] [--since 1d] [--json]
+  feed list [--unmarked] [--source X] [--since 1d] [--severity S] [--mark M|none] [--json]
   feed mark <id…> important|unimportant|noise [--comment C]
   feed unmark <id…> | feed delete <id…>
   feed summary [--json] | feed prune [--dry-run]
@@ -303,7 +304,7 @@ const COMMANDS = {
       return { text: `ok: ${result.items.length} item(s)${warn}` };
     }
     if (action === 'list') {
-      const items = feed.listFeedItems({ unmarked: o.unmarked, source: o.source, since: o.since });
+      const items = feed.listFeedItems({ unmarked: o.unmarked, source: o.source, since: o.since, severity: o.severity, mark: o.mark });
       return o.json ? items : { text: items.map((item) => `${item.id} · ${item.severity} · ${item.title}${item.mark ? ` · ${item.mark.value}` : ''}`).join('\n') || 'no items' };
     }
     if (action === 'mark') {

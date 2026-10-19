@@ -403,14 +403,19 @@ function mutateIds(ids, fn) {
     if (!bySource.has(parsed.source)) bySource.set(parsed.source, new Set());
     bySource.get(parsed.source).add(id);
   }
+  const requireAll = (data, set) => {
+    for (const id of set) if (!data.items.some((item) => item.id === id)) throw new BoardError(404, 'no-feed-item', `feed item ${id} not found`);
+  };
+  // Callbacks write stats as they go, so every id is checked before the first one runs.
+  for (const [source, set] of bySource) requireAll(readSourceFile(source), set);
   const changed = [];
   for (const [source, set] of bySource) {
     withFileLock(sourcePath(source), () => {
       const data = readSourceFile(source);
+      requireAll(data, set);
       let dirty = false;
       for (const id of set) {
         const index = data.items.findIndex((item) => item.id === id);
-        if (index === -1) throw new BoardError(404, 'no-feed-item', `feed item ${id} not found`);
         const result = fn(data.items[index], data, index);
         if (result) {
           changed.push(result);
