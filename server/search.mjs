@@ -4,6 +4,7 @@ import { dataDir } from './paths.mjs';
 import { SETTINGS_REGISTRY } from './settings-registry.mjs';
 import { listFeedItems } from './feed.mjs';
 import { docsDir } from './docs.mjs';
+import { DICT } from './page/i18n.mjs';
 
 const RU = 'ёйцукенгшщзхъфывапролджэячсмитьбю';
 const EN = '`qwertyuiop[]asdfghjkl;\'zxcvbnm,.';
@@ -72,13 +73,37 @@ function scoreText(fields, queryWords) {
   return { score: total, matched };
 }
 
-function highlight(text, wordsToMark) {
-  let out = String(text ?? '');
+// Ranges, not inline markers: titles may contain any character, guillemets included.
+export function matchRanges(text, wordsToMark) {
+  const norm = normalizeSearchText(text);
+  const found = [];
   for (const word of wordsToMark) {
-    const re = new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
-    out = out.replace(re, (m) => `«${m}»`);
+    for (let at = norm.indexOf(word); at !== -1; at = norm.indexOf(word, at + word.length)) found.push([at, at + word.length]);
   }
-  return out;
+  found.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const range of found) {
+    const last = merged.at(-1);
+    if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+    else merged.push([...range]);
+  }
+  return merged;
+}
+
+const SNIPPET = 160;
+
+function snippetAround(body, wordsToMark) {
+  const text = String(body ?? '').replace(/\s+/g, ' ').trim();
+  const ranges = matchRanges(text, wordsToMark);
+  if (!ranges.length) return { snippet: '', snippetMarks: [] };
+  const start = Math.max(0, Math.min(ranges[0][0] - 40, text.length - SNIPPET));
+  const end = Math.min(text.length, start + SNIPPET);
+  const lead = start > 0 ? '…' : '';
+  const snippet = `${lead}${text.slice(start, end)}${end < text.length ? '…' : ''}`;
+  const snippetMarks = ranges
+    .filter(([a, b]) => a >= start && b <= end)
+    .map(([a, b]) => [a - start + lead.length, b - start + lead.length]);
+  return { snippet, snippetMarks };
 }
 
 const parts = new Map(); // key -> { mtime, entries }
@@ -109,7 +134,7 @@ function indexEpicFile(file) {
   for (const task of epic.tasks || []) {
     push({
       type: 'task', id: `${epic.id}/${task.id}`, title: task.title || task.id, body: task.status || '',
-      href: `/e/${encodeURIComponent(epic.id)}#task-${encodeURIComponent(task.id)}`, where: epic.id, at: epic.updatedAt,
+      href: `/e/${encodeURIComponent(epic.id)}#t-${encodeURIComponent(task.id)}`, where: epic.id, at: epic.updatedAt,
       fields: [
         { text: task.id, title: true }, { text: task.title || '', title: true }, { text: task.status || '', title: false },
       ],
@@ -117,19 +142,19 @@ function indexEpicFile(file) {
     for (const step of task.steps || []) {
       push({
         type: 'step', id: `${epic.id}/${task.id}/${step.id}`, title: step.title || step.id, body: step.note || '',
-        href: `/e/${encodeURIComponent(epic.id)}#step-${encodeURIComponent(task.id)}-${encodeURIComponent(step.id)}`,
+        href: `/e/${encodeURIComponent(epic.id)}#t-${encodeURIComponent(task.id)}/${encodeURIComponent(step.id)}`,
         where: `${epic.id} · ${task.id}`, at: epic.updatedAt,
         fields: [
           { text: step.id, title: true }, { text: step.title || '', title: true }, { text: step.note || '', title: false }, { text: step.label || '', title: false },
         ],
       });
-      for (const open of step.open || []) {
-        push({
-          type: 'open', id: open.id, title: open.text || open.id, body: '',
-          href: `/e/${encodeURIComponent(epic.id)}#task-${encodeURIComponent(task.id)}`, where: `${epic.id} · ${task.id}`, at: epic.updatedAt,
-          fields: [{ text: open.text || '', title: true }],
-        });
-      }
+    }
+    for (const open of task.open || []) {
+      push({
+        type: 'open', id: `${epic.id}/${task.id}/${open.id}`, title: open.text || open.id, body: '',
+        href: `/e/${encodeURIComponent(epic.id)}#t-${encodeURIComponent(task.id)}`, where: `${epic.id} · ${task.id}`, at: epic.updatedAt,
+        fields: [{ text: open.text || '', title: true }],
+      });
     }
     for (const branch of task.branches || []) {
       push({
@@ -201,11 +226,14 @@ function refreshParts() {
     {
       key: 'settings',
       file: join(dataDir(), 'settings.json'),
-      build: () => SETTINGS_REGISTRY.map((entry) => ({
-        type: 'setting', id: entry.key, title: entry.key, body: entry.hint,
+      build: () => SETTINGS_REGISTRY.filter((entry) => entry.ui).map((entry) => ({
+        type: 'setting', id: entry.key, title: entry.key, body: '',
+        titles: Object.fromEntries(Object.entries(DICT).map(([lang, dict]) => [lang, dict[entry.label] || entry.key])),
+        bodies: Object.fromEntries(Object.entries(DICT).map(([lang, dict]) => [lang, dict[entry.hint] || ''])),
         href: `/settings#${encodeURIComponent(entry.key)}`, where: entry.group, at: null,
         fields: [
-          { text: entry.key, title: true }, { text: entry.label, title: true }, { text: entry.hint, title: false },
+          { text: entry.key, title: true },
+          ...Object.values(DICT).flatMap((dict) => [{ text: dict[entry.label] || '', title: true }, { text: dict[entry.hint] || '', title: false }]),
         ],
       })),
     },
@@ -227,7 +255,7 @@ function refreshParts() {
   for (const key of parts.keys()) if (!live.has(key)) parts.delete(key);
 }
 
-export function searchBoard(q, { scope = 'all', limit = 40 } = {}) {
+export function searchBoard(q, { scope = 'all', limit = 40, lang = 'en' } = {}) {
   const variants = queryVariants(q);
   if (!variants.length) return { groups: [], q };
   refreshParts();
@@ -242,12 +270,9 @@ export function searchBoard(q, { scope = 'all', limit = 40 } = {}) {
       if (!scored) continue;
       let score = scored.score;
       if (preferredEpic && (entry.id === preferredEpic || entry.where?.startsWith(preferredEpic) || entry.href?.includes(`/e/${preferredEpic}`))) score += 50;
-      hits.push({
-        ...entry,
-        score,
-        text: highlight(entry.title, queryWords),
-        snippet: highlight((entry.body || '').slice(0, 160), queryWords),
-      });
+      const text = String(entry.titles?.[lang] ?? entry.title ?? '');
+      const body = entry.bodies?.[lang] ?? entry.body;
+      hits.push({ ...entry, score, text, marks: matchRanges(text, queryWords), ...snippetAround(body, queryWords) });
       break;
     }
   }
@@ -260,7 +285,7 @@ export function searchBoard(q, { scope = 'all', limit = 40 } = {}) {
   const groups = [...groupsMap.entries()].map(([type, items]) => ({
     type,
     total: items.length,
-    items: items.slice(0, 5).map(({ fields, matched, score, ...rest }) => rest),
+    items: items.slice(0, 20).map(({ fields, matched, score, titles, bodies, ...rest }) => rest),
   }));
   return { q, groups };
 }

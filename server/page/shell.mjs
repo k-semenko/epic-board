@@ -34,7 +34,7 @@ function renderBadge(summary) {
   }
   badge.hidden = false;
   badge.classList.toggle('is-fire', summary.fire > 0);
-  badge.textContent = String(summary.unmarked);
+  badge.textContent = summary.fire > 0 ? `${summary.unmarked} · 🔥${summary.fire}` : String(summary.unmarked);
 }
 
 let feedRev = null;
@@ -56,25 +56,63 @@ function groupLabel(type) {
   return t(`search.group.${type}`) || type;
 }
 
+// Escapes each segment separately so matched text never becomes markup.
+export function markText(text, marks = []) {
+  let out = '';
+  let at = 0;
+  for (const [a, b] of marks) {
+    if (a < at || b > text.length) continue;
+    out += `${esc(text.slice(at, a))}<b>${esc(text.slice(a, b))}</b>`;
+    at = b;
+  }
+  return out + esc(text.slice(at));
+}
+
+const PER_GROUP = 5;
+let lastResults = null;
+const expanded = new Set();
+
+function hitHtml(item) {
+  return `<a class="search-hit" href="${esc(item.href)}" data-search-href="${esc(item.href)}" data-search-title="${esc(item.text)}">
+    <span class="search-hit-main"><span class="search-hit-text">${markText(item.text, item.marks)}</span>${item.snippet && !item.marks?.length ? `<span class="search-hit-snippet muted">${markText(item.snippet, item.snippetMarks)}</span>` : ''}</span>
+    <span class="muted search-hit-where">${esc(item.where || '')}</span>
+  </a>`;
+}
+
 function renderSearchResults(data) {
   const box = document.querySelector('#search-results');
   if (!box) return;
+  lastResults = data;
+  box.hidden = false;
   if (!data?.groups?.length) {
-    box.hidden = false;
     box.innerHTML = `<p class="muted">${esc(t('search.empty'))}</p>`;
     return;
   }
-  box.hidden = false;
-  box.innerHTML = data.groups.map((group) => `
-    <section class="search-group">
+  box.innerHTML = data.groups.map((group) => {
+    const shown = expanded.has(group.type) ? group.items : group.items.slice(0, PER_GROUP);
+    const rest = group.total - shown.length;
+    return `<section class="search-group">
       <h4>${esc(groupLabel(group.type))}</h4>
-      ${group.items.map((item) => `
-        <a class="search-hit" href="${esc(item.href)}" data-search-href="${esc(item.href)}">
-          <span class="search-hit-text">${esc(item.text).replaceAll('«', '<b>').replaceAll('»', '</b>')}</span>
-          <span class="muted">${esc(item.where || '')}</span>
-        </a>`).join('')}
-      ${group.total > group.items.length ? `<button type="button" class="search-more" data-type="${esc(group.type)}">${esc(t('search.more', { n: group.total - group.items.length }))}</button>` : ''}
-    </section>`).join('');
+      ${shown.map(hitHtml).join('')}
+      ${rest > 0 && shown.length < group.items.length ? `<button type="button" class="search-more" data-search-more="${esc(group.type)}">${esc(t('search.more', { n: rest }))}</button>` : ''}
+    </section>`;
+  }).join('');
+}
+
+function rememberOpened(link) {
+  try {
+    const opened = JSON.parse(localStorage.getItem('epic-board.opened') || '[]');
+    const item = { href: link.dataset.searchHref, title: link.dataset.searchTitle || link.textContent.trim() };
+    localStorage.setItem('epic-board.opened', JSON.stringify([item, ...opened.filter((x) => x.href !== item.href)].slice(0, 5)));
+  } catch { /* storage may be unavailable */ }
+}
+
+function moveSearchFocus(box, delta) {
+  const hits = [...box.querySelectorAll('.search-hit, .search-more')];
+  if (!hits.length) return;
+  const at = hits.indexOf(document.activeElement);
+  const next = at === -1 ? (delta > 0 ? 0 : hits.length - 1) : Math.max(0, Math.min(hits.length - 1, at + delta));
+  hits[next].focus();
 }
 
 async function runSearch(q) {
@@ -84,10 +122,11 @@ async function runSearch(q) {
     return;
   }
   const scope = location.pathname.startsWith('/e/') ? `epic:${decodeURIComponent(location.pathname.slice(3))}` : 'all';
-  const data = await api(`/api/search?q=${encodeURIComponent(q)}&scope=${encodeURIComponent(scope)}`);
+  const data = await api(`/api/search?q=${encodeURIComponent(q)}&scope=${encodeURIComponent(scope)}&lang=${getLang()}`);
   if (seq !== searchSeq) return;
   const recent = JSON.parse(localStorage.getItem('epic-board.searchRecent') || '[]');
   localStorage.setItem('epic-board.searchRecent', JSON.stringify([q, ...recent.filter((x) => x !== q)].slice(0, 5)));
+  expanded.clear();
   renderSearchResults(data);
 }
 
@@ -121,12 +160,20 @@ export function bindShell({ pollMs = 8000, search = true } = {}) {
           ${recent.map((q) => `<button type="button" class="search-hit" data-search-fill="${esc(q)}">${esc(q)}</button>`).join('') || `<p class="muted">${esc(t('search.emptyRecent'))}</p>`}
         </section>
         <section class="search-group"><h4>${esc(t('search.recentOpened'))}</h4>
-          ${opened.map((item) => `<a class="search-hit" href="${esc(item.href)}">${esc(item.title)}</a>`).join('') || `<p class="muted">${esc(t('search.emptyRecent'))}</p>`}
+          ${opened.map((item) => `<a class="search-hit" href="${esc(item.href)}" data-search-href="${esc(item.href)}" data-search-title="${esc(item.title)}">${esc(item.title)}</a>`).join('') || `<p class="muted">${esc(t('search.emptyRecent'))}</p>`}
         </section>`;
     }
   });
   document.addEventListener('click', (event) => {
     if (!event.target.closest('.top-search')) box.hidden = true;
+    const more = event.target.closest('[data-search-more]');
+    if (more) {
+      expanded.add(more.dataset.searchMore);
+      renderSearchResults(lastResults);
+      return;
+    }
+    const link = event.target.closest('[data-search-href]');
+    if (link) rememberOpened(link);
     const fill = event.target.closest('[data-search-fill]');
     if (fill) {
       input.value = fill.dataset.searchFill;
@@ -139,7 +186,26 @@ export function bindShell({ pollMs = 8000, search = true } = {}) {
       input.focus();
       input.select();
     }
-    if (event.key === 'Escape') box.hidden = true;
+    if (event.key === 'Escape') {
+      box.hidden = true;
+      if (box.contains(document.activeElement)) input.focus();
+    }
+  });
+  const searchArea = document.querySelector('.top-search');
+  searchArea?.addEventListener('keydown', (event) => {
+    if (box.hidden) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveSearchFocus(box, event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if (event.key !== 'Enter') return;
+    const link = document.activeElement?.closest?.('[data-search-href]') || (document.activeElement === input ? box.querySelector('[data-search-href]') : null);
+    if (!link) return;
+    event.preventDefault();
+    rememberOpened(link);
+    if (event.metaKey || event.ctrlKey) window.open(link.href, '_blank', 'noopener');
+    else location.href = link.href;
   });
 }
 

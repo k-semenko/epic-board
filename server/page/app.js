@@ -1742,7 +1742,8 @@ async function renderEpic(id) {
       <div class="session-head">${agentBadge(x.agent)}<code class="muted">${esc(x.id.slice(0, 8))}</code>${x.task ? `<span class="chip">${esc(x.task)}</span>` : ''}<span class="muted session-time">${icon('clock')}<span class="phrase">${agoText(x.lastAt)}</span></span></div>
       <dl class="session-body"><dt>${esc(t('session.doing'))}</dt><dd>${esc(x.doing ?? '—')}</dd><dt>${esc(t('session.next'))}</dt><dd>${esc(x.next ?? '—')}</dd></dl></li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
   renderHistory(history);
-  buildSearchIndex(epic, history);
+  // The live page uses the board-wide search; an export has no service and keeps its own index.
+  if (EXPORT) buildSearchIndex(epic, history);
 }
 
 async function pollEpicLinks(id) {
@@ -1985,12 +1986,20 @@ async function bootEpic() {
   };
   if (EXPORT) bindLang(rerenderLang);
   else {
-    bindShell({ search: false });
+    bindShell();
     document.addEventListener('epic-board:lang', () => { void rerenderLang(); });
+    // Board search links to `#t-<task>[/<step>]` on the epic already open, which only changes the hash.
+    addEventListener('hashchange', () => {
+      const open = openFromHash();
+      if (!open || !current) return;
+      tlState.open = open;
+      renderMapArea(current);
+      $('#map')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
   bindMapTools();
   bindSideCarousel();
-  bindSearch();
+  if (EXPORT) bindSearch();
   bindDocs();
   if (!EXPORT) bindDecisionForms(id);
   const sectionSettings = bindSectionSettings({ api, onError: alertBox, onSettings: applyPageSettings, readOnly: Boolean(EXPORT) });

@@ -160,6 +160,7 @@ export function createBoardServer({ port, run = execRunner } = {}) {
         return send(res, 200, searchBoard(url.searchParams.get('q') || '', {
           scope: url.searchParams.get('scope') || 'all',
           limit: Math.min(Number(url.searchParams.get('limit')) || 40, 100),
+          lang: url.searchParams.get('lang') === 'ru' ? 'ru' : 'en',
         }));
       }
       if (parts[1] === 'dashboard' && m === 'GET' && parts.length === 2) return send(res, 200, buildDashboard());
