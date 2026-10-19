@@ -2,3 +2,15 @@ data/
 node_modules/
 dist/
 .DS_Store
+
+# Local agent state and working notes
+.claude/sessions/
+.claude/handovers/
+.claude/settings.local.json
+.superpowers/
+docs/briefs/
+
+# Secrets and logs
+.env
+.env.*
+*.log
