@@ -1,0 +1,12 @@
+[
+  {
+    "source": "pipelines",
+    "externalId": "gitlab:ci:12345",
+    "kind": "alert",
+    "severity": "important",
+    "channel": "ci/web",
+    "title": "Pipeline failed on main",
+    "body": "job test:unit exited 1",
+    "refs": ["https://example.com/pipelines/12345"]
+  }
+]

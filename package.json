@@ -1,6 +1,6 @@
 {
   "name": "epic-board",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Local board for multi-repository work: tasks from any tracker, steps, branches, merge requests, decisions. Ships as a Claude Code, Cursor and Codex plugin.",
   "license": "MIT",
   "private": true,

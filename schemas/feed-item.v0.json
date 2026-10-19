@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/k-semenko/epic-board/schemas/feed-item.v0.json",
+  "title": "Epic Board feed item v0",
+  "type": "object",
+  "required": ["source", "externalId", "kind", "severity", "title"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "type": "integer", "const": 0 },
+    "source": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "externalId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+    "kind": { "enum": ["mention", "alert", "question", "report", "info"] },
+    "severity": { "enum": ["fire", "important", "normal", "noise"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "body": { "type": "string", "maxLength": 2000 },
+    "channel": { "type": "string", "maxLength": 100 },
+    "refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-19
+
+### Added
+
+- Settings registry with schema 2, revision checks, `/settings`, and `config` CLI; legacy settings keys still accepted on write.
+- Signal feed with CLI/API, retention settings, profiles, `/feed` triage UI, header badge, server-side global search, and a home dashboard strip.
+- Feed connector contract v0 (`schemas/feed-item.v0.json`, `skills/epic-board/reference/feed.md`) and anonymized connector examples.
+
 ## [0.10.0] - 2026-10-18
 
 ### Added

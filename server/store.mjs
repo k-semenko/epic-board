@@ -32,7 +32,7 @@ export function epicPath(id) {
 }
 
 const historyPath = (id) => path.join(epicsDir(), `${checkId(id)}.history.ndjson`);
-const lockPath = (id) => path.join(epicsDir(), `${checkId(id)}.lock`);
+const epicLockPath = (id) => path.join(epicsDir(), `${checkId(id)}.lock`);
 
 function alive(pid) {
   try {
@@ -45,9 +45,10 @@ function alive(pid) {
 
 const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-// Only a dead owner loses the lock: a slow but live writer must never have its write raced.
-export function withLock(id, fn, { timeoutMs = 5000 } = {}) {
-  const file = lockPath(id);
+// Lock a target path via `<path>.lock`. Only a dead owner loses the lock: a slow but live writer must never have its write raced.
+export function withFileLock(targetPath, fn, { timeoutMs = 5000, lockPath = `${targetPath}.lock` } = {}) {
+  const file = lockPath;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   const until = Date.now() + timeoutMs;
   for (;;) {
     try {
@@ -65,7 +66,7 @@ export function withLock(id, fn, { timeoutMs = 5000 } = {}) {
         } catch {}
         continue;
       }
-      if (Date.now() > until) throw new BoardError(423, 'locked', `epic ${id} is locked by process ${owner ?? '?'}, retry later`);
+      if (Date.now() > until) throw new BoardError(423, 'locked', `${targetPath} is locked by process ${owner ?? '?'}, retry later`);
       pause(25);
     }
   }
@@ -76,6 +77,11 @@ export function withLock(id, fn, { timeoutMs = 5000 } = {}) {
       fs.unlinkSync(file);
     } catch {}
   }
+}
+
+export function withLock(id, fn, { timeoutMs = 5000 } = {}) {
+  const target = path.join(epicsDir(), checkId(id));
+  return withFileLock(target, fn, { timeoutMs, lockPath: epicLockPath(id) });
 }
 
 export function writeAtomic(file, text) {

@@ -41,6 +41,7 @@ const PATHS = {
   bot: '<rect x="3" y="5" width="10" height="8" rx="2"/><path d="M8 2.5V5M6 9h.1M10 9h.1"/>',
   settings: '<path d="M6.3 2l.4-1h2.6l.4 1 1.3.8 1.1-.1 1.3 2.2-.7.9v1.6l.7.9-1.3 2.2-1.1-.1-1.3.8-.4 1H6.7l-.4-1-1.3-.8-1.1.1-1.3-2.2.7-.9V5.8l-.7-.9 1.3-2.2 1.1.1z" transform="translate(0 1)"/><circle cx="8" cy="8" r="2.2"/>',
   grip: '<circle cx="6" cy="4" r=".7"/><circle cx="10" cy="4" r=".7"/><circle cx="6" cy="8" r=".7"/><circle cx="10" cy="8" r=".7"/><circle cx="6" cy="12" r=".7"/><circle cx="10" cy="12" r=".7"/>',
+  inbox: '<path d="M2.5 4.5h11v8a1.5 1.5 0 0 1-1.5 1.5h-8A1.5 1.5 0 0 1 2.5 12.5z"/><path d="M2.5 4.5l2.2 4h6.6l2.2-4M6 11.5h4"/>',
 };
 
 export function icon(name, cls = '') {

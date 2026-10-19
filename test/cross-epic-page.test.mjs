@@ -324,7 +324,7 @@ test('index polling retains query, pins, focused controls and cards during failu
   let fail = false;
   let list = [{ id: 'alpha', title: 'Alpha', relatedEpics: view().relatedEpics, readAt: view().readAt }];
   const page = appHarness({ request: async (path) => {
-    if (path === '/api/settings') return { pinnedEpics: ['alpha'] };
+    if (path === '/api/settings') return { rev: 0, values: { 'epic.pinned': ['alpha'] } };
     if (fail) throw new Error('Offline');
     return list;
   } });
@@ -363,7 +363,7 @@ test('an initial index error reports unavailable data instead of declaring the b
 test('a related link retains focus in its owning epic card when another card has the same href', async () => {
   const common = { id: 'common', title: 'Common', url: 'http://board.test/e/common', status: 'resolved' };
   let list = ['first', 'second'].map((id) => ({ id, title: id, relatedEpics: [common] }));
-  const page = appHarness({ request: async (path) => path === '/api/settings' ? { pinnedEpics: [] } : list });
+  const page = appHarness({ request: async (path) => path === '/api/settings' ? { rev: 0, values: { 'epic.pinned': [] } } : list });
   await page.app.renderIndex();
   const controls = page.element('#epics').controls;
   page.document.activeElement = controls.find((control) => control.ownerId === 'second' && control.getAttribute?.('href') === common.url);

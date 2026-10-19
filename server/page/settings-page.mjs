@@ -1,0 +1,269 @@
+import { moveSection } from './section-order.mjs';
+import { icon } from './icons.mjs';
+import { bindShell, api, esc, t, fillChrome } from './shell.mjs';
+
+bindShell();
+const $ = (sel) => document.querySelector(sel);
+
+function same(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+const GROUP_LABEL = { epic: 'settings.group.epic', feed: 'settings.group.feed' };
+
+let registry = [];
+let rev = 0;
+let saved = {};
+let draft = {};
+let group = 'epic';
+let conflict = false;
+
+function uiEntries() {
+  return registry.filter((entry) => entry.ui !== false);
+}
+
+function groups() {
+  return [...new Set(uiEntries().map((entry) => entry.group))];
+}
+
+function dirty() {
+  return uiEntries().some((entry) => !same(draft[entry.key], saved[entry.key]));
+}
+
+function showError(message) {
+  const box = $('#settings-error');
+  if (!message) {
+    box.hidden = true;
+    box.textContent = '';
+    return;
+  }
+  box.hidden = false;
+  box.textContent = message;
+}
+
+function renderDraftBar() {
+  const bar = $('#settings-draft');
+  bar.hidden = !dirty();
+}
+
+function renderGroups() {
+  const nav = $('#settings-groups');
+  nav.innerHTML = groups().map((id) => (
+    `<button type="button" class="settings-group${id === group ? ' is-active' : ''}" data-group="${esc(id)}">${esc(t(GROUP_LABEL[id] || id))}</button>`
+  )).join('');
+}
+
+function defaultLabel(entry) {
+  const value = entry.default;
+  return value === null || value === undefined ? '∅' : typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function renderOrder(entry) {
+  const order = [...(draft[entry.key] || [])];
+  return `<ol class="section-order-list settings-order" data-key="${esc(entry.key)}">${order.map((id, index) => {
+    const name = t(`sec.${id}`);
+    return `<li data-order-id="${esc(id)}"><span class="order-grip">${icon('grip')}</span><span class="order-name">${esc(name)}</span>
+      <span class="order-controls">
+        <button type="button" class="icon-btn" data-move="-1" aria-label="${esc(t('settings.up', { name }))}" ${index === 0 ? 'disabled' : ''}>${icon('arrowUp')}</button>
+        <button type="button" class="icon-btn" data-move="1" aria-label="${esc(t('settings.down', { name }))}" ${index === order.length - 1 ? 'disabled' : ''}>${icon('arrowDown')}</button>
+      </span></li>`;
+  }).join('')}</ol>`;
+}
+
+function renderRecord(entry) {
+  const fields = entry.constraints?.fields || {};
+  const value = draft[entry.key] || {};
+  return `<div class="settings-record" data-key="${esc(entry.key)}">${Object.keys(fields).map((id) => `
+    <label class="settings-field-inline"><span>${esc(t(`sec.${id}`))}</span>
+      <select data-record-field="${esc(id)}">${fields[id].values.map((option) => `<option value="${option}" ${value[id] === option ? 'selected' : ''}>${option}</option>`).join('')}</select>
+    </label>`).join('')}</div>`;
+}
+
+function renderEnum(entry) {
+  const values = entry.constraints?.values || [];
+  const current = draft[entry.key];
+  return `<div class="settings-enum" data-key="${esc(entry.key)}">${values.map((option) => `
+    <button type="button" class="chip${current === option ? ' is-active' : ''}" data-enum="${esc(option)}">${esc(t(`map.height.${option}`) || option)}</button>`).join('')}
+    <button type="button" class="chip${current === null ? ' is-active' : ''}" data-enum="">${esc(t('settings.default'))}</button>
+  </div>`;
+}
+
+function renderField(entry) {
+  const changed = !same(draft[entry.key], saved[entry.key]);
+  const isDefault = same(draft[entry.key], entry.default);
+  let control = '';
+  if (entry.type === 'order') control = renderOrder(entry);
+  else if (entry.type === 'record') control = renderRecord(entry);
+  else if (entry.type === 'enum') control = renderEnum(entry);
+  else if (entry.type === 'bool') {
+    control = `<label class="settings-toggle"><input type="checkbox" data-bool ${draft[entry.key] ? 'checked' : ''}> ${esc(t(entry.label))}</label>`;
+  } else if (entry.type === 'duration') {
+    const chips = ['7d', '14d', '30d', '180d', '0'];
+    control = `<div class="settings-duration" data-key="${esc(entry.key)}">${chips.map((chip) => `
+      <button type="button" class="chip${draft[entry.key] === chip || (chip === '0' && draft[entry.key] === 0) ? ' is-active' : ''}" data-duration="${chip}">${chip === '0' ? '∞' : chip.replace('d', t('settings.dayUnit'))}</button>`).join('')}
+      <input type="text" data-duration-input value="${esc(draft[entry.key] === 0 ? '0' : draft[entry.key] ?? '')}" spellcheck="false">
+    </div>`;
+  } else {
+    control = `<input type="text" data-text value="${esc(typeof draft[entry.key] === 'string' ? draft[entry.key] : JSON.stringify(draft[entry.key]))}">`;
+  }
+  return `<section class="settings-item${changed ? ' is-changed' : ''}" data-setting="${esc(entry.key)}">
+    <header class="settings-item-head">
+      <div><h2>${esc(t(entry.label))}</h2><p class="muted">${esc(t(entry.hint))}</p></div>
+      <div class="settings-item-meta">
+        <span class="muted">${esc(t('settings.defaultValue', { value: defaultLabel(entry) }))}</span>
+        ${changed && !isDefault ? `<button type="button" data-reset>${esc(t('settings.reset'))}</button>` : ''}
+      </div>
+    </header>
+    ${control}
+  </section>`;
+}
+
+function renderFields() {
+  const entries = uiEntries().filter((entry) => entry.group === group);
+  $('#settings-fields').innerHTML = entries.map(renderField).join('') || `<p class="muted">${esc(t('settings.emptyGroup'))}</p>`;
+  fillChrome($('#settings-fields'));
+  renderDraftBar();
+}
+
+function render() {
+  fillChrome();
+  renderGroups();
+  renderFields();
+  if (conflict) showError(t('settings.conflict'));
+}
+
+function setDraft(key, value) {
+  draft = { ...draft, [key]: value };
+  conflict = false;
+  showError('');
+  renderFields();
+}
+
+async function load() {
+  const [reg, state] = await Promise.all([api('/api/settings/registry'), api('/api/settings')]);
+  registry = reg.settings || [];
+  rev = state.rev;
+  saved = { ...state.values };
+  draft = structuredClone(saved);
+  const available = groups();
+  if (!available.includes(group)) group = available[0] || 'epic';
+  render();
+}
+
+async function save() {
+  const patch = {};
+  for (const entry of uiEntries()) {
+    if (!same(draft[entry.key], saved[entry.key])) patch[entry.key] = draft[entry.key];
+  }
+  if (!Object.keys(patch).length) return;
+  try {
+    const state = await api('/api/settings', { method: 'PUT', body: { rev, patch } });
+    rev = state.rev;
+    saved = { ...state.values };
+    draft = structuredClone(saved);
+    conflict = false;
+    showError('');
+    render();
+  } catch (error) {
+    if (/rev is|settings-conflict|409/.test(error.message)) {
+      conflict = true;
+      const state = await api('/api/settings');
+      rev = state.rev;
+      saved = { ...state.values };
+      render();
+      showError(t('settings.conflict'));
+      return;
+    }
+    showError(error.message);
+  }
+}
+
+function discard() {
+  draft = structuredClone(saved);
+  conflict = false;
+  showError('');
+  render();
+}
+
+$('#settings-groups').addEventListener('click', (event) => {
+  const button = event.target.closest('[data-group]');
+  if (!button) return;
+  group = button.dataset.group;
+  render();
+});
+
+$('#settings-fields').addEventListener('click', (event) => {
+  const item = event.target.closest('[data-setting]');
+  if (!item) return;
+  const key = item.dataset.setting;
+  const entry = registry.find((row) => row.key === key);
+  if (!entry) return;
+  if (event.target.closest('[data-reset]')) {
+    setDraft(key, structuredClone(entry.default));
+    return;
+  }
+  const move = event.target.closest('[data-move]');
+  if (move && entry.type === 'order') {
+    const id = move.closest('[data-order-id]').dataset.orderId;
+    const delta = Number(move.dataset.move);
+    const order = [...draft[key]];
+    setDraft(key, moveSection(order, id, order.indexOf(id) + delta));
+    return;
+  }
+  const enumBtn = event.target.closest('[data-enum]');
+  if (enumBtn && entry.type === 'enum') {
+    setDraft(key, enumBtn.dataset.enum === '' ? null : enumBtn.dataset.enum);
+    return;
+  }
+  const duration = event.target.closest('[data-duration]');
+  if (duration && entry.type === 'duration') {
+    const value = duration.dataset.duration === '0' ? 0 : duration.dataset.duration;
+    setDraft(key, value);
+  }
+});
+
+$('#settings-fields').addEventListener('change', (event) => {
+  const item = event.target.closest('[data-setting]');
+  if (!item) return;
+  const key = item.dataset.setting;
+  const entry = registry.find((row) => row.key === key);
+  if (!entry) return;
+  if (event.target.matches('[data-bool]')) {
+    setDraft(key, event.target.checked);
+    return;
+  }
+  if (event.target.matches('[data-record-field]')) {
+    setDraft(key, { ...draft[key], [event.target.dataset.recordField]: Number(event.target.value) });
+  }
+});
+
+$('#settings-fields').addEventListener('change', (event) => {
+  if (!event.target.matches('[data-duration-input],[data-text]')) return;
+  const item = event.target.closest('[data-setting]');
+  if (!item) return;
+  const key = item.dataset.setting;
+  const entry = registry.find((row) => row.key === key);
+  if (!entry) return;
+  if (entry.type === 'duration') {
+    const text = event.target.value.trim();
+    setDraft(key, text === '0' ? 0 : text);
+    return;
+  }
+  try {
+    setDraft(key, JSON.parse(event.target.value));
+  } catch {
+    setDraft(key, event.target.value);
+  }
+});
+
+$('#settings-save').addEventListener('click', () => { void save(); });
+$('#settings-discard').addEventListener('click', discard);
+document.addEventListener('epic-board:lang', render);
+
+window.addEventListener('beforeunload', (event) => {
+  if (!dirty()) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
+
+load().catch((error) => showError(error.message));
