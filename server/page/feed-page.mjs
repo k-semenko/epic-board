@@ -13,6 +13,7 @@ let filters = { source: '', severity: '', mark: '' };
 let undo = null;
 let toastTimer = 0;
 let knownIds = new Set();
+let pending = null; // { id, value } waits for an optional "why?" before marking
 
 const MARKS = [
   { value: 'important', key: '1', label: 'feed.mark.important' },
@@ -30,9 +31,14 @@ function visible() {
   if (filters.severity) list = list.filter((item) => item.severity === filters.severity);
   if (tab === 'history' && filters.mark) list = list.filter((item) => item.mark?.value === filters.mark);
   if (tab === 'unmarked') {
+    // Same order the page draws: fires, then one group per source; keyboard focus indexes into it.
     const fire = list.filter((item) => item.severity === 'fire');
-    const rest = list.filter((item) => item.severity !== 'fire');
-    return [...fire, ...rest];
+    const bySource = new Map();
+    for (const item of list.filter((x) => x.severity !== 'fire')) {
+      if (!bySource.has(item.source)) bySource.set(item.source, []);
+      bySource.get(item.source).push(item);
+    }
+    return [...fire, ...[...bySource.values()].flat()];
   }
   return list.sort((a, b) => String(b.mark?.at || b.updatedAt).localeCompare(String(a.mark?.at || a.updatedAt)));
 }
@@ -69,7 +75,7 @@ function rowHtml(item, index) {
     .map((r) => {
       if (r.startsWith('epic:')) return `<a href="/e/${esc(r.slice(5))}">${esc(r.slice(5))}</a>`;
       const [, epic, task] = r.match(/^task:([^/]+)\/(.+)$/) || [];
-      return epic ? `<a href="/e/${esc(epic)}#task-${esc(task)}">${esc(task)}</a>` : '';
+      return epic ? `<a href="/e/${esc(epic)}#t-${esc(task)}">${esc(task)}</a>` : '';
     }).join(' ');
   return `<li class="feed-row${active}${sel}" data-id="${esc(item.id)}" data-index="${index}">
     <button type="button" class="feed-dot sev-${esc(item.severity)}" aria-label="${esc(item.severity)}"></button>
@@ -160,9 +166,15 @@ function showToast(ids) {
   toastTimer = setTimeout(() => { toast.hidden = true; undo = null; }, 5000);
 }
 
+function commentOpen() {
+  return [...document.querySelectorAll('.feed-comment')].some((field) => !field.hidden);
+}
+
 async function load({ soft = false } = {}) {
   const data = await api('/api/feed');
-  if (soft && data.rev !== rev) {
+  if (soft && data.rev === rev) return;
+  if (soft && commentOpen()) return;
+  if (soft) {
     const fresh = data.items.filter((item) => !knownIds.has(item.id) && isUnmarked(item));
     if (fresh.length) {
       const bar = $('#feed-new');
@@ -180,11 +192,48 @@ async function load({ soft = false } = {}) {
   fillChrome($('#feed-filters'));
 }
 
+async function postFeed(action, body) {
+  await api(`/api/feed/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+
 async function markIds(ids, value, comment) {
   if (!ids.length) return;
-  await api('/api/feed/mark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, value, comment }) });
-  showToast(ids);
+  const previous = ids.map((id) => ({ id, mark: items.find((item) => item.id === id)?.mark || null }));
+  pending = null;
+  await postFeed('mark', { ids, value, comment });
+  showToast(previous);
   await load();
+}
+
+// Undo puts back what was there: no mark, or the mark changed from History.
+async function undoLast() {
+  if (!undo) return;
+  const restore = undo;
+  undo = null;
+  $('#feed-toast').hidden = true;
+  const bare = restore.filter((x) => !x.mark).map((x) => x.id);
+  if (bare.length) await postFeed('unmark', { ids: bare });
+  for (const x of restore.filter((r) => r.mark)) await postFeed('mark', { ids: [x.id], value: x.mark.value, comment: x.mark.comment });
+  await load();
+}
+
+function rowOf(id) {
+  return [...document.querySelectorAll('.feed-row')].find((row) => row.dataset.id === id);
+}
+
+// A mark that disagrees with the connector asks "why?" first; Enter sends it, Esc or the same mark again skips it.
+async function requestMark(item, value) {
+  const field = rowOf(item.id)?.querySelector('.feed-comment');
+  const input = field?.querySelector('input');
+  const typed = field && !field.hidden ? input.value.trim() : '';
+  const again = pending && pending.id === item.id && pending.value === value;
+  if (!typed && !again && field && needsComment(item, value)) {
+    pending = { id: item.id, value };
+    field.hidden = false;
+    input.focus();
+    return;
+  }
+  await markIds([item.id], value, typed || undefined);
 }
 
 function currentItem() {
@@ -223,23 +272,17 @@ $('#feed-list').addEventListener('click', async (event) => {
   if (event.target.closest('[data-mark]')) {
     const value = event.target.closest('[data-mark]').dataset.mark;
     const item = items.find((x) => x.id === row.dataset.id);
-    let comment;
-    if (needsComment(item, value)) {
-      const field = row.querySelector('.feed-comment');
-      field.hidden = false;
-      comment = field.querySelector('input').value || undefined;
-    }
-    await markIds([item.id], value, comment);
+    await requestMark(item, value);
     return;
   }
   if (event.target.closest('[data-unmark]')) {
-    await api('/api/feed/unmark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [row.dataset.id] }) });
+    await postFeed('unmark', { ids: [row.dataset.id] });
     await load();
     return;
   }
   if (event.target.closest('[data-delete]')) {
     if (!confirm(t('feed.confirmDelete'))) return;
-    await api('/api/feed/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [row.dataset.id] }) });
+    await postFeed('delete', { ids: [row.dataset.id] });
     await load();
   }
 });
@@ -258,11 +301,25 @@ $('#feed-new').addEventListener('click', (event) => {
 });
 
 $('#feed-toast').addEventListener('click', async (event) => {
-  if (!event.target.closest('[data-undo]') || !undo) return;
-  await api('/api/feed/unmark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: undo }) });
-  undo = null;
-  $('#feed-toast').hidden = true;
-  await load();
+  if (event.target.closest('[data-undo]')) await undoLast();
+});
+
+$('#feed-list').addEventListener('keydown', async (event) => {
+  const input = event.target.closest('.feed-comment input');
+  if (!input) return;
+  const row = input.closest('.feed-row');
+  const item = items.find((x) => x.id === row?.dataset.id);
+  if (!item) return;
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    if (pending?.id === item.id) await markIds([item.id], pending.value, input.value.trim() || undefined);
+    else input.blur();
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    if (pending?.id === item.id) await markIds([item.id], pending.value);
+    else { input.closest('.feed-comment').hidden = true; input.blur(); }
+  }
 });
 
 document.addEventListener('keydown', async (event) => {
@@ -285,11 +342,7 @@ document.addEventListener('keydown', async (event) => {
     const row = document.querySelector('.feed-row.is-focus .feed-comment');
     if (row) { row.hidden = false; row.querySelector('input').focus(); }
   }
-  if (event.key === 'u' && undo) {
-    await api('/api/feed/unmark', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: undo }) });
-    undo = null;
-    await load();
-  }
+  if (event.key === 'u' && undo) await undoLast();
   if (event.key === '?') {
     const dlg = $('#feed-help');
     $('#feed-help-body').textContent = t('feed.helpBody');
@@ -297,9 +350,11 @@ document.addEventListener('keydown', async (event) => {
   }
   const mark = MARKS.find((m) => m.key === event.key);
   if (mark && tab === 'unmarked') {
-    const ids = selected.size ? [...selected] : currentItem() ? [currentItem().id] : [];
-    selected.clear();
-    await markIds(ids, mark.value);
+    if (selected.size) {
+      const ids = [...selected];
+      selected.clear();
+      await markIds(ids, mark.value);
+    } else if (currentItem()) await requestMark(currentItem(), mark.value);
   }
 });
 
@@ -334,5 +389,20 @@ document.addEventListener('epic-board:lang', () => {
   renderList();
 });
 
-load().catch((error) => { $('#feed-list').innerHTML = `<p class="crit">${esc(error.message)}</p>`; });
+// Search links point at `/feed#<id>`: open the tab holding the item and focus it.
+function focusFromHash() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  const item = id && items.find((x) => x.id === id);
+  if (!item) return;
+  tab = isUnmarked(item) ? 'unmarked' : 'history';
+  for (const el of document.querySelectorAll('[data-tab]')) el.classList.toggle('is-active', el.dataset.tab === tab);
+  filters = { source: '', severity: '', mark: '' };
+  focus = Math.max(0, visible().findIndex((x) => x.id === id));
+  renderFilters();
+  renderList();
+  rowOf(id)?.scrollIntoView({ block: 'center' });
+}
+
+load().then(focusFromHash).catch((error) => { $('#feed-list').innerHTML = `<p class="crit">${esc(error.message)}</p>`; });
+addEventListener('hashchange', focusFromHash);
 setInterval(() => { void load({ soft: true }); }, 8000);

@@ -146,8 +146,11 @@ async function load() {
   saved = { ...state.values };
   draft = structuredClone(saved);
   const available = groups();
+  const linked = registry.find((entry) => entry.key === decodeURIComponent(location.hash.slice(1)));
+  if (linked) group = linked.group;
   if (!available.includes(group)) group = available[0] || 'epic';
   render();
+  if (linked) document.querySelector(`[data-key="${CSS.escape(linked.key)}"]`)?.scrollIntoView({ block: 'center' });
 }
 
 async function save() {
