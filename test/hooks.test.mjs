@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpHome } from './helpers.mjs';
 
 const data = tmpHome();
@@ -103,6 +103,40 @@ test('cursor pre-compact: short user_message', () => {
 
 test('broken input never fails the session', () => {
   const r = spawnSync(process.execPath, ['hooks/session-start.mjs'], { input: '{oops', encoding: 'utf8', env: hookEnv });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+});
+
+test('session-start warns when the plugin is behind the installed service copy', async () => {
+  const { servicePath } = await import('../server/service.mjs');
+  const { VERSION } = await import('../server/version.mjs');
+  const home = mkdtempSync(join(tmpdir(), 'eb-hook-home-'));
+  const env = { HOME: home };
+  // With a unit present, a missing or older marker makes the hook reinstall the real launchd/systemd service.
+  const unit = servicePath({ env: { ...hookEnv, ...env } });
+  mkdirSync(dirname(unit), { recursive: true });
+  writeFileSync(unit, '');
+  const app = join(home, '.local/share/epic-board/app');
+  mkdirSync(app, { recursive: true });
+  const install = (version) => writeFileSync(join(app, 'installed.json'), JSON.stringify({ version }));
+  const input = { session_id: 'new', source: 'startup', cwd: '/elsewhere' };
+
+  install('99.0.0');
+  const text = claudeContext(hook('session-start.mjs', input, env));
+  assert.equal(text, `epic-board: plugin is behind the service (${VERSION} < 99.0.0); update: claude plugin marketplace update epic-board && claude plugin update epic-board@epic-board, then restart Claude Code.`);
+  assert.match(claudeContext(hook('session-start.mjs', input, { ...env, PLUGIN_ROOT: '/plugin' })), /behind the service .*in Codex/);
+  assert.match(cursorOut(hook('session-start.mjs', input, { ...env, CURSOR_PLUGIN_ROOT: '/plugin' })).additional_context, /behind the service .*Customize/);
+
+  install(VERSION);
+  assert.equal(hook('session-start.mjs', input, env).stdout, '');
+});
+
+test('session-start stays quiet without a service unit', () => {
+  const home = mkdtempSync(join(tmpdir(), 'eb-hook-home-'));
+  const app = join(home, '.local/share/epic-board/app');
+  mkdirSync(app, { recursive: true });
+  writeFileSync(join(app, 'installed.json'), JSON.stringify({ version: '99.0.0' }));
+  const r = hook('session-start.mjs', { session_id: 'new', source: 'startup', cwd: '/elsewhere' }, { HOME: home });
   assert.equal(r.status, 0);
   assert.equal(r.stdout, '');
 });

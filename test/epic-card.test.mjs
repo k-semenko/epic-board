@@ -4,7 +4,19 @@ import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import { bundleScript } from '../server/export.mjs';
 
-function indexApp({ request = async () => ({ pinnedEpics: [] }) } = {}) {
+function settingsState(pins = []) {
+  return {
+    rev: 0,
+    values: {
+      'epic.sectionOrder': ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
+      'epic.pageSizes': { waiting: 5, decisions: 5, history: 5 },
+      'epic.mapHeight': null,
+      'epic.pinned': [...pins],
+    },
+  };
+}
+
+function indexApp({ request = async () => settingsState() } = {}) {
   const listeners = {};
   const query = { value: '', addEventListener() {} };
   const language = { addEventListener(type, listener) { listeners.language = listener; } };
@@ -59,14 +71,18 @@ function indexApp({ request = async () => ({ pinnedEpics: [] }) } = {}) {
   const context = vm.createContext({
     document,
     window: {},
+    Event: class Event { constructor(type) { this.type = type; } },
     setInterval() {},
     setTimeout() {},
     async fetch(path, options) {
       const data = await request(path, options);
       return { ok: true, headers: { get: () => 'application/json' }, json: async () => data };
     },
-    location: { pathname: '/' },
+    URLSearchParams,
+    history: { replaceState() {} },
+    location: { pathname: '/', search: '' },
   });
+  document.dispatchEvent = () => {};
   vm.runInContext(script, context);
   return {
     app: context.app, epics, query, alerts,
@@ -138,25 +154,31 @@ test('search filters pinned and dated epics together and hides empty sections', 
 });
 
 test('the pin click handler persists toggles, restores keyboard focus, and reloads saved pins', async () => {
-  let settings = { pinnedEpics: [] };
+  let settings = settingsState();
   const request = async (path, options) => {
     if (path === '/api/epics') return [sample('new'), sample('old')];
     assert.equal(path, '/api/settings');
-    if (options.method === 'PUT') settings = JSON.parse(options.body);
+    if (options.method === 'PUT') {
+      const body = JSON.parse(options.body);
+      settings = {
+        rev: settings.rev + 1,
+        values: { ...settings.values, 'epic.pinned': body.patch['epic.pinned'] },
+      };
+    }
     return settings;
   };
   const page = indexApp({ request });
   await page.app.render();
   page.app.bindPins();
   await page.click('old');
-  assert.deepEqual(settings, { pinnedEpics: ['old'] });
+  assert.deepEqual(settings.values['epic.pinned'], ['old']);
   assert.equal(page.buttons()[0].dataset.pin, 'old');
   assert.equal(page.buttons()[0].focusOptions.preventScroll, true);
   const reloaded = indexApp({ request });
   await reloaded.app.render();
   assert.equal(reloaded.buttons()[0].dataset.pin, 'old');
   await page.click('old');
-  assert.deepEqual(settings, { pinnedEpics: [] });
+  assert.deepEqual(settings.values['epic.pinned'], []);
   assert.equal((page.epics.innerHTML.match(/<section/g) || []).length, 1);
 });
 
@@ -172,14 +194,19 @@ test('a failed pin save keeps the previous grouping and re-enables the controls'
 });
 
 test('switching language during a pin save does not reload stale settings or lose pins', async () => {
-  let settings = { pinnedEpics: [] };
+  let settings = settingsState();
   let settingsReads = 0;
   let finishSave;
   const page = indexApp({ request: async (path, options) => {
     if (path === '/api/epics') return [sample('new'), sample('old')];
+    if (path === '/api/dashboard') return {};
     if (options.method === 'PUT') {
       await new Promise((resolve) => { finishSave = resolve; });
-      settings = JSON.parse(options.body);
+      const body = JSON.parse(options.body);
+      settings = {
+        rev: settings.rev + 1,
+        values: { ...settings.values, 'epic.pinned': body.patch['epic.pinned'] },
+      };
       return settings;
     }
     settingsReads++;
@@ -191,7 +218,7 @@ test('switching language during a pin save does not reload stale settings or los
   assert.equal(settingsReads, 1);
   finishSave();
   await pending;
-  assert.deepEqual(settings, { pinnedEpics: ['old'] });
+  assert.deepEqual(settings.values['epic.pinned'], ['old']);
   assert.equal(page.buttons()[0].dataset.pin, 'old');
   assert.match(page.epics.innerHTML, /aria-pressed="true"/);
 });

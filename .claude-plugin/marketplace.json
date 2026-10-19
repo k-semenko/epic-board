@@ -12,7 +12,7 @@
       "name": "epic-board",
       "source": "./",
       "description": "Local board for multi-repository work: tasks, steps, branches, merge requests, pending decisions, session plans",
-      "version": "0.10.0",
+      "version": "0.11.0",
       "category": "productivity",
       "tags": [
         "multi-repo",

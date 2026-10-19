@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-19
+
+### Added
+
+- Settings registry with schema 2, revision checks, `/settings`, and `config` CLI; legacy settings keys still accepted on write.
+- Signal feed with CLI/API, retention settings, profiles, `/feed` triage UI, header badge, server-side global search, and a home dashboard strip.
+- Feed connector contract v0 (`schemas/feed-item.v0.json`, `skills/epic-board/reference/feed.md`) and anonymized connector examples.
+- Feed items are cards with severity, source, channel and creation time, a clamped preview and a full-text dialog; the feed groups by source or severity.
+- The feed's *How to use* dialog explains triage to people and gives agents the prompt and CLI interface.
+- `feed list` filters by `--severity` and `--mark`.
+- The session-start hook warns when the plugin is older than the installed service copy and names the update commands for the agent.
+
+### Fixed
+
+- A feed mark batch with an unknown id is rejected before any item or profile counter changes.
+- Board search returns highlight ranges, opens tasks, steps and loose ends on the epic map, finds settings by their translated labels and works from every page.
+- A disagreeing mark asks *why?* before the item leaves the list, keyboard focus follows the drawn order, and undo restores a previous mark.
+- The dashboard strip is drawn on the home page and counts merge requests from refreshed facts.
+- Settings controls, header icons and feed filters follow the board's styles; defaults read as text instead of JSON.
+
 ## [0.10.0] - 2026-10-18
 
 ### Added

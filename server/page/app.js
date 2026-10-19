@@ -8,6 +8,7 @@ import { DecisionDrafts, renderWaitingCard, waitingCounts, waitingSearchText } f
 import { paginate, renderPagination } from './pagination.mjs';
 import { createDocEditor } from './doc-editor.mjs';
 import { linkPollState, renderStepLinks, renderLinkBadge, renderRelatedEpics, renderLinkStatus, updateLinksDom, indexRevision } from './links.mjs';
+import { bindShell } from './shell.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -27,7 +28,7 @@ const EXPORT = typeof window !== 'undefined' ? window.__EPIC_EXPORT__ || null : 
 
 function exportApi(path, method) {
   if (method !== 'GET') throw new Error(t('export.readOnly'));
-  if (path === '/api/settings') return EXPORT.settings || {};
+  if (path === '/api/settings') return { rev: 0, values: EXPORT.settings || {} };
   if (/\/history/.test(path)) {
     const limit = new URLSearchParams(path.split('?')[1]).get('limit');
     return limit === 'all' ? EXPORT.history : EXPORT.history.slice(0, Number(limit) || 20);
@@ -116,10 +117,32 @@ function dayLabel(iso) {
 }
 
 let allEpics = [];
+let dashboard = null;
 let pinnedEpics = new Set();
+let settingsRev = 0;
 let savingPin = false;
 let indexLinksState = null;
 let indexPolling = false;
+let indexSort = 'created';
+
+function bindIndexSort() {
+  const select = $('#epic-sort');
+  const restore = () => {
+    const params = typeof URLSearchParams === 'function' ? new URLSearchParams(location.search || '') : null;
+    indexSort = params?.get('sort') === 'updated' ? 'updated' : 'created';
+    if (select) select.value = indexSort;
+  };
+  restore();
+  select?.addEventListener('change', () => {
+    indexSort = select.value === 'updated' ? 'updated' : 'created';
+    const params = new URLSearchParams(location.search || '');
+    if (indexSort === 'updated') params.set('sort', 'updated');
+    else params.delete('sort');
+    const query = params.toString();
+    history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash || ''}`);
+    renderEpicList();
+  });
+}
 
 function replaceEpicCards(html) {
   const root = $('#epics');
@@ -144,12 +167,13 @@ function renderEpicList() {
     replaceEpicCards(`<p class="muted">${allEpics.length ? esc(t('index.none')) : t('index.empty')}</p>`);
     return;
   }
-  const sorted = [...found].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  const dateField = indexSort === 'updated' ? 'updatedAt' : 'createdAt';
+  const sorted = [...found].sort((a, b) => String(b[dateField] || '').localeCompare(String(a[dateField] || '')));
   const pinned = sorted.filter((e) => pinnedEpics.has(e.id));
   const groups = new Map();
   for (const e of sorted) {
     if (pinnedEpics.has(e.id)) continue;
-    const label = dayLabel(e.createdAt);
+    const label = dayLabel(e[dateField]);
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(e);
   }
@@ -167,21 +191,61 @@ function epicCard(e) {
   return `<li data-epic-card="${esc(e.id)}"><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a>${renderRelatedEpics(e.relatedEpics, { incomplete: e.incomplete })}<button type="button" class="icon-btn epic-pin" data-pin="${esc(e.id)}" aria-pressed="${pinned}" aria-label="${pinLabel}" title="${pinLabel}"${savingPin ? ' disabled' : ''}>${icon('pin')}</button></li>`;
 }
 
+const asDashboard = (value) => (value?.epics && value?.connectors && value?.feed ? value : null);
+
+function sparkline(values, { width = 96, height = 22 } = {}) {
+  if (!values?.length) return '';
+  const max = Math.max(1, ...values);
+  const step = values.length > 1 ? width / (values.length - 1) : 0;
+  const points = values.map((v, i) => `${(i * step).toFixed(1)},${(height - 2 - (v / max) * (height - 4)).toFixed(1)}`).join(' ');
+  return `<svg class="stat-spark" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+function dashboardTiles(d) {
+  const silent = d.connectors.silent || [];
+  return [
+    { icon: 'board', label: 'dash.epics', value: d.epics.total, meta: t('dash.epicsMeta', { total: d.epics.total, pinned: d.epics.pinned }), href: d.epics.href },
+    { icon: 'list', label: 'dash.tasks', value: d.tasks.inWork, meta: t('dash.tasksMeta', { blocked: d.tasks.blocked, waiting: d.tasks.waiting }), href: d.tasks.href, warn: d.tasks.blocked > 0 },
+    { icon: 'clock', label: 'dash.waiting', value: d.waiting.open, meta: d.waiting.oldestDays === null ? '' : t('dash.waitingMeta', { n: d.waiting.oldestDays }), href: d.waiting.href, warn: d.waiting.open > 0 },
+    { icon: 'branch', label: 'dash.mr', value: d.mr.open, meta: t('dash.mrMeta', { n: d.mr.red }), href: d.mr.href, warn: d.mr.red > 0 },
+    { icon: 'inbox', label: 'dash.feed', value: d.feed.unmarked, meta: d.feed.fire ? `🔥${d.feed.fire}` : '', spark: d.feed.spark, href: d.feed.href, warn: d.feed.fire > 0 },
+    { icon: 'link', label: 'dash.connectors', value: d.connectors.active, meta: silent.length ? t('dash.connectorsSilent', { n: silent.length }) : t('dash.connectorsOk'), title: silent.join(', '), href: d.connectors.href, warn: silent.length > 0 },
+  ].map((tile) => {
+    const body = `<span class="stat-label">${icon(tile.icon)}${esc(t(tile.label))}</span><span class="stat-value">${tile.value}${tile.spark ? sparkline(tile.spark) : ''}</span><span class="stat-meta">${esc(tile.meta || '')}</span>`;
+    const attrs = `class="stat${tile.warn ? ' is-warn' : ''}"${tile.title ? ` title="${esc(tile.title)}"` : ''}`;
+    return tile.href ? `<a ${attrs} href="${tile.href}">${body}</a>` : `<div ${attrs}>${body}</div>`;
+  }).join('');
+}
+
 function renderIndexContent() {
   const sum = (k) => allEpics.reduce((n, e) => n + (e[k] || 0), 0);
+  $('#stats').classList?.toggle?.('dash', Boolean(dashboard));
+  if (dashboard) {
+    $('#stats').innerHTML = dashboardTiles(dashboard);
+    renderEpicList();
+    renderIndexLinksStatus();
+    return;
+  }
   $('#stats').innerHTML = [
-    ['board', 'stat.epics', allEpics.length],
-    ['list', 'stat.tasks', sum('tasks')],
-    ['branch', 'stat.branches', sum('branches')],
-    ['clock', 'stat.waiting', sum('waiting')],
-  ].map(([i, label, n]) => `<div class="stat"><span class="stat-label">${icon(i)}${esc(t(label))}</span><span class="stat-value">${n}</span></div>`).join('');
+    ['board', 'stat.epics', allEpics.length, '/'],
+    ['list', 'stat.tasks', sum('tasks'), '/tasks'],
+    ['branch', 'stat.branches', sum('branches'), ''],
+    ['clock', 'stat.waiting', sum('waiting'), '/tasks?waiting=1'],
+  ].map(([i, label, n, href]) => {
+    const body = `<span class="stat-label">${icon(i)}${esc(t(label))}</span><span class="stat-value">${n}</span>`;
+    return href ? `<a class="stat" href="${href}">${body}</a>` : `<div class="stat">${body}</div>`;
+  }).join('');
   renderEpicList();
   renderIndexLinksStatus();
 }
 
 async function renderIndex() {
-  const [epics, settings] = await Promise.allSettled([api('/api/epics'), api('/api/settings')]);
-  if (settings.status === 'fulfilled') pinnedEpics = new Set(settings.value.pinnedEpics || []);
+  const [epics, settings, dash] = await Promise.allSettled([api('/api/epics'), api('/api/settings'), EXPORT ? Promise.reject() : api('/api/dashboard')]);
+  dashboard = dash.status === 'fulfilled' ? asDashboard(dash.value) : null;
+  if (settings.status === 'fulfilled') {
+    settingsRev = Number.isInteger(settings.value.rev) ? settings.value.rev : 0;
+    pinnedEpics = new Set(settings.value.values?.['epic.pinned'] || settings.value.pinnedEpics || []);
+  }
   if (epics.status === 'fulfilled') acceptIndex(epics.value);
   else indexLinksState = linkPollState(indexLinksState, null, true);
   renderIndexContent();
@@ -209,7 +273,12 @@ async function pollIndex() {
   try {
     const revision = indexLinksState?.data?.revision;
     acceptIndex(await api('/api/epics'));
+    // Feed and MR facts change without touching the epic list, so the tiles are compared on their own.
+    const nextDash = asDashboard(await api('/api/dashboard').catch(() => dashboard));
+    const dashChanged = JSON.stringify(nextDash) !== JSON.stringify(dashboard);
+    dashboard = nextDash;
     if (revision !== indexLinksState.data.revision) renderIndexContent();
+    else if (dashChanged && dashboard) $('#stats').innerHTML = dashboardTiles(dashboard);
   } catch {
     indexLinksState = linkPollState(indexLinksState, null, true);
   } finally {
@@ -230,8 +299,9 @@ function bindEpicPins() {
     savingPin = true;
     for (const pin of $('#epics').querySelectorAll('[data-pin]')) pin.disabled = true;
     try {
-      const settings = await api('/api/settings', { method: 'PUT', body: { pinnedEpics: [...next] } });
-      pinnedEpics = new Set(settings.pinnedEpics);
+      const settings = await api('/api/settings', { method: 'PUT', body: { rev: settingsRev, patch: { 'epic.pinned': [...next] } } });
+      settingsRev = settings.rev;
+      pinnedEpics = new Set(settings.values['epic.pinned']);
     } catch (e) {
       alertBox(e.message);
     } finally {
@@ -333,7 +403,7 @@ function cardBody(n) {
   return `<div class="ov-top"><span class="mono">${esc(n.id)}</span>${n.status ? `<span class="chip">${esc(n.status)}</span>` : ''}</div>
     <div class="ov-title" title="${esc(n.fullTitle)}">${esc(n.title)}</div>
     <div class="ov-progress"><span class="bar"><i style="width:${pct}%"></i></span><span class="mono">${n.progress.done}/${n.progress.total}</span></div>
-    ${n.side ? '' : now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
+    ${now}${flags ? `<div class="ov-flags">${flags}</div>` : ''}`;
 }
 
 function cardState(n) {
@@ -615,11 +685,14 @@ function renderDetail(map, open) {
   const list = (items, empty) => (items.length ? `<ul class="links">${items.join('')}</ul>` : `<p class="muted">${esc(empty)}</p>`);
   const links = `<div class="detail-links"><div><h4>${esc(t('detail.dependsOn'))}</h4>${list(incoming, t('detail.noIn'))}</div><div><h4>${esc(t('detail.leadsTo'))}</h4>${list(outgoing, t('detail.noOut'))}</div></div>`;
   const steps = lane ? lane.steps : map.merge.map((m) => ({ id: `m${m.n}`, title: `${m.n}. ${m.text}`, state: m.waiting ? 'waiting' : 'todo', note: m.branch, deps: [] }));
+  // Merge uses the same right-hand card as a task step (Depends on / Leads to), not a strip under the title.
+  const below = lane
+    ? stepSplit(lane, links)
+    : `<div class="step-split"><div></div><div class="step-info">${links}</div></div>`;
   return `<section class="detail${lane ? '' : ' detail-merge'}" id="detail" aria-label="${esc(t('detail.aria'))}">
     <header class="detail-head">${heading}${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
-    ${lane ? '' : links}
     ${renderTimeline(detailLayout(map, open))}
-    ${lane ? stepSplit(lane, links) : ''}
+    ${below}
     <div class="lanes-narrow">${narrowFlow(steps, lane?.id)}</div>
   </section>`;
 }
@@ -1077,7 +1150,7 @@ async function saveMapHeight(mode) {
   mapHeight = mode;
   applyMapHeightClass();
   try {
-    await saveSettings({ mapHeight: mode });
+    await saveSettings({ 'epic.mapHeight': mode });
   } catch (error) {
     mapHeight = previous;
     applyMapHeightClass();
@@ -1497,15 +1570,17 @@ function changeSectionPage(block, page) {
 }
 
 function applyPageSettings(settings) {
+  const sizes = settings['epic.pageSizes'] || settings.epicPageSizes || {};
   for (const block of Object.keys(pageSizes)) {
-    const value = settings.epicPageSizes?.[block];
+    const value = sizes[block];
     const size = [5, 10, 15].includes(value) ? value : 5;
     if (pageSizes[block] === size) continue;
     pageSizes[block] = size;
     sectionPages[block] = 1;
     if (current) renderSection(block);
   }
-  const next = ['s', 'm', 'l'].includes(settings?.mapHeight) ? settings.mapHeight : null;
+  const height = settings['epic.mapHeight'] ?? settings.mapHeight;
+  const next = ['s', 'm', 'l'].includes(height) ? height : null;
   if (next !== mapHeight) {
     mapHeight = next;
     applyMapHeightClass();
@@ -1536,7 +1611,7 @@ function bindPagination(saveSettings) {
     savingPageSizes = true;
     refreshPagers();
     try {
-      await saveSettings({ epicPageSizes: { [block]: size } });
+      await saveSettings({ 'epic.pageSizes': { [block]: size } });
     } catch (error) {
       alertBox(error.message);
     } finally {
@@ -1682,10 +1757,23 @@ async function renderEpic(id) {
   currentHistory = history;
   current = epic;
   document.title = `${epic.id} · ${epic.title} · EpicBoard`;
-  $('#title').innerHTML = `<span class="mono muted">${esc(epic.id)}</span> · ${esc(epic.title)}${epic.url ? ` ${external(epic.url, '')}` : ''}`;
+  const epicId = $('#epic-id');
+  if (epicId) {
+    epicId.hidden = false;
+    epicId.textContent = epic.id;
+  }
+  $('#title').innerHTML = `${esc(epic.title)}${epic.url ? ` ${external(epic.url, '')}` : ''}`;
   $('#goal').textContent = epic.goal || '';
   const stamps = Object.values(epic.facts || {}).map((f) => f.fetchedAt).filter(Boolean).sort();
-  $('#updated').innerHTML = stamps.length ? t('epic.factsUpdated', { a: agoText(stamps.at(-1)), b: agoText(epic.updatedAt) }) : t('epic.edited', { a: agoText(epic.updatedAt) });
+  const plainAgo = (iso) => t('ago', { t: ago(iso) });
+  const stampTip = stamps.length
+    ? t('epic.factsUpdated', { a: plainAgo(stamps.at(-1)), b: plainAgo(epic.updatedAt) })
+    : t('epic.edited', { a: plainAgo(epic.updatedAt) });
+  const updated = $('#updated');
+  updated.hidden = false;
+  updated.removeAttribute('title');
+  updated.setAttribute('aria-label', stampTip);
+  updated.innerHTML = `${icon('clock')}<span class="tip" role="tooltip">${esc(stampTip)}</span>`;
   renderMapArea(epic);
   renderWaiting(epic);
   $('#branches').innerHTML = branchRows(epic);
@@ -1694,7 +1782,8 @@ async function renderEpic(id) {
       <div class="session-head">${agentBadge(x.agent)}<code class="muted">${esc(x.id.slice(0, 8))}</code>${x.task ? `<span class="chip">${esc(x.task)}</span>` : ''}<span class="muted session-time">${icon('clock')}<span class="phrase">${agoText(x.lastAt)}</span></span></div>
       <dl class="session-body"><dt>${esc(t('session.doing'))}</dt><dd>${esc(x.doing ?? '—')}</dd><dt>${esc(t('session.next'))}</dt><dd>${esc(x.next ?? '—')}</dd></dl></li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
   renderHistory(history);
-  buildSearchIndex(epic, history);
+  // The live page uses the board-wide search; an export has no service and keeps its own index.
+  if (EXPORT) buildSearchIndex(epic, history);
 }
 
 async function pollEpicLinks(id) {
@@ -1930,14 +2019,27 @@ async function bootEpic() {
   if (exp) exp.href = `/api/epics/${enc(id)}/export`;
   tlState.open = openFromHash();
   fillIcons();
-  bindLang(async () => {
+  const rerenderLang = async () => {
     setFull($('#map-frame')?.classList.contains('map-full') || false);
     if (EXPORT) markExport();
     await renderEpic(id);
-  });
+  };
+  if (EXPORT) bindLang(rerenderLang);
+  else {
+    bindShell();
+    document.addEventListener('epic-board:lang', () => { void rerenderLang(); });
+    // Board search links to `#t-<task>[/<step>]` on the epic already open, which only changes the hash.
+    addEventListener('hashchange', () => {
+      const open = openFromHash();
+      if (!open || !current) return;
+      tlState.open = open;
+      renderMapArea(current);
+      $('#map')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
   bindMapTools();
   bindSideCarousel();
-  bindSearch();
+  if (EXPORT) bindSearch();
   bindDocs();
   if (!EXPORT) bindDecisionForms(id);
   const sectionSettings = bindSectionSettings({ api, onError: alertBox, onSettings: applyPageSettings, readOnly: Boolean(EXPORT) });
@@ -2010,7 +2112,9 @@ async function bootEpic() {
 async function bootIndex() {
   applyI18n();
   fillIcons();
-  bindLang(renderIndexContent);
+  bindShell({ search: !EXPORT });
+  document.addEventListener('epic-board:lang', renderIndexContent);
+  bindIndexSort();
   $('#q')?.addEventListener('input', renderEpicList);
   bindEpicPins();
   await renderIndex();

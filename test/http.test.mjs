@@ -55,27 +55,32 @@ test('errors carry status and json', async () => {
 test('global settings can be saved without changing epic data or history', async () => {
   const defaults = await call('/api/settings');
   assert.equal(defaults.status, 200);
-  assert.deepEqual(await defaults.json(), {
-    epicSectionOrder: ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history'],
-    epicPageSizes: { waiting: 5, decisions: 5, history: 5 },
-    mapHeight: null,
-    pinnedEpics: [],
-  });
+  const defaultValues = await defaults.json();
+  assert.equal(defaultValues.rev, 0);
+  assert.deepEqual(defaultValues.values['epic.sectionOrder'], ['waiting', 'map', 'branches', 'sessions', 'decisions', 'history']);
+  assert.deepEqual(defaultValues.values['epic.pageSizes'], { waiting: 5, decisions: 5, history: 5 });
+  assert.equal(defaultValues.values['epic.mapHeight'], null);
+  assert.deepEqual(defaultValues.values['epic.pinned'], []);
+  assert.equal(defaultValues.values['feed.retention.unmarked'], '14d');
   const before = await (await call('/api/epics/5')).json();
   const history = await (await call('/api/epics/5/history')).json();
-  const settings = { epicSectionOrder: ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'] };
-  const expected = { ...settings, epicPageSizes: { waiting: 5, decisions: 5, history: 5 }, mapHeight: null, pinnedEpics: [] };
-  const saved = await call('/api/settings', { method: 'PUT', body: settings });
+  const order = ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'];
+  const saved = await call('/api/settings', { method: 'PUT', body: { epicSectionOrder: order } });
   assert.equal(saved.status, 200);
-  assert.deepEqual(await saved.json(), expected);
-  assert.deepEqual(await (await call('/api/settings')).json(), expected);
-  const resized = await call('/api/settings', { method: 'PUT', body: { epicPageSizes: { waiting: 10, history: 15 } } });
-  const resizedSettings = { ...settings, epicPageSizes: { waiting: 10, decisions: 5, history: 15 }, mapHeight: null, pinnedEpics: [] };
+  const savedBody = await saved.json();
+  assert.equal(savedBody.rev, 1);
+  assert.deepEqual(savedBody.values['epic.sectionOrder'], order);
+  assert.deepEqual(await (await call('/api/settings')).json(), savedBody);
+  const resized = await call('/api/settings', { method: 'PUT', body: { rev: 1, patch: { 'epic.pageSizes': { waiting: 10, history: 15 } } } });
   assert.equal(resized.status, 200);
-  assert.deepEqual(await resized.json(), resizedSettings);
+  const resizedSettings = await resized.json();
+  assert.equal(resizedSettings.rev, 2);
+  assert.deepEqual(resizedSettings.values['epic.pageSizes'], { waiting: 10, decisions: 5, history: 15 });
   assert.deepEqual(await (await call('/api/settings')).json(), resizedSettings);
   assert.deepEqual(await (await call('/api/epics/5')).json(), before);
   assert.deepEqual(await (await call('/api/epics/5/history')).json(), history);
+  assert.equal((await call('/api/settings/registry')).status, 200);
+  assert.equal((await call('/settings')).status, 200);
 });
 
 test('invalid settings requests return 400 and preserve the saved order', async () => {
@@ -91,6 +96,7 @@ test('invalid settings requests return 400 and preserve the saved order', async 
     { epicPageSizes: { waiting: '10' } },
     { epicPageSizes: { waiting: 20 } },
     { epicPageSizes: { map: 10 } },
+    { rev: before.rev, patch: { 'epic.pageSizes': { waiting: 20 } } },
   ];
   for (const body of invalid) {
     const response = await call('/api/settings', { method: 'PUT', body });
@@ -107,12 +113,13 @@ test('pin settings persist over HTTP without changing epic content or history', 
   const history = await (await call('/api/epics/pin-epic/history')).json();
   const saved = await call('/api/settings', { method: 'PUT', body: { pinnedEpics: ['pin-epic', 'missing-epic'] } });
   assert.equal(saved.status, 200);
-  const expected = { ...settings, pinnedEpics: ['pin-epic', 'missing-epic'] };
-  assert.deepEqual(await saved.json(), expected);
+  const expected = await saved.json();
+  assert.equal(expected.rev, settings.rev + 1);
+  assert.deepEqual(expected.values['epic.pinned'], ['pin-epic', 'missing-epic']);
   assert.deepEqual(await (await call('/api/settings')).json(), expected);
   assert.deepEqual(await (await call('/api/epics/pin-epic')).json(), epic);
   assert.deepEqual(await (await call('/api/epics/pin-epic/history')).json(), history);
-  for (const pinnedEpics of [null, '5', [5], ['5', '5'], ['../bad']]) {
+  for (const pinnedEpics of ['5', [5], ['5', '5'], ['../bad']]) {
     const response = await call('/api/settings', { method: 'PUT', body: { pinnedEpics } });
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error, 'bad-settings');
@@ -120,7 +127,9 @@ test('pin settings persist over HTTP without changing epic content or history', 
   }
   const unpinned = await call('/api/settings', { method: 'PUT', body: { pinnedEpics: [] } });
   assert.equal(unpinned.status, 200);
-  assert.deepEqual(await (await call('/api/settings')).json(), { ...settings, pinnedEpics: [] });
+  const cleared = await (await call('/api/settings')).json();
+  assert.equal(cleared.rev, expected.rev + 1);
+  assert.deepEqual(cleared.values['epic.pinned'], []);
 });
 
 test('settings writes use the same origin and JSON guards as epic writes', async () => {
