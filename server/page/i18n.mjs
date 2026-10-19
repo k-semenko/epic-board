@@ -120,7 +120,38 @@ const en = {
   'feed.filter.source': 'Source', 'feed.filter.severity': 'Severity', 'feed.filter.mark': 'Mark', 'feed.filter.all': 'All',
   'feed.sev.fire': 'Fire', 'feed.sev.important': 'Important', 'feed.sev.normal': 'Normal', 'feed.sev.noise': 'Noise',
   'feed.noProfile': 'No profile yet', 'feed.helpTitle': 'Keyboard',
-  'feed.how': 'How to write', 'feed.howTitle': 'Writing to the feed',
+  'feed.showText': 'Show text', 'feed.how': 'How to use', 'feed.howTitle': 'Using the feed', 'feed.howPeople': 'For people', 'feed.howAi': 'Giving it to AI',
+  'feed.guide': `**What this is.** Agents and scripts drop signals here: mentions, alerts, run results. The board polls nothing by itself; every item came from a connector.
+
+**Going through it.** Each row ends with three buttons:
+
+- 👍 **Important** — good that it showed up.
+- 👎 **Unimportant** — fair, but nothing to do.
+- 🗑 **Noise** — do not send things like this.
+
+A marked item leaves *Unseen* at once and goes to *History*; the toast lets you undo it for five seconds.
+
+**When you disagree with the source.** If a fire goes to noise or noise to important, a *why?* field opens. Enter saves the reason, Esc skips it. Once a week these reasons become the source's profile, and the source sends less noise.
+
+**Groups.** Fires sit on top. Everything else is grouped by source; *Mark group as noise* never touches fires.
+
+**History.** Restore an item to *Unseen*, change its mark or delete it.
+
+**Filters.** Pick one source to see its profile on the right: what it has learned and the week's numbers.
+
+**Keyboard.** \`j\`/\`k\` move · \`1\`/\`2\`/\`3\` mark · \`x\` select several · \`Enter\` open the text · \`c\` comment · \`u\` undo · \`?\` help.
+
+**Retention.** How long items are kept is set in *Settings → Feed*.`,
+  'feed.aiInterface': `**Interface for agents.** Only the CLI, from the plugin root:
+
+| Command | What it does |
+|---|---|
+| \`feed add <file.json>\` | add or update items |
+| \`feed profile show --source S\` | read what the human marked as useful and as noise |
+| \`feed list --unmarked --json\` | see what is still unseen |
+| \`feed summary --json\` | counters for indicators |
+
+Agents never call \`feed mark\`: marks belong to the human.`,
   'feed.howHint': 'The board does not poll sources. An agent or a script pushes items through the CLI. Copy this into the agent. Do not ask the agent to open this page.',
   'feed.copy': 'Copy', 'feed.copied': 'Copied', 'feed.copyFailed': 'Copy failed',
   'feed.agentPrompt': `Write to the epic-board feed only through the CLI. Do not open the page or call HTTP.
@@ -322,7 +353,38 @@ const ru = {
   'feed.filter.source': 'Источник', 'feed.filter.severity': 'Важность', 'feed.filter.mark': 'Отметка', 'feed.filter.all': 'Все',
   'feed.sev.fire': 'Пожар', 'feed.sev.important': 'Важно', 'feed.sev.normal': 'Обычно', 'feed.sev.noise': 'Мусор',
   'feed.noProfile': 'Профиля ещё нет', 'feed.helpTitle': 'Клавиатура',
-  'feed.how': 'Как писать', 'feed.howTitle': 'Как писать в ленту',
+  'feed.showText': 'Показать текст', 'feed.how': 'Как пользоваться', 'feed.howTitle': 'Как пользоваться лентой', 'feed.howPeople': 'Для людей', 'feed.howAi': 'Как отдать AI',
+  'feed.guide': `**Что это.** Сюда агенты и скрипты складывают сигналы: упоминания, алерты, итоги прогонов. Сама доска ничего не опрашивает — каждый пункт прислал какой-то коннектор.
+
+**Разбор.** В конце каждой строки три кнопки:
+
+- 👍 **Важно** — хорошо, что показали.
+- 👎 **Не важно** — по делу, но реакции не нужно.
+- 🗑 **Мусор** — такое не присылать.
+
+Отмеченный пункт сразу уходит из «Непросмотренного» в «Историю», пять секунд его можно отменить из всплывашки.
+
+**Если не согласен с источником.** Когда пожар уходит в мусор или мусор в важное, появляется поле «почему?». Enter сохраняет причину, Esc пропускает. Раз в неделю эти ответы превращаются в профиль источника, и он шумит меньше.
+
+**Группы.** Пожары сверху. Остальное сгруппировано по источнику; «Всё в группе — мусор» пожары не трогает.
+
+**История.** Можно вернуть пункт в «Непросмотренное», поменять отметку или удалить.
+
+**Фильтры.** Если выбрать один источник, справа появится его профиль: чему он научился и цифры за неделю.
+
+**Клавиатура.** \`j\`/\`k\` — ход · \`1\`/\`2\`/\`3\` — отметка · \`x\` — выделить несколько · \`Enter\` — открыть текст · \`c\` — комментарий · \`u\` — отмена · \`?\` — справка.
+
+**Хранение.** Сколько держать пункты — в «Настройки → Лента».`,
+  'feed.aiInterface': `**Интерфейс для агентов.** Только CLI, из корня плагина:
+
+| Команда | Что делает |
+|---|---|
+| \`feed add <файл.json>\` | добавить или обновить пункты |
+| \`feed profile show --source S\` | узнать, что человек счёл полезным, а что мусором |
+| \`feed list --unmarked --json\` | посмотреть, что ещё не разобрано |
+| \`feed summary --json\` | счётчики для индикаторов |
+
+\`feed mark\` агент не вызывает: отметки ставит человек.`,
   'feed.howHint': 'Доска сама источники не опрашивает. Агент или скрипт кладёт пункты через CLI. Скопируй текст агенту. Просить агента открыть эту страницу не нужно.',
   'feed.copy': 'Скопировать', 'feed.copied': 'Скопировано', 'feed.copyFailed': 'Не удалось скопировать',
   'feed.agentPrompt': `В ленту epic-board пиши только через CLI. Страницу и HTTP не открывай.

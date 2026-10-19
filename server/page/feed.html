@@ -16,7 +16,7 @@
 <nav class="topbar"><div class="topbar-in">
   <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>EpicBoard</a>
   <div class="top-search"><label class="search"><span data-icon="search"></span><input id="q" type="search" data-i18n-ph="search.placeholder" autocomplete="off"></label><div id="search-results" class="search-results" hidden></div></div>
-  <a href="/feed" aria-current="page" class="icon-btn topbar-feed" aria-current="page" data-i18n-aria="nav.feed" data-i18n-title="nav.feed"><span data-icon="inbox"></span><span id="feed-badge" class="feed-badge" hidden></span></a>
+  <a href="/feed" aria-current="page" class="icon-btn topbar-feed" data-i18n-aria="nav.feed" data-i18n-title="nav.feed"><span data-icon="inbox"></span><span id="feed-badge" class="feed-badge" hidden></span></a>
   <a href="/settings" class="icon-btn topbar-settings" data-i18n-aria="settings.title" data-i18n-title="settings.title"><span data-icon="settings"></span></a>
   <button type="button" id="lang" class="lang-btn">RU</button>
 </div></nav>
@@ -45,11 +45,19 @@
     <aside id="feed-profile" class="feed-profile" hidden></aside>
   </div>
   <div id="feed-toast" class="feed-toast" hidden></div>
-  <dialog id="feed-how"><div class="modal">
-    <header class="modal-head"><h3 data-i18n="feed.howTitle">Writing to the feed</h3><button type="button" class="icon-btn" data-how-close aria-label="Close"><span data-icon="close"></span></button></header>
-    <p class="muted" data-i18n="feed.howHint">The board does not poll sources. An agent or script pushes items through the CLI. Paste this into the agent.</p>
-    <pre id="feed-how-prompt" class="feed-prompt"></pre>
-    <footer class="modal-foot"><button type="button" class="primary" id="feed-how-copy" data-i18n="feed.copy">Copy</button></footer>
+  <dialog id="feed-how"><div class="modal feed-how">
+    <header class="modal-head"><h3 data-i18n="feed.howTitle">Using the feed</h3><button type="button" class="icon-btn" data-how-close aria-label="Close"><span data-icon="close"></span></button></header>
+    <div class="view-nav" role="tablist">
+      <button type="button" class="is-active" data-how-tab="people" data-i18n="feed.howPeople">For people</button>
+      <button type="button" data-how-tab="ai" data-i18n="feed.howAi">Giving it to AI</button>
+    </div>
+    <section data-how-panel="people"><div id="feed-guide" class="markdown feed-guide"></div></section>
+    <section data-how-panel="ai" hidden>
+      <p class="muted" data-i18n="feed.howHint">The board does not poll sources. An agent or script pushes items through the CLI. Paste this into the agent.</p>
+      <pre id="feed-how-prompt" class="feed-prompt"></pre>
+      <footer class="modal-foot"><button type="button" class="primary" id="feed-how-copy" data-i18n="feed.copy">Copy</button></footer>
+      <div id="feed-ai-interface" class="markdown feed-guide"></div>
+    </section>
   </div></dialog>
   <dialog id="feed-help" class="feed-help"><div class="modal"><header class="modal-head"><h3 data-i18n="feed.helpTitle">Keyboard</h3><button type="button" class="icon-btn" data-help-close aria-label="Close"><span data-icon="close"></span></button></header><pre id="feed-help-body"></pre></div></dialog>
 </main>

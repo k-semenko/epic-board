@@ -34,7 +34,9 @@ function renderBadge(summary) {
   }
   badge.hidden = false;
   badge.classList.toggle('is-fire', summary.fire > 0);
-  badge.textContent = summary.fire > 0 ? `${summary.unmarked} · 🔥${summary.fire}` : String(summary.unmarked);
+  // Red marks fires; the count stays short so the badge never covers the next header button.
+  badge.textContent = String(summary.unmarked);
+  badge.parentElement?.setAttribute?.('title', summary.fire > 0 ? `${t('nav.feed')} · 🔥${summary.fire}` : t('nav.feed'));
 }
 
 let feedRev = null;

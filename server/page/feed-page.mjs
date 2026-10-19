@@ -16,10 +16,14 @@ let knownIds = new Set();
 let pending = null; // { id, value } waits for an optional "why?" before marking
 
 const MARKS = [
-  { value: 'important', key: '1', label: 'feed.mark.important' },
-  { value: 'unimportant', key: '2', label: 'feed.mark.unimportant' },
-  { value: 'noise', key: '3', label: 'feed.mark.noise' },
+  { value: 'important', key: '1', label: 'feed.mark.important', icon: 'thumbUp' },
+  { value: 'unimportant', key: '2', label: 'feed.mark.unimportant', icon: 'thumbDown' },
+  { value: 'noise', key: '3', label: 'feed.mark.noise', icon: 'trash' },
 ];
+
+function actionButton(attrs, iconName, label, active = false) {
+  return `<button type="button" class="icon-btn feed-act${active ? ' is-active' : ''}" ${attrs} title="${esc(label)}" aria-label="${esc(label)}"${active ? ' aria-pressed="true"' : ''}>${icon(iconName)}</button>`;
+}
 
 function isUnmarked(item) {
   return !item.mark || item.changedSinceMark;
@@ -71,12 +75,17 @@ function renderFilters() {
 function rowHtml(item, index) {
   const active = index === focus ? ' is-focus' : '';
   const sel = selected.has(item.id) ? ' is-selected' : '';
-  const refs = (item.refs || []).filter((r) => r.startsWith('epic:') || r.startsWith('task:')).slice(0, 3)
-    .map((r) => {
-      if (r.startsWith('epic:')) return `<a href="/e/${esc(r.slice(5))}">${esc(r.slice(5))}</a>`;
-      const [, epic, task] = r.match(/^task:([^/]+)\/(.+)$/) || [];
-      return epic ? `<a href="/e/${esc(epic)}#t-${esc(task)}">${esc(task)}</a>` : '';
-    }).join(' ');
+  const refs = (item.refs || []).slice(0, 4).map((r) => {
+    if (r.startsWith('epic:')) return `<a class="chip" href="/e/${esc(r.slice(5))}">${esc(r.slice(5))}</a>`;
+    const task = r.match(/^task:([^/]+)\/(.+)$/);
+    if (task) return `<a class="chip" href="/e/${esc(task[1])}#t-${esc(task[2])}">${esc(task[2])}</a>`;
+    if (/^https?:\/\//.test(r)) {
+      let host = r;
+      try { host = new URL(r).host; } catch {}
+      return `<a class="chip" href="${esc(r)}" target="_blank" rel="noopener">${icon('link')}${esc(host)}</a>`;
+    }
+    return '';
+  }).join('');
   return `<li class="feed-row${active}${sel}" data-id="${esc(item.id)}" data-index="${index}">
     <button type="button" class="feed-dot sev-${esc(item.severity)}" aria-label="${esc(item.severity)}"></button>
     <div class="feed-main">
@@ -84,6 +93,7 @@ function rowHtml(item, index) {
         <span class="feed-source">${esc(item.source)}</span>
         ${item.channel ? `<span class="muted">${esc(item.channel)}</span>` : ''}
         <strong>${esc(item.title)}</strong>
+        ${item.body ? `<button type="button" class="feed-more" data-toggle-body title="${esc(t('feed.showText'))}" aria-label="${esc(t('feed.showText'))}">${icon('file')}</button>` : ''}
         <span class="muted">${esc(ago(item.updatedAt))}</span>
         ${item.count > 1 ? `<span class="chip">×${item.count}</span>` : ''}
         ${item.changedSinceMark ? `<span class="chip">${esc(t('feed.changed'))}</span>` : ''}
@@ -91,12 +101,11 @@ function rowHtml(item, index) {
       </div>
       <div class="feed-body" hidden></div>
       <div class="feed-comment" hidden><input type="text" data-i18n-ph="feed.why" placeholder="${esc(t('feed.why'))}"></div>
-      <div class="feed-actions">
-        ${tab === 'unmarked' ? MARKS.map((m) => `<button type="button" data-mark="${m.value}">${esc(t(m.label))}</button>`).join('') : `
-          <button type="button" data-unmark>${esc(t('feed.unmark'))}</button>
-          ${MARKS.map((m) => `<button type="button" data-mark="${m.value}">${esc(t(m.label))}</button>`).join('')}
-          <button type="button" data-delete>${esc(t('feed.delete'))}</button>`}
-      </div>
+    </div>
+    <div class="feed-actions">
+      ${tab === 'history' ? actionButton('data-unmark', 'undo', t('feed.unmark')) : ''}
+      ${MARKS.map((m) => actionButton(`data-mark="${m.value}"`, m.icon, `${t(m.label)} · ${m.key}`, item.mark?.value === m.value)).join('')}
+      ${tab === 'history' ? actionButton('data-delete', 'close', t('feed.delete')) : ''}
     </div>
   </li>`;
 }
@@ -275,6 +284,13 @@ $('#feed-list').addEventListener('click', async (event) => {
     await requestMark(item, value);
     return;
   }
+  if (event.target.closest('[data-toggle-body]')) {
+    const body = row.querySelector('.feed-body');
+    const item = items.find((x) => x.id === row.dataset.id);
+    body.hidden = !body.hidden;
+    if (!body.hidden) body.innerHTML = renderMarkdown(item.body || '').html;
+    return;
+  }
   if (event.target.closest('[data-unmark]')) {
     await postFeed('unmark', { ids: [row.dataset.id] });
     await load();
@@ -293,7 +309,7 @@ $('#feed-list').addEventListener('dblclick', (event) => {
   const body = row.querySelector('.feed-body');
   const item = items.find((x) => x.id === row.dataset.id);
   body.hidden = !body.hidden;
-  if (!body.hidden) body.innerHTML = renderMarkdown(item.body || '');
+  if (!body.hidden) body.innerHTML = renderMarkdown(item.body || '').html;
 });
 
 $('#feed-new').addEventListener('click', (event) => {
@@ -361,8 +377,15 @@ document.addEventListener('keydown', async (event) => {
 });
 
 function openHow() {
+  $('#feed-guide').innerHTML = renderMarkdown(t('feed.guide')).html;
+  $('#feed-ai-interface').innerHTML = renderMarkdown(t('feed.aiInterface')).html;
   $('#feed-how-prompt').textContent = t('feed.agentPrompt');
   $('#feed-how').showModal();
+}
+
+function showHowTab(name) {
+  for (const btn of document.querySelectorAll('[data-how-tab]')) btn.classList.toggle('is-active', btn.dataset.howTab === name);
+  for (const panel of document.querySelectorAll('[data-how-panel]')) panel.hidden = panel.dataset.howPanel !== name;
 }
 
 $('#feed-how-open').addEventListener('click', openHow);
@@ -371,6 +394,8 @@ $('#feed-list').addEventListener('click', (event) => {
 });
 $('#feed-how').addEventListener('click', (event) => {
   if (event.target.closest('[data-how-close]')) $('#feed-how').close();
+  const howTab = event.target.closest('[data-how-tab]');
+  if (howTab) showHowTab(howTab.dataset.howTab);
 });
 $('#feed-how-copy').addEventListener('click', async () => {
   const text = $('#feed-how-prompt').textContent;
