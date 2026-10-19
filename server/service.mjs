@@ -210,6 +210,14 @@ export async function status({ env = process.env, platform = process.platform } 
   ].join('\n');
 }
 
+// The service copy is newer than this plugin: the agent runs stale skills until the plugin is updated.
+export function pluginBehind({ env = process.env, platform = process.platform } = {}) {
+  const unit = servicePath({ env, platform });
+  if (!unit || !existsSync(unit)) return null;
+  const have = installedVersion(appDir(env));
+  return have && newer(have, VERSION) ? { plugin: VERSION, service: have } : null;
+}
+
 // Called from the SessionStart hook: after a plugin update the service picks up the new code by itself.
 // Only forward: a second, older copy of the plugin (a clone next to the marketplace one) never downgrades.
 export async function syncIfOutdated({ env = process.env, platform = process.platform, exec = execFileSync } = {}) {

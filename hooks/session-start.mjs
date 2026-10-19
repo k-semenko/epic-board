@@ -1,4 +1,4 @@
-import { readInput, findSessionEpic, epicForCwd, run, CLI, sessionId, cwdOf, agentName, emitSessionContext, isCursor } from './lib.mjs';
+import { readInput, findSessionEpic, epicForCwd, run, CLI, sessionId, cwdOf, agentName, emitSessionContext, isCursor, outdatedNote } from './lib.mjs';
 import { buildBrief } from '../server/brief.mjs';
 import { boardUrl } from '../server/paths.mjs';
 
@@ -32,11 +32,11 @@ run(async () => {
   const sid = sessionId(input);
   // Cursor sessionStart is fire-and-forget: emit before any service install can delay stdout.
   if (isCursor()) {
-    const notes = boardNotes(input, sid);
+    const notes = [await outdatedNote(), ...boardNotes(input, sid)].filter(Boolean);
     emitSessionContext(notes.join('\n') || null, { sessionId: sid });
     await syncNotes();
     return;
   }
-  const notes = [...(await syncNotes()), ...boardNotes(input, sid)];
+  const notes = [...(await syncNotes()), await outdatedNote(), ...boardNotes(input, sid)].filter(Boolean);
   if (notes.length) emitSessionContext(notes.join('\n'));
 });
