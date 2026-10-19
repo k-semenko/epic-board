@@ -350,6 +350,8 @@ document.addEventListener('keydown', async (event) => {
   }
   const mark = MARKS.find((m) => m.key === event.key);
   if (mark && tab === 'unmarked') {
+    // The key would otherwise land in the "why?" field that this mark may open.
+    event.preventDefault();
     if (selected.size) {
       const ids = [...selected];
       selected.clear();
