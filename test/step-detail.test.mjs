@@ -40,3 +40,20 @@ for (const steps of [
     assert.equal(side, main);
   });
 }
+
+test('merge puts Depends on / Leads to in the right-hand card, not under the title', () => {
+  const render = detailRenderer();
+  const html = render({
+    title: 'Ship SDK',
+    goal: 'SDK is on main',
+    tasks: [{ id: 'SDK-1', title: 'Cut the release', branches: [{ repo: 'sdk', name: 'feat/cut' }], steps: [{ id: 'cut', title: 'Cut', state: 'done' }] }],
+    mergeOrder: [{ id: 'm1', text: 'feat/cut → main', branch: 'sdk:feat/cut' }],
+  }, '@merge');
+  assert.match(html, /detail-merge/);
+  assert.match(html, /step-info[\s\S]*detail-links[\s\S]*SDK-1/);
+  assert.match(html, /step-info[\s\S]*detail-links[\s\S]*SDK is on main/);
+  const afterHeader = html.slice(html.indexOf('</header>'));
+  const linksAt = afterHeader.indexOf('detail-links');
+  const timelineAt = afterHeader.indexOf('class="tl"');
+  assert.ok(timelineAt >= 0 && linksAt > timelineAt, 'links belong below the merge timeline, inside the side card');
+});

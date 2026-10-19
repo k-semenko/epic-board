@@ -21,8 +21,15 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--
 /* Grid children default to min-width:auto, so a wide diagram or table would widen the page. */
 .wrap > *, .head > * { min-width: 0; }
 h1 { overflow-wrap: anywhere; }
-.head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.head { display: grid; gap: 6px 16px; }
+.epic-id { margin: 0; font-size: 12px; line-height: 1.3; }
+.head-title-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; min-width: 0; }
+.head-title-row h1 { flex: 1 1 14rem; min-width: 0; margin: 0; }
+.head .actions { flex: 0 1 auto; margin-left: auto; }
+.updated-stamp { display: inline-flex; align-items: center; justify-content: center; padding: 7px; cursor: help; color: var(--muted); }
+.updated-stamp:hover { color: var(--fg); }
 h1 { font-size: 24px; margin: 4px 0; text-wrap: balance; }
+#goal { margin: 0; }
 h2 { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
 h3 { font-size: 16px; margin: 0; }
 a { color: var(--accent); text-decoration: none; }
@@ -512,12 +519,10 @@ button.doc-open .chip svg.i { display: none; }
   .map-frame:not(.map-full):has(.overview.map-h-l) .docs-block { display: block; }
   .map-frame:not(.map-full):has(.overview.map-h-l) .docs-scroll { overflow: visible; min-height: auto; }
   #map > .detail { flex: 1; min-height: 0; margin: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 8px; }
-  #map > .detail-merge { grid-template-rows: auto auto auto minmax(0, 1fr); }
   .detail .tl-scroll { max-height: none; }
   .docs-block { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
   .docs-scroll { overflow: auto; min-height: 0; padding-right: 4px; }
 }
-.detail-merge .detail-links > div { max-height: 76px; overflow: auto; padding-right: 4px; }
 
 /* Documents as compact tiles in columns */
 .docs-scroll { display: grid; gap: 8px; align-content: start; }
