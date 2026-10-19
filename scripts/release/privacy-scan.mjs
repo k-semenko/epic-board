@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT } from './lib.mjs';
+import { SECRET_RULES } from '../../server/secrets.mjs';
 
 const SKIP_PREFIXES = ['vendor/'];
 const ALLOW_MARK = 'privacy-scan: allow';
@@ -35,11 +36,7 @@ const RULES = [
         || EMAIL_ALLOWED_DOMAINS.some((d) => d.test(domain));
     },
   },
-  { id: 'private-key', re: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g },
-  { id: 'github-token', re: /\bgh[pousr]_[A-Za-z0-9]{20,}/g },
-  { id: 'github-fine-grained-token', re: /\bgithub_pat_[A-Za-z0-9_]{20,}/g },
-  { id: 'gitlab-token', re: /\bglpat-[A-Za-z0-9_-]{20,}/g },
-  { id: 'aws-access-key', re: /\bAKIA[0-9A-Z]{16}\b/g },
+  ...SECRET_RULES,
 ];
 
 const files = execFileSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' })

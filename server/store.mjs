@@ -1,9 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { dataDir } from './paths.mjs';
 import { BoardError } from './errors.mjs';
 import { migrateWaiting, prepareWaitingPatch, transitionWaiting, validateWaiting } from './waiting.mjs';
 import { inspectRepository } from './repositories.mjs';
+import { planDeletion } from './deletion.mjs';
+import { checkDocPath } from './doc-paths.mjs';
+import { normalizeAfter, parseStepRef } from './step-refs.mjs';
 
 // Any tracker key works as an id (42, PROJ-12, gh.341); it also names files, so no slashes or leading dots.
 export const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -28,7 +32,7 @@ export function epicPath(id) {
 }
 
 const historyPath = (id) => path.join(epicsDir(), `${checkId(id)}.history.ndjson`);
-const lockPath = (id) => path.join(epicsDir(), `${checkId(id)}.lock`);
+const epicLockPath = (id) => path.join(epicsDir(), `${checkId(id)}.lock`);
 
 function alive(pid) {
   try {
@@ -41,9 +45,10 @@ function alive(pid) {
 
 const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-// Only a dead owner loses the lock: a slow but live writer must never have its write raced.
-export function withLock(id, fn, { timeoutMs = 5000 } = {}) {
-  const file = lockPath(id);
+// Lock a target path via `<path>.lock`. Only a dead owner loses the lock: a slow but live writer must never have its write raced.
+export function withFileLock(targetPath, fn, { timeoutMs = 5000, lockPath = `${targetPath}.lock` } = {}) {
+  const file = lockPath;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   const until = Date.now() + timeoutMs;
   for (;;) {
     try {
@@ -61,7 +66,7 @@ export function withLock(id, fn, { timeoutMs = 5000 } = {}) {
         } catch {}
         continue;
       }
-      if (Date.now() > until) throw new BoardError(423, 'locked', `epic ${id} is locked by process ${owner ?? '?'}, retry later`);
+      if (Date.now() > until) throw new BoardError(423, 'locked', `${targetPath} is locked by process ${owner ?? '?'}, retry later`);
       pause(25);
     }
   }
@@ -72,6 +77,11 @@ export function withLock(id, fn, { timeoutMs = 5000 } = {}) {
       fs.unlinkSync(file);
     } catch {}
   }
+}
+
+export function withLock(id, fn, { timeoutMs = 5000 } = {}) {
+  const target = path.join(epicsDir(), checkId(id));
+  return withFileLock(target, fn, { timeoutMs, lockPath: epicLockPath(id) });
 }
 
 export function writeAtomic(file, text) {
@@ -298,8 +308,9 @@ export function validateEpic(epic) {
       if (s.state && !['done', 'active', 'todo', 'blocked', 'waiting'].includes(s.state)) {
         throw new BoardError(400, 'bad-state', `step ${t.id}/${s.id}: state is done, active, todo, blocked or waiting`);
       }
-      for (const ref of s.after || []) {
-        if (!steps.has(ref)) throw new BoardError(400, 'bad-after', `step ${t.id}/${s.id}: after points to a missing step ${ref}`);
+      for (const ref of normalizeAfter(s.after ?? [], epic.id)) {
+        const target = parseStepRef(ref, epic.id);
+        if (target.local && !steps.has(target.ref)) throw new BoardError(400, 'bad-after', `step ${t.id}/${s.id}: after points to a missing step ${ref}`);
       }
     }
     for (const b of t.branches || []) {
@@ -342,6 +353,17 @@ function prepareRepositories(epic, patch) {
   return { ...patch, repos };
 }
 
+function prepareAfter(patch, epicId) {
+  if (!Array.isArray(patch.tasks)) return patch;
+  return { ...patch, tasks: patch.tasks.map((task) => {
+    if (!task || task.$delete || !Array.isArray(task.steps)) return task;
+    return { ...task, steps: task.steps.map((step) => {
+      if (!step || step.$delete || !Object.hasOwn(step, 'after') || step.after === null) return step;
+      return { ...step, after: normalizeAfter(step.after, epicId) };
+    }) };
+  }) };
+}
+
 // `check` sees the merged epic under the lock, before anything is written.
 export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, check } = {}) {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new BoardError(400, 'bad-patch', 'patch must be an object');
@@ -353,7 +375,7 @@ export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, chec
     const epic = readEpic(id);
     const at = new Date().toISOString();
     const changes = [];
-    const next = mergeObject(epic, prepareRepositories(epic, prepareDecisions(epic, prepareWaitingPatch(epic, patch, at), at)), '', changes);
+    const next = mergeObject(epic, prepareRepositories(epic, prepareDecisions(epic, prepareWaitingPatch(epic, prepareAfter(patch, epic.id), at), at)), '', changes);
     validateEpic(next);
     if (check) check(next);
     if (!changes.length) return { epic, changes };
@@ -363,6 +385,53 @@ export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, chec
     return { epic: next, changes };
   }, lockTimeoutMs ? { timeoutMs: lockTimeoutMs } : undefined);
 }
+
+function deleteTaskOrStep(id, taskId, stepId, { cleanupRefs = false, by = 'cli', why = '' } = {}) {
+  return withLock(id, () => {
+    const epic = readEpic(id);
+    const { patch, waiting, references } = planDeletion(epic, taskId, stepId);
+    const at = new Date().toISOString();
+    const changes = [];
+    const next = mergeObject(epic, patch, '', changes);
+    // Deletion detaches current associations without revising the question or its immutable answers.
+    if (waiting.length) next.waiting = mergeArray(epic.waiting, waiting.map((item) => ({ ...item, version: randomUUID() })), 'waiting', 'waiting', changes);
+    const lostDocuments = [];
+    const docsRoot = path.join(epicsDir(), checkId(id), 'docs');
+    if (stepId === undefined) for (const doc of epic.docs || []) {
+      try { checkDocPath(epic, doc.path, docsRoot); }
+      catch (error) {
+        if (!(error instanceof BoardError)) throw error;
+        continue;
+      }
+      try { checkDocPath(next, doc.path, docsRoot); }
+      catch (error) {
+        if (!(error instanceof BoardError) || error.code !== 'outside') throw error;
+        lostDocuments.push(`docs[${doc.id}].path -> ${doc.path} (loses allowed worktree root)`);
+      }
+    }
+    const blockers = [...(cleanupRefs ? [] : references), ...lostDocuments];
+    if (blockers.length) {
+      const target = stepId === undefined ? `task ${taskId}` : `step ${taskId}/${stepId}`;
+      const advice = lostDocuments.length ? 'Import/relink these documents or keep the worktree registered on a surviving branch first. --cleanup-refs does not change document roots.' : 'Use --cleanup-refs to detach mutable references; append-only decisions remain as history.';
+      throw new BoardError(400, lostDocuments.length ? 'document-root' : 'referenced', `cannot delete ${target}; referenced by:\n${blockers.map((ref) => `  ${ref}`).join('\n')}\n${advice}`);
+    }
+    validateEpic(next);
+    next.updatedAt = at;
+    saveEpic(next);
+    appendHistory(id, changes.map((change) => ({ at, by, why, ...change })));
+    return { epic: next, changes };
+  });
+}
+
+export function deleteTask(id, taskId, opts) {
+  return deleteTaskOrStep(id, taskId, undefined, opts);
+}
+
+export function deleteStep(id, taskId, stepId, opts) {
+  if (typeof stepId !== 'string' || !stepId) throw new BoardError(400, 'no-step-id', 'step id is required');
+  return deleteTaskOrStep(id, taskId, stepId, opts);
+}
+
 function pendingItem(epic, itemId) {
   const item = (epic.waiting || []).find((w) => w.id === itemId);
   if (!item) throw new BoardError(404, 'no-waiting', `no pending item ${itemId}`);

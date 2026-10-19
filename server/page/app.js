@@ -7,6 +7,8 @@ import { bindSectionSettings } from './section-settings.mjs';
 import { DecisionDrafts, renderWaitingCard, waitingCounts, waitingSearchText } from './waiting.mjs';
 import { paginate, renderPagination } from './pagination.mjs';
 import { createDocEditor } from './doc-editor.mjs';
+import { linkPollState, renderStepLinks, renderLinkBadge, renderRelatedEpics, renderLinkStatus, updateLinksDom, indexRevision } from './links.mjs';
+import { bindShell } from './shell.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -26,12 +28,13 @@ const EXPORT = typeof window !== 'undefined' ? window.__EPIC_EXPORT__ || null : 
 
 function exportApi(path, method) {
   if (method !== 'GET') throw new Error(t('export.readOnly'));
-  if (path === '/api/settings') return EXPORT.settings || {};
+  if (path === '/api/settings') return { rev: 0, values: EXPORT.settings || {} };
   if (/\/history/.test(path)) {
     const limit = new URLSearchParams(path.split('?')[1]).get('limit');
     return limit === 'all' ? EXPORT.history : EXPORT.history.slice(0, Number(limit) || 20);
   }
   if (/\/docs-text$/.test(path)) return EXPORT.docs || [];
+  if (/\/links$/.test(path)) return EXPORT.links;
   const doc = path.match(/\/docs\/([^/]+)$/);
   if (doc) {
     const d = (EXPORT.docs || []).find((x) => x.id === decodeURIComponent(doc[1]));
@@ -114,41 +117,161 @@ function dayLabel(iso) {
 }
 
 let allEpics = [];
+let pinnedEpics = new Set();
+let settingsRev = 0;
+let savingPin = false;
+let indexLinksState = null;
+let indexPolling = false;
+let indexSort = 'created';
+
+function bindIndexSort() {
+  const select = $('#epic-sort');
+  const restore = () => {
+    const params = typeof URLSearchParams === 'function' ? new URLSearchParams(location.search || '') : null;
+    indexSort = params?.get('sort') === 'updated' ? 'updated' : 'created';
+    if (select) select.value = indexSort;
+  };
+  restore();
+  select?.addEventListener('change', () => {
+    indexSort = select.value === 'updated' ? 'updated' : 'created';
+    const params = new URLSearchParams(location.search || '');
+    if (indexSort === 'updated') params.set('sort', 'updated');
+    else params.delete('sort');
+    const query = params.toString();
+    history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash || ''}`);
+    renderEpicList();
+  });
+}
+
+function replaceEpicCards(html) {
+  const root = $('#epics');
+  if (root.innerHTML === html) return;
+  const controls = [...root.querySelectorAll('a[href], [data-pin]')];
+  const active = controls.includes(document.activeElement) ? document.activeElement : null;
+  const pin = active?.dataset.pin;
+  const href = active?.getAttribute?.('href');
+  const owner = active?.closest?.('[data-epic-card]')?.dataset.epicCard;
+  root.innerHTML = html;
+  if (active) [...root.querySelectorAll('a[href], [data-pin]')].find((control) => pin ? control.dataset.pin === pin : control.getAttribute?.('href') === href && control.closest?.('[data-epic-card]')?.dataset.epicCard === owner)?.focus({ preventScroll: true });
+}
 
 function renderEpicList() {
+  if (indexLinksState?.stale && !indexLinksState.data && !allEpics.length) {
+    replaceEpicCards(`<p class="muted">${esc(t('links.indexUnavailable'))}</p>`);
+    return;
+  }
   const q = ($('#q')?.value || '').trim().toLowerCase();
   const found = allEpics.filter((e) => !q || [e.id, e.title, e.goal].some((v) => String(v ?? '').toLowerCase().includes(q)));
   if (!found.length) {
-    $('#epics').innerHTML = `<p class="muted">${allEpics.length ? esc(t('index.none')) : t('index.empty')}</p>`;
+    replaceEpicCards(`<p class="muted">${allEpics.length ? esc(t('index.none')) : t('index.empty')}</p>`);
     return;
   }
+  const dateField = indexSort === 'updated' ? 'updatedAt' : 'createdAt';
+  const sorted = [...found].sort((a, b) => String(b[dateField] || '').localeCompare(String(a[dateField] || '')));
+  const pinned = sorted.filter((e) => pinnedEpics.has(e.id));
   const groups = new Map();
-  for (const e of [...found].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))) {
-    const label = dayLabel(e.createdAt);
+  for (const e of sorted) {
+    if (pinnedEpics.has(e.id)) continue;
+    const label = dayLabel(e[dateField]);
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(e);
   }
-  $('#epics').innerHTML = [...groups].map(([label, list]) => `<section class="day"><h2 class="day-head">${esc(label)}</h2><ul class="cards">${list.map(epicCard).join('')}</ul></section>`).join('');
+  const sections = pinned.length ? [[t('index.pinned'), pinned], ...groups] : [...groups];
+  replaceEpicCards(sections.map(([label, list]) => `<section class="day"><h2 class="day-head">${esc(label)}</h2><ul class="cards">${list.map(epicCard).join('')}</ul></section>`).join(''));
 }
 
-// The whole card is the link. Padding sits on the anchor, so the goal and the meta row open the epic too.
+// Keep the pin button outside the link so toggling it never opens the epic.
 function epicCard(e) {
+  const pinned = pinnedEpics.has(e.id);
+  const pinLabel = esc(t(pinned ? 'index.unpin' : 'index.pin', { title: e.title }));
   const waiting = e.waiting
     ? `<span class="warn">${icon('clock')}${esc(t('index.waiting', { n: e.waiting }))}</span>`
     : `<span class="muted">${icon('check')}${esc(t('index.nothing'))}</span>`;
-  return `<li><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a></li>`;
+  return `<li data-epic-card="${esc(e.id)}"><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a>${renderRelatedEpics(e.relatedEpics, { incomplete: e.incomplete })}<button type="button" class="icon-btn epic-pin" data-pin="${esc(e.id)}" aria-pressed="${pinned}" aria-label="${pinLabel}" title="${pinLabel}"${savingPin ? ' disabled' : ''}>${icon('pin')}</button></li>`;
+}
+
+function renderIndexContent() {
+  const sum = (k) => allEpics.reduce((n, e) => n + (e[k] || 0), 0);
+  $('#stats').innerHTML = [
+    ['board', 'stat.epics', allEpics.length, '/'],
+    ['list', 'stat.tasks', sum('tasks'), '/tasks'],
+    ['branch', 'stat.branches', sum('branches'), ''],
+    ['clock', 'stat.waiting', sum('waiting'), '/tasks?waiting=1'],
+  ].map(([i, label, n, href]) => {
+    const body = `<span class="stat-label">${icon(i)}${esc(t(label))}</span><span class="stat-value">${n}</span>`;
+    return href ? `<a class="stat" href="${href}">${body}</a>` : `<div class="stat">${body}</div>`;
+  }).join('');
+  renderEpicList();
+  renderIndexLinksStatus();
 }
 
 async function renderIndex() {
-  allEpics = await api('/api/epics');
-  const sum = (k) => allEpics.reduce((n, e) => n + (e[k] || 0), 0);
-  $('#stats').innerHTML = [
-    ['board', 'stat.epics', allEpics.length],
-    ['list', 'stat.tasks', sum('tasks')],
-    ['branch', 'stat.branches', sum('branches')],
-    ['clock', 'stat.waiting', sum('waiting')],
-  ].map(([i, label, n]) => `<div class="stat"><span class="stat-label">${icon(i)}${esc(t(label))}</span><span class="stat-value">${n}</span></div>`).join('');
-  renderEpicList();
+  const [epics, settings] = await Promise.allSettled([api('/api/epics'), api('/api/settings')]);
+  if (settings.status === 'fulfilled') {
+    settingsRev = Number.isInteger(settings.value.rev) ? settings.value.rev : 0;
+    pinnedEpics = new Set(settings.value.values?.['epic.pinned'] || settings.value.pinnedEpics || []);
+  }
+  if (epics.status === 'fulfilled') acceptIndex(epics.value);
+  else indexLinksState = linkPollState(indexLinksState, null, true);
+  renderIndexContent();
+}
+
+function acceptIndex(epics) {
+  const snapshot = { revision: indexRevision(epics), readAt: epics.find((epic) => epic.readAt)?.readAt || new Date().toISOString() };
+  indexLinksState = linkPollState(indexLinksState, snapshot);
+  allEpics = epics;
+}
+
+function renderIndexLinksStatus() {
+  let status = $('#index-links-status');
+  if (!status) {
+    status = document.createElement('div');
+    status.id = 'index-links-status';
+    $('#stats')?.after?.(status);
+  }
+  status.innerHTML = renderLinkStatus(indexLinksState, { index: true });
+}
+
+async function pollIndex() {
+  if (indexPolling || savingPin) return;
+  indexPolling = true;
+  try {
+    const revision = indexLinksState?.data?.revision;
+    acceptIndex(await api('/api/epics'));
+    if (revision !== indexLinksState.data.revision) renderIndexContent();
+  } catch {
+    indexLinksState = linkPollState(indexLinksState, null, true);
+  } finally {
+    indexPolling = false;
+    renderIndexLinksStatus();
+  }
+}
+
+function bindEpicPins() {
+  $('#epics').addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-pin]');
+    if (!button || savingPin) return;
+    const hadFocus = document.activeElement === button;
+    const id = button.dataset.pin;
+    const next = new Set(pinnedEpics);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    savingPin = true;
+    for (const pin of $('#epics').querySelectorAll('[data-pin]')) pin.disabled = true;
+    try {
+      const settings = await api('/api/settings', { method: 'PUT', body: { rev: settingsRev, patch: { 'epic.pinned': [...next] } } });
+      settingsRev = settings.rev;
+      pinnedEpics = new Set(settings.values['epic.pinned']);
+    } catch (e) {
+      alertBox(e.message);
+    } finally {
+      const restoreFocus = hadFocus && (document.activeElement === button || document.activeElement === document.body);
+      savingPin = false;
+      for (const pin of $('#epics').querySelectorAll('[data-pin]')) pin.disabled = false;
+      renderEpicList();
+      if (restoreFocus) [...$('#epics').querySelectorAll('[data-pin]')].find((pin) => pin.dataset.pin === id)?.focus({ preventScroll: true });
+    }
+  });
 }
 
 function fillIcons(root = document) {
@@ -202,6 +325,8 @@ function taskInfo(epic, id) {
 
 let current = null;
 let currentHistory = [];
+let linksState = null;
+let linksPolling = false;
 const pageSizes = { waiting: 5, decisions: 5, history: 5 };
 const sectionPages = { waiting: 1, decisions: 1, history: 1 };
 const waitingExpansion = new Map();
@@ -437,13 +562,17 @@ function renderOverview(ov, open) {
 
 // ---------- Detail: the steps of one task ----------
 
-function stepChip(step) {
-  const tip = [stateText(step.state), step.title, step.note].filter(Boolean).join(' — ');
-  return `<li class="step ${esc(step.state)}" title="${esc(tip)}"><span class="step-title">${stateIcon(step.state)}${esc(step.title)}</span></li>`;
+function crossLinkBadge(task, step) {
+  return `<span data-cross-link-badge data-task="${esc(task)}" data-step="${esc(step)}">${renderLinkBadge(linksState, current?.id, task, step)}</span>`;
 }
 
-function narrowFlow(steps) {
-  return `<ol class="flow">${steps.map(stepChip).join('') || `<li class="muted">${esc(t('step.none'))}</li>`}</ol>`;
+function stepChip(step, task) {
+  const tip = [stateText(step.state), step.title, step.note].filter(Boolean).join(' — ');
+  return `<li class="step ${esc(step.state)}" title="${esc(tip)}"><span class="step-title">${stateIcon(step.state)}${esc(step.title)}</span>${task ? crossLinkBadge(task, step.id) : ''}</li>`;
+}
+
+function narrowFlow(steps, task) {
+  return `<ol class="flow">${steps.map((step) => stepChip(step, task)).join('') || `<li class="muted">${esc(t('step.none'))}</li>`}</ol>`;
 }
 
 const TL = { colW: 200, nodeW: 168, nodeH: 84, rowH: 100, pad: 24 };
@@ -473,7 +602,7 @@ function renderTimeline(layout) {
     const n = r.kind === 'merge' ? `<span class="n">${c.n}</span>` : '';
     const docCount = (current?.docs || []).filter((d) => d.task === r.id && d.step === c.id).length;
     const badge = docCount ? `<span class="tl-docs" title="${esc(t('step.docCount', { n: docCount }))}">${icon('file')}${docCount}</span>` : '';
-    return `<foreignObject x="${nodeX(c.col)}" y="${rowY(i)}" width="${TL.nodeW}" height="${TL.nodeH}"><div xmlns="http://www.w3.org/1999/xhtml" class="tl-node ${esc(c.state)}${docCount ? ' has-docs' : ''}${r.kind === 'lane' && c.id === tlState.step ? ' selected' : ''}"${r.kind === 'lane' ? ` data-step="${esc(c.id)}"` : ''} data-sid="st-${esc(r.id)}-${esc(c.id)}" title="${esc(tip)}"><span class="tl-title">${stateIcon(c.state)}${n}${esc(c.title)}</span>${badge}</div></foreignObject>`;
+    return `<foreignObject x="${nodeX(c.col)}" y="${rowY(i)}" width="${TL.nodeW}" height="${TL.nodeH}"><div xmlns="http://www.w3.org/1999/xhtml" class="tl-node ${esc(c.state)}${docCount ? ' has-docs' : ''}${r.kind === 'lane' && c.id === tlState.step ? ' selected' : ''}"${r.kind === 'lane' ? ` data-step="${esc(c.id)}"` : ''} data-sid="st-${esc(r.id)}-${esc(c.id)}" title="${esc(tip)}"><span class="tl-title">${stateIcon(c.state)}${n}${esc(c.title)}</span>${r.kind === 'lane' ? crossLinkBadge(r.id, c.id) : ''}${badge}</div></foreignObject>`;
   }).join('')).join('');
   return `<div class="tl" id="tl"><div class="tl-scroll" id="tl-scroll"><svg class="tl-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
       <defs><marker id="tl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tl-arrowhead"/></marker></defs>
@@ -524,7 +653,7 @@ function renderDetail(map, open) {
     <header class="detail-head">${heading}${lane?.status ? `<span class="chip">${esc(lane.status)}</span>` : ''}${raw?.url ? external(raw.url, raw.tracker || t('task.open')) : ''}</header>
     ${renderTimeline(detailLayout(map, open))}
     ${below}
-    <div class="lanes-narrow">${narrowFlow(steps)}</div>
+    <div class="lanes-narrow">${narrowFlow(steps, lane?.id)}</div>
   </section>`;
 }
 
@@ -564,6 +693,7 @@ function stepInfo(lane, stepId, links) {
     <h4 class="step-info-title">${esc(step.title)}</h4>
     ${step.note ? `<p class="step-info-note">${esc(step.note)}</p>` : `<p class="muted">${esc(t('step.noDescription'))}</p>`}
     ${links}
+    <section class="step-cross-links" data-cross-step-links data-task="${esc(lane.id)}" data-step="${esc(step.id)}">${renderStepLinks(linksState, current?.id, lane.id, step.id, { exported: Boolean(EXPORT) })}</section>
     ${raw.label ? `<dl class="step-info-meta"><dt>${esc(t('step.label'))}</dt><dd>${esc(raw.label)}</dd></dl>` : ''}
     ${changes ? `<h5>${esc(t('step.changes'))}</h5><ul class="step-changes">${changes}</ul>` : ''}
   </div>`;
@@ -980,7 +1110,7 @@ async function saveMapHeight(mode) {
   mapHeight = mode;
   applyMapHeightClass();
   try {
-    await saveSettings({ mapHeight: mode });
+    await saveSettings({ 'epic.mapHeight': mode });
   } catch (error) {
     mapHeight = previous;
     applyMapHeightClass();
@@ -1400,15 +1530,17 @@ function changeSectionPage(block, page) {
 }
 
 function applyPageSettings(settings) {
+  const sizes = settings['epic.pageSizes'] || settings.epicPageSizes || {};
   for (const block of Object.keys(pageSizes)) {
-    const value = settings.epicPageSizes?.[block];
+    const value = sizes[block];
     const size = [5, 10, 15].includes(value) ? value : 5;
     if (pageSizes[block] === size) continue;
     pageSizes[block] = size;
     sectionPages[block] = 1;
     if (current) renderSection(block);
   }
-  const next = ['s', 'm', 'l'].includes(settings?.mapHeight) ? settings.mapHeight : null;
+  const height = settings['epic.mapHeight'] ?? settings.mapHeight;
+  const next = ['s', 'm', 'l'].includes(height) ? height : null;
   if (next !== mapHeight) {
     mapHeight = next;
     applyMapHeightClass();
@@ -1439,7 +1571,7 @@ function bindPagination(saveSettings) {
     savingPageSizes = true;
     refreshPagers();
     try {
-      await saveSettings({ epicPageSizes: { [block]: size } });
+      await saveSettings({ 'epic.pageSizes': { [block]: size } });
     } catch (error) {
       alertBox(error.message);
     } finally {
@@ -1599,9 +1731,9 @@ async function renderEpic(id) {
     : t('epic.edited', { a: plainAgo(epic.updatedAt) });
   const updated = $('#updated');
   updated.hidden = false;
+  updated.removeAttribute('title');
   updated.setAttribute('aria-label', stampTip);
-  updated.title = stampTip;
-  updated.innerHTML = icon('clock');
+  updated.innerHTML = `${icon('clock')}<span class="tip" role="tooltip">${esc(stampTip)}</span>`;
   renderMapArea(epic);
   renderWaiting(epic);
   $('#branches').innerHTML = branchRows(epic);
@@ -1611,6 +1743,19 @@ async function renderEpic(id) {
       <dl class="session-body"><dt>${esc(t('session.doing'))}</dt><dd>${esc(x.doing ?? '—')}</dd><dt>${esc(t('session.next'))}</dt><dd>${esc(x.next ?? '—')}</dd></dl></li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
   renderHistory(history);
   buildSearchIndex(epic, history);
+}
+
+async function pollEpicLinks(id) {
+  if (linksPolling) return;
+  linksPolling = true;
+  try {
+    linksState = linkPollState(linksState, await api(`/api/epics/${enc(id)}/links`));
+  } catch {
+    linksState = linkPollState(linksState, null, true);
+  } finally {
+    linksPolling = false;
+    if (linksState.changed) updateLinksDom(document, linksState, id, { exported: Boolean(EXPORT) });
+  }
 }
 
 // ---------- Header search across everything the opened epic shows ----------
@@ -1833,11 +1978,16 @@ async function bootEpic() {
   if (exp) exp.href = `/api/epics/${enc(id)}/export`;
   tlState.open = openFromHash();
   fillIcons();
-  bindLang(async () => {
+  const rerenderLang = async () => {
     setFull($('#map-frame')?.classList.contains('map-full') || false);
     if (EXPORT) markExport();
     await renderEpic(id);
-  });
+  };
+  if (EXPORT) bindLang(rerenderLang);
+  else {
+    bindShell({ search: false });
+    document.addEventListener('epic-board:lang', () => { void rerenderLang(); });
+  }
   bindMapTools();
   bindSideCarousel();
   bindSearch();
@@ -1846,7 +1996,7 @@ async function bootEpic() {
   const sectionSettings = bindSectionSettings({ api, onError: alertBox, onSettings: applyPageSettings, readOnly: Boolean(EXPORT) });
   if (sectionSettings.save) saveSettings = sectionSettings.save;
   bindPagination(sectionSettings.save);
-  await Promise.all([renderEpic(id), sectionSettings.reload().catch((err) => alertBox(err.message))]);
+  await Promise.all([renderEpic(id), pollEpicLinks(id), sectionSettings.reload().catch((err) => alertBox(err.message))]);
   $('#refresh-all').addEventListener('click', () => refreshModal(current));
   document.addEventListener('click', (e) => {
     const el = e.target;
@@ -1907,14 +2057,19 @@ async function bootEpic() {
       if (current && updatedAt !== current.updatedAt) await renderEpic(id);
     } catch {}
   }, 10000);
+  if (!EXPORT) setInterval(() => pollEpicLinks(id), 10000);
 }
 
 async function bootIndex() {
   applyI18n();
   fillIcons();
-  bindLang(renderIndex);
+  bindShell({ search: false });
+  document.addEventListener('epic-board:lang', renderIndexContent);
+  bindIndexSort();
   $('#q')?.addEventListener('input', renderEpicList);
+  bindEpicPins();
   await renderIndex();
+  setInterval(pollIndex, 10000);
 }
 
 if (EXPORT || location.pathname.startsWith('/e/')) bootEpic().catch((e) => alertBox(e.message));

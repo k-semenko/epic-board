@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-19
+
+### Added
+
+- Settings registry with schema 2, revision checks, `/settings`, and `config` CLI; legacy settings keys still accepted on write.
+- Signal feed with CLI/API, retention settings, profiles, `/feed` triage UI, header badge, server-side global search, and a home dashboard strip.
+- Feed connector contract v0 (`schemas/feed-item.v0.json`, `skills/epic-board/reference/feed.md`) and anonymized connector examples.
+
+## [0.10.0] - 2026-10-18
+
+### Added
+
+- Informational links between steps in different epics, with current counterpart states, backlinks and related epics on the home page.
+- Link snapshots in task reports and standalone HTML exports, including missing-target and incomplete-data notices.
+- Delete tasks and steps from the CLI with reference checks and an explicit `--cleanup-refs` option that preserves documents and immutable history.
+
+### Fixed
+
+- Keep external links intact when deleting a local task with the same ID as a foreign epic, and preserve focused controls and drafts during link updates.
+
+## [0.9.0] - 2026-10-18
+
+### Added
+
+- Pin epics into a separate section at the top of the home page, with pins saved in shared board settings.
+
+### Changed
+
+- Show two epic cards per row on wide screens and one on narrow screens. Cards share the same height, with a single-line title, a two-line goal and ellipses for overflow.
+
 ### Fixed
 
 - Clear obsolete push warnings when both local and remote branches are removed, while retaining the dated Git snapshot and refreshing linked merge requests.
@@ -129,7 +159,8 @@ First public release.
 - The UI is bilingual (English and Russian).
 - Linux support via `systemd --user`.
 
-[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/k-semenko/epic-board/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/k-semenko/epic-board/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/k-semenko/epic-board/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/k-semenko/epic-board/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/k-semenko/epic-board/compare/v0.6.1...v0.6.2

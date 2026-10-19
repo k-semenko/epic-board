@@ -77,12 +77,12 @@ test('decisions and history page independently and history reaches records after
 
 test('shared settings give each block its own page size and rerenders retain the current page', () => {
   const { app, html } = appHarness();
-  app.settings({ epicPageSizes: { waiting: 10, decisions: 15, history: 5 } });
+  app.settings({ 'epic.pageSizes': { waiting: 10, decisions: 15, history: 5 } });
   assert.equal((html('waiting').match(/data-sid="w-/g) || []).length, 10);
   assert.equal((html('decisions').match(/data-sid="d-/g) || []).length, 12);
   app.page('waiting', 2);
   app.waiting();
-  app.settings({ epicPageSizes: { waiting: 10, decisions: 15, history: 5 } });
+  app.settings({ 'epic.pageSizes': { waiting: 10, decisions: 15, history: 5 } });
   assert.match(html('waiting'), /Question 11/);
   assert.doesNotMatch(html('waiting'), /Question 1<\/h3>/);
 });

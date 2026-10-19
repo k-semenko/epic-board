@@ -9,7 +9,12 @@ import { allowedHosts, publicUrl } from './paths.mjs';
 import { VERSION } from './version.mjs';
 import * as docs from './docs.mjs';
 import { BoardError } from './errors.mjs';
-import { readSettings, writeSettings } from './settings.mjs';
+import { readSettingsState, writeSettings, translateLegacyPatch, registryPublic } from './settings.mjs';
+import * as feed from './feed.mjs';
+import { searchBoard } from './search.mjs';
+import { buildDashboard } from './dashboard.mjs';
+import { tasksForBoard } from './tasks.mjs';
+import { readBoardSnapshot, linksForEpic } from './links.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -82,6 +87,9 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       if (m === 'GET' && parts.length === 0) return serveFile(res, join(ROOT, 'server/page/index.html'));
       if (m === 'GET' && parts.length === 1 && parts[0] === 'favicon.ico') return serveFile(res, join(ROOT, 'server/page/favicon.png'), 'image/png');
       if (m === 'GET' && parts.length === 1 && parts[0] === 'editor') return serveFile(res, join(ROOT, 'server/page/doc-editor.html'));
+      if (m === 'GET' && parts.length === 1 && parts[0] === 'tasks') return serveFile(res, join(ROOT, 'server/page/tasks.html'));
+      if (m === 'GET' && parts.length === 1 && parts[0] === 'settings') return serveFile(res, join(ROOT, 'server/page/settings.html'));
+      if (m === 'GET' && parts.length === 1 && parts[0] === 'feed') return serveFile(res, join(ROOT, 'server/page/feed.html'));
       if (m === 'GET' && parts[0] === 'e' && parts.length === 2) {
         store.checkId(parts[1]);
         return serveFile(res, join(ROOT, 'server/page/epic.html'));
@@ -91,9 +99,18 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       if (m === 'GET' && parts[0] === 'vendor' && parts.length === 2 && VENDOR_FILES.has(parts[1])) return serveFile(res, join(ROOT, 'vendor', parts[1]));
       if (parts[0] !== 'api') throw new BoardError(404, 'not-found', 'no such path');
       if (parts[1] === 'health' && m === 'GET') return send(res, 200, { ok: true, version: VERSION });
-      if (parts[1] === 'settings' && parts.length === 2) {
-        if (m === 'GET') return send(res, 200, readSettings());
-        if (m === 'PUT') return send(res, 200, writeSettings(await readBody(req)));
+      if (parts[1] === 'settings') {
+        if (parts.length === 3 && parts[2] === 'registry' && m === 'GET') return send(res, 200, { settings: registryPublic() });
+        if (parts.length === 2 && m === 'GET') return send(res, 200, readSettingsState());
+        if (parts.length === 2 && m === 'PUT') {
+          const body = await readBody(req);
+          if (!body || typeof body !== 'object' || Array.isArray(body)) throw new BoardError(400, 'bad-settings', 'settings body must be an object');
+          if (Object.hasOwn(body, 'patch') || Object.hasOwn(body, 'rev')) {
+            if (!body.patch || typeof body.patch !== 'object' || Array.isArray(body.patch)) throw new BoardError(400, 'bad-settings', 'settings patch must be an object');
+            return send(res, 200, writeSettings(body.patch, { rev: body.rev }));
+          }
+          return send(res, 200, writeSettings(translateLegacyPatch(body)));
+        }
       }
 
       if (parts[1] === 'selfcheck' && m === 'GET') {
@@ -104,9 +121,58 @@ export function createBoardServer({ port, run = execRunner } = {}) {
         if (repo && !known.includes(repo)) throw new BoardError(400, 'bad-repo', `repo ${repo} is not described in any epic`);
         return send(res, 200, await selfcheck({ run, repo }));
       }
+      if (m === 'GET' && parts[1] === 'tasks' && parts.length === 2) return send(res, 200, tasksForBoard(readBoardSnapshot()));
+      if (parts[1] === 'feed') {
+        if (parts.length === 2 && m === 'GET') {
+          return send(res, 200, {
+            rev: feed.feedRev(),
+            items: feed.listFeedItems({
+              unmarked: url.searchParams.get('unmarked') === '1',
+              source: url.searchParams.get('source') || undefined,
+              since: url.searchParams.get('since') || undefined,
+              severity: url.searchParams.get('severity') || undefined,
+              mark: url.searchParams.get('mark') || undefined,
+            }),
+          });
+        }
+        if (parts.length === 2 && m === 'POST') return send(res, 200, feed.addFeedItems(await readBody(req)));
+        if (parts.length === 3 && parts[2] === 'mark' && m === 'POST') {
+          const body = await readBody(req);
+          return send(res, 200, { items: feed.markFeedItems(body.ids, body.value, { comment: body.comment }) });
+        }
+        if (parts.length === 3 && parts[2] === 'unmark' && m === 'POST') {
+          const body = await readBody(req);
+          return send(res, 200, { items: feed.unmarkFeedItems(body.ids) });
+        }
+        if (parts.length === 3 && parts[2] === 'delete' && m === 'POST') {
+          const body = await readBody(req);
+          return send(res, 200, { items: feed.deleteFeedItems(body.ids) });
+        }
+        if (parts.length === 3 && parts[2] === 'summary' && m === 'GET') return send(res, 200, feed.feedSummary());
+        if (parts.length === 3 && parts[2] === 'rev' && m === 'GET') return send(res, 200, { rev: feed.feedRev() });
+        if (parts.length === 3 && parts[2] === 'profile' && m === 'GET') {
+          const source = url.searchParams.get('source');
+          if (url.searchParams.get('text') === '1') return send(res, 200, feed.showFeedProfile(source));
+          return send(res, 200, feed.feedProfileAggregates(source));
+        }
+      }
+      if (parts[1] === 'search' && m === 'GET' && parts.length === 2) {
+        return send(res, 200, searchBoard(url.searchParams.get('q') || '', {
+          scope: url.searchParams.get('scope') || 'all',
+          limit: Math.min(Number(url.searchParams.get('limit')) || 40, 100),
+        }));
+      }
+      if (parts[1] === 'dashboard' && m === 'GET' && parts.length === 2) return send(res, 200, buildDashboard());
       if (parts[1] !== 'epics') throw new BoardError(404, 'not-found', 'no such path');
       if (parts.length === 2) {
-        if (m === 'GET') return send(res, 200, store.listEpics().map(summary));
+        if (m === 'GET') {
+          const snapshot = readBoardSnapshot();
+          if (!snapshot.epics.length && snapshot.errors.length) throw new BoardError(500, 'unavailable-board', 'cannot read any epic files');
+          return send(res, 200, [...snapshot.epics].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).map((epic) => {
+            const { relatedEpics, incomplete, readAt } = linksForEpic(snapshot, epic.id);
+            return { ...summary(epic), relatedEpics, incomplete, readAt };
+          }));
+        }
         if (m === 'POST') {
           const body = await readBody(req);
           return send(res, 201, store.createEpic(body, { by: BY.has(body.by) ? body.by : 'agent' }));
@@ -116,6 +182,7 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       const tail = parts.slice(3).join('/');
       if (m === 'GET' && tail === '') return send(res, 200, store.readEpic(id));
       if (m === 'GET' && tail === 'rev') return send(res, 200, { updatedAt: store.readEpic(id).updatedAt });
+      if (m === 'GET' && tail === 'links') return send(res, 200, linksForEpic(readBoardSnapshot(), id));
       if (m === 'GET' && tail === 'history') {
         const limit = url.searchParams.get('limit');
         return send(res, 200, store.readHistory(id, { limit: limit === 'all' ? Infinity : Math.min(Number(limit) || 20, 500) }));

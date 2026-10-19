@@ -9,6 +9,10 @@ export function buildLanes(epic) {
   const tasks = epic.tasks || [];
   const stepTitles = new Map();
   for (const t of tasks) for (const s of t.steps || []) stepTitles.set(`${t.id}/${s.id}`, s.title);
+  const localRef = (ref) => {
+    const parts = typeof ref === 'string' ? ref.split('/') : [];
+    return parts.length === 3 && parts[0] === String(epic.id) ? parts.slice(1).join('/') : ref;
+  };
 
   const lane = (t) => ({
     id: t.id,
@@ -22,7 +26,7 @@ export function buildLanes(epic) {
       state: STATES.has(s.state) ? s.state : 'todo',
       note: s.note ?? null,
       // Order inside a lane is already shown by the chain; only links from other tasks need words.
-      deps: (s.after || [])
+      deps: [...new Set((s.after || []).map(localRef))]
         .filter((ref) => !ref.startsWith(`${t.id}/`) && stepTitles.has(ref))
         .map((ref) => ({ task: ref.split('/')[0], step: ref.split('/')[1], title: stepTitles.get(ref), label: s.label ?? null })),
     })),

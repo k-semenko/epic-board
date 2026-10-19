@@ -16,10 +16,26 @@
 <nav class="topbar"><div class="topbar-in">
   <a href="/" class="brand" data-i18n-aria="nav.all"><span data-logo></span>EpicBoard</a>
   <div class="top-search"><label class="search"><span data-icon="search"></span><input id="q" type="search" data-i18n-ph="index.search" autocomplete="off"></label><div id="search-results" class="search-results" hidden></div></div>
+  <a href="/feed" class="icon-btn topbar-feed" data-i18n-aria="nav.feed" data-i18n-title="nav.feed"><span data-icon="inbox"></span><span id="feed-badge" class="feed-badge" hidden></span></a>
+  <a href="/settings" class="icon-btn topbar-settings" data-i18n-aria="settings.title" data-i18n-title="settings.title"><span data-icon="settings"></span></a>
   <button type="button" id="lang" class="lang-btn">RU</button>
 </div></nav>
 <main class="wrap">
-  <header class="head"><h1 data-i18n="index.title">Epics</h1></header>
+  <header class="head">
+    <div><h1 data-i18n="index.title">Epics</h1>
+      <nav class="view-nav" data-i18n-aria="nav.views" aria-label="Views">
+        <a href="/" aria-current="page" data-i18n="nav.epics">Epics</a>
+        <a href="/tasks" data-i18n="nav.tasks">Tasks</a>
+        <a href="/feed" data-i18n="nav.feed">Feed</a>
+      </nav>
+    </div>
+    <label class="sort-control"><span data-i18n="index.sort">Sort</span>
+      <select id="epic-sort">
+        <option value="created" data-i18n="index.sortCreated">Date created</option>
+        <option value="updated" data-i18n="index.sortUpdated">Last modified</option>
+      </select>
+    </label>
+  </header>
   <div id="stats" class="stats"></div>
   <div id="epics"><p class="muted" data-i18n="loading">Loading…</p></div>
 </main>
