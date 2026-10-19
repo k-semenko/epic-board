@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- The session-start hook warns when the plugin is older than the installed service copy and names the update commands for the agent.
+
 ### Fixed
 
 - Clear obsolete push warnings when both local and remote branches are removed, while retaining the dated Git snapshot and refreshing linked merge requests.

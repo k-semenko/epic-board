@@ -35,6 +35,25 @@ export function agentName() {
   return 'claude';
 }
 
+const UPDATE_HOWTO = {
+  claude: 'claude plugin marketplace update epic-board && claude plugin update epic-board@epic-board, then restart Claude Code',
+  codex: 'update the epic-board marketplace and plugin in Codex, then restart it',
+  cursor: 'update epic-board in Customize → Plugins, then reload the window',
+};
+
+// Third-party marketplaces do not auto-update, so nothing else tells the user the plugin is stale.
+export async function outdatedNote() {
+  try {
+    const { pluginBehind } = await import('../server/service.mjs');
+    const behind = pluginBehind();
+    if (!behind) return null;
+    const howto = UPDATE_HOWTO[agentName()] || 'update the epic-board plugin and restart the agent';
+    return `epic-board: plugin is behind the service (${behind.plugin} < ${behind.service}); update: ${howto}.`;
+  } catch {
+    return null;
+  }
+}
+
 // Cursor: additional_context + env (session id survives if context is dropped).
 // Claude and Codex: nested hookSpecificOutput.
 export function emitSessionContext(text, { sessionId: sid } = {}) {
