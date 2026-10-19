@@ -29,11 +29,10 @@ export function buildDashboard() {
       if (states.includes('waiting')) tasksWaiting++;
       for (const branch of task.branches || []) {
         const fact = epic.facts?.[`${branch.repo}:${branch.name}`];
-        const mr = fact?.mr || branch.mr;
-        if (mr && !mr.merged && mr.state !== 'closed') {
+        // Refresh writes MR facts with state opened|merged|closed; a bare iid means it was never refreshed.
+        if (fact?.mr?.state === 'opened') {
           mrOpen++;
-          const pipe = mr.pipeline || mr.status;
-          if (pipe === 'failed' || pipe === 'canceled' || mr.pipelineStatus === 'failed') mrRed++;
+          if (fact.mr.pipeline === 'failed') mrRed++;
         }
       }
     }
@@ -65,17 +64,17 @@ export function buildDashboard() {
       inWork: tasksInWork,
       blocked: tasksBlocked,
       waiting: tasksWaiting,
-      href: '/?filter=tasks',
+      href: '/tasks',
     },
     waiting: {
       open: waitingOpen,
       oldestDays: waitingDays,
-      href: '/?filter=waiting',
+      href: '/tasks?waiting=1',
     },
     mr: {
       open: mrOpen,
       red: mrRed,
-      href: '/?filter=mr',
+      href: null,
     },
     feed: {
       unmarked: feed.unmarked,

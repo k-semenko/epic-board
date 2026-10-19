@@ -199,6 +199,7 @@ test('switching language during a pin save does not reload stale settings or los
   let finishSave;
   const page = indexApp({ request: async (path, options) => {
     if (path === '/api/epics') return [sample('new'), sample('old')];
+    if (path === '/api/dashboard') return {};
     if (options.method === 'PUT') {
       await new Promise((resolve) => { finishSave = resolve; });
       const body = JSON.parse(options.body);

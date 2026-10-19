@@ -402,6 +402,11 @@ a.stat { text-decoration: none; }
 a.stat:hover { text-decoration: none; border-color: var(--accent); }
 .stat-label { display: flex; align-items: center; color: var(--muted); font-size: 12.5px; }
 .stat-value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stats.dash { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); overflow-x: auto; }
+.stat-value { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.stat-spark { color: var(--accent); flex: none; }
+.stat-meta { color: var(--muted); font-size: 12px; min-height: 1.3em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat.is-warn .stat-meta { color: var(--warn, #c80); }
 
 /* Map block: tools act on the whole map, full screen takes the whole block */
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
@@ -628,7 +633,7 @@ button.primary:hover { filter: brightness(1.08); }
 .topbar-settings:hover, .topbar-feed:hover { text-decoration: none; background: var(--chip); }
 .topbar-settings svg.i, .topbar-feed svg.i { width: 22px; height: 22px; }
 .topbar-feed { margin-left: auto; margin-right: -8px; }
-.feed-badge { position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 10px; line-height: 16px; text-align: center; pointer-events: none; }
+.feed-badge { position: absolute; top: 0; left: 24px; white-space: nowrap; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 10px; line-height: 16px; text-align: center; pointer-events: none; }
 .feed-badge.is-fire { background: var(--crit, #c44); }
 .search-group { margin-bottom: 10px; }
 .search-group h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }

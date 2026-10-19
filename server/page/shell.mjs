@@ -139,11 +139,20 @@ export function bindShell({ pollMs = 8000, search = true } = {}) {
   });
   void refreshFeedBadge();
   setInterval(() => { void refreshFeedBadge(); }, pollMs);
-  if (!search) return;
+  if (search) bindBoardSearch();
+}
 
+// The header field searches the whole board; pages may still filter their own list from the same field.
+export function bindBoardSearch() {
   const input = document.querySelector('#q');
-  const box = document.querySelector('#search-results');
-  if (!input || !box) return;
+  let box = document.querySelector('#search-results');
+  if (!input) return;
+  if (!box) {
+    const area = input.closest?.('.top-search');
+    if (!area) return;
+    box = Object.assign(document.createElement('div'), { id: 'search-results', className: 'search-results', hidden: true });
+    area.append(box);
+  }
 
   input.addEventListener('input', () => {
     clearTimeout(searchTimer);

@@ -117,6 +117,7 @@ function dayLabel(iso) {
 }
 
 let allEpics = [];
+let dashboard = null;
 let pinnedEpics = new Set();
 let settingsRev = 0;
 let savingPin = false;
@@ -190,8 +191,41 @@ function epicCard(e) {
   return `<li data-epic-card="${esc(e.id)}"><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a>${renderRelatedEpics(e.relatedEpics, { incomplete: e.incomplete })}<button type="button" class="icon-btn epic-pin" data-pin="${esc(e.id)}" aria-pressed="${pinned}" aria-label="${pinLabel}" title="${pinLabel}"${savingPin ? ' disabled' : ''}>${icon('pin')}</button></li>`;
 }
 
+const asDashboard = (value) => (value?.epics && value?.connectors && value?.feed ? value : null);
+
+function sparkline(values, { width = 96, height = 22 } = {}) {
+  if (!values?.length) return '';
+  const max = Math.max(1, ...values);
+  const step = values.length > 1 ? width / (values.length - 1) : 0;
+  const points = values.map((v, i) => `${(i * step).toFixed(1)},${(height - 2 - (v / max) * (height - 4)).toFixed(1)}`).join(' ');
+  return `<svg class="stat-spark" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+function dashboardTiles(d) {
+  const silent = d.connectors.silent || [];
+  return [
+    { icon: 'board', label: 'dash.epics', value: d.epics.total, meta: t('dash.epicsMeta', { total: d.epics.total, pinned: d.epics.pinned }), href: d.epics.href },
+    { icon: 'list', label: 'dash.tasks', value: d.tasks.inWork, meta: t('dash.tasksMeta', { blocked: d.tasks.blocked, waiting: d.tasks.waiting }), href: d.tasks.href, warn: d.tasks.blocked > 0 },
+    { icon: 'clock', label: 'dash.waiting', value: d.waiting.open, meta: d.waiting.oldestDays === null ? '' : t('dash.waitingMeta', { n: d.waiting.oldestDays }), href: d.waiting.href, warn: d.waiting.open > 0 },
+    { icon: 'branch', label: 'dash.mr', value: d.mr.open, meta: t('dash.mrMeta', { n: d.mr.red }), href: d.mr.href, warn: d.mr.red > 0 },
+    { icon: 'inbox', label: 'dash.feed', value: d.feed.unmarked, meta: d.feed.fire ? `🔥${d.feed.fire}` : '', spark: d.feed.spark, href: d.feed.href, warn: d.feed.fire > 0 },
+    { icon: 'link', label: 'dash.connectors', value: d.connectors.active, meta: silent.length ? t('dash.connectorsSilent', { n: silent.length }) : t('dash.connectorsOk'), title: silent.join(', '), href: d.connectors.href, warn: silent.length > 0 },
+  ].map((tile) => {
+    const body = `<span class="stat-label">${icon(tile.icon)}${esc(t(tile.label))}</span><span class="stat-value">${tile.value}${tile.spark ? sparkline(tile.spark) : ''}</span><span class="stat-meta">${esc(tile.meta || '')}</span>`;
+    const attrs = `class="stat${tile.warn ? ' is-warn' : ''}"${tile.title ? ` title="${esc(tile.title)}"` : ''}`;
+    return tile.href ? `<a ${attrs} href="${tile.href}">${body}</a>` : `<div ${attrs}>${body}</div>`;
+  }).join('');
+}
+
 function renderIndexContent() {
   const sum = (k) => allEpics.reduce((n, e) => n + (e[k] || 0), 0);
+  $('#stats').classList?.toggle?.('dash', Boolean(dashboard));
+  if (dashboard) {
+    $('#stats').innerHTML = dashboardTiles(dashboard);
+    renderEpicList();
+    renderIndexLinksStatus();
+    return;
+  }
   $('#stats').innerHTML = [
     ['board', 'stat.epics', allEpics.length, '/'],
     ['list', 'stat.tasks', sum('tasks'), '/tasks'],
@@ -206,7 +240,8 @@ function renderIndexContent() {
 }
 
 async function renderIndex() {
-  const [epics, settings] = await Promise.allSettled([api('/api/epics'), api('/api/settings')]);
+  const [epics, settings, dash] = await Promise.allSettled([api('/api/epics'), api('/api/settings'), EXPORT ? Promise.reject() : api('/api/dashboard')]);
+  dashboard = dash.status === 'fulfilled' ? asDashboard(dash.value) : null;
   if (settings.status === 'fulfilled') {
     settingsRev = Number.isInteger(settings.value.rev) ? settings.value.rev : 0;
     pinnedEpics = new Set(settings.value.values?.['epic.pinned'] || settings.value.pinnedEpics || []);
@@ -238,7 +273,12 @@ async function pollIndex() {
   try {
     const revision = indexLinksState?.data?.revision;
     acceptIndex(await api('/api/epics'));
+    // Feed and MR facts change without touching the epic list, so the tiles are compared on their own.
+    const nextDash = asDashboard(await api('/api/dashboard').catch(() => dashboard));
+    const dashChanged = JSON.stringify(nextDash) !== JSON.stringify(dashboard);
+    dashboard = nextDash;
     if (revision !== indexLinksState.data.revision) renderIndexContent();
+    else if (dashChanged && dashboard) $('#stats').innerHTML = dashboardTiles(dashboard);
   } catch {
     indexLinksState = linkPollState(indexLinksState, null, true);
   } finally {
@@ -2072,7 +2112,7 @@ async function bootEpic() {
 async function bootIndex() {
   applyI18n();
   fillIcons();
-  bindShell({ search: false });
+  bindShell({ search: !EXPORT });
   document.addEventListener('epic-board:lang', renderIndexContent);
   bindIndexSort();
   $('#q')?.addEventListener('input', renderEpicList);
