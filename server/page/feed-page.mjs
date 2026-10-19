@@ -78,21 +78,19 @@ function needsComment(item, value) {
   return false;
 }
 
+// Every control sits in the same slot in both tabs: a label above, a 34px control below.
 function renderFilters() {
   const sources = [...new Set(items.map((item) => item.source))].sort();
+  const select = (key, options) => `<select data-filter="${key}"><option value="">${esc(t('feed.filter.all'))}</option>${options.map(([value, label]) => `<option value="${esc(value)}" ${filters[key] === value ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>`;
+  const history = tab === 'history';
   $('#feed-filters').innerHTML = `
-    <label>${esc(t('feed.filter.source'))}
-      <select data-filter="source"><option value="">${esc(t('feed.filter.all'))}</option>${sources.map((s) => `<option value="${esc(s)}" ${filters.source === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
-    </label>
-    <label>${esc(t('feed.filter.severity'))}
-      <select data-filter="severity"><option value="">${esc(t('feed.filter.all'))}</option>${['fire', 'important', 'normal', 'noise'].map((s) => `<option value="${s}" ${filters.severity === s ? 'selected' : ''}>${esc(t(`feed.sev.${s}`))}</option>`).join('')}</select>
-    </label>
-    <div class="feed-groupby"><span>${esc(t('feed.groupBy'))}</span><div class="view-nav" role="radiogroup">
+    <label class="feed-filter">${esc(t('feed.filter.source'))}${select('source', sources.map((s) => [s, s]))}</label>
+    <label class="feed-filter">${esc(t('feed.filter.severity'))}${select('severity', SEVERITIES.map((s) => [s, t(`feed.sev.${s}`)]))}</label>
+    <div class="feed-filter feed-groupby"><span>${esc(t('feed.groupBy'))}</span><div class="view-nav" role="radiogroup" aria-label="${esc(t('feed.groupBy'))}">
       ${['source', 'severity'].map((key) => `<button type="button" role="radio" aria-checked="${groupBy === key}" class="${groupBy === key ? 'is-active' : ''}" data-group-by="${key}">${esc(t(`feed.groupBy.${key}`))}</button>`).join('')}
     </div></div>
-    ${tab === 'history' ? `<label>${esc(t('feed.filter.mark'))}
-      <select data-filter="mark"><option value="">${esc(t('feed.filter.all'))}</option>${MARKS.map((m) => `<option value="${m.value}" ${filters.mark === m.value ? 'selected' : ''}>${esc(t(m.label))}</option>`).join('')}</select>
-    </label>` : ''}`;
+    <label class="feed-filter${history ? '' : ' is-idle'}"${history ? '' : ' aria-hidden="true"'}>${esc(t('feed.filter.mark'))}${select('mark', MARKS.map((m) => [m.value, t(m.label)]))}</label>`;
+  if (!history) $('#feed-filters [data-filter="mark"]').disabled = true;
 }
 
 function refChips(item) {

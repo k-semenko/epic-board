@@ -714,10 +714,13 @@ button.primary:hover { filter: brightness(1.08); }
 /* The page under an open dialog stays still; the wheel scrolls only the dialog. */
 html:has(dialog[open]) { overflow: hidden; }
 .feed-item { overscroll-behavior: contain; }
-.feed-groupby { display: flex; align-items: flex-end; gap: 8px; }
-.feed-groupby > span { font-size: 12.5px; color: var(--muted); align-self: center; }
+.feed-filters { grid-template-columns: minmax(0, 220px) minmax(0, 220px) max-content minmax(0, 220px); justify-content: start; }
+.feed-filter { display: grid; grid-template-rows: auto 34px; gap: 4px; min-width: 0; color: var(--muted); font-size: 12px; }
+.feed-filter select { height: 34px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
+.feed-filter.is-idle { visibility: hidden; }
 .feed-groupby .view-nav { margin: 0; height: 34px; box-sizing: border-box; flex-wrap: nowrap; }
 .feed-groupby .view-nav button { white-space: nowrap; }
+@media (max-width: 760px) { .feed-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .feed-filter.is-idle { display: none; } }
 .feed-group h2 { display: inline-flex; align-items: center; gap: 6px; }
 .feed-group h2 .feed-sev::before { width: 8px; height: 8px; }
 .feed-item-dialog::backdrop { background: rgba(0, 0, 0, .5); }
