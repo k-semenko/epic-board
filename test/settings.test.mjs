@@ -21,6 +21,14 @@ const defaults = {
   'feed.retention.important': '180d',
   'feed.retention.keepLinked': true,
   'feed.sourceSilentAfter': '24h',
+  'feed.notify.enabled': false,
+  'feed.notify.minLevel': 'normal',
+  'feed.notify.sound.fire': 'board:alarm',
+  'feed.notify.sound.important': 'board:chime',
+  'feed.notify.sound.normal': 'board:pop',
+  'feed.notify.volume': 10,
+  'feed.notify.banner': true,
+  'feed.notify.quietHours': '',
 };
 const mapFirst = ['map', 'waiting', 'branches', 'sessions', 'decisions', 'history'];
 
@@ -138,4 +146,11 @@ test('saving settings creates a missing data directory', (t) => {
   t.after(() => { process.env.EPIC_BOARD_HOME = home; });
   writeSettings({ 'epic.sectionOrder': ['branches', 'waiting', 'map', 'sessions', 'decisions', 'history'] });
   assert.ok(existsSync(join(nestedHome, 'settings.json')));
+});
+
+test('quiet hours accept a time window or nothing, and reject anything else', () => {
+  assert.equal(writeSettings({ 'feed.notify.quietHours': '22:00-08:00' }).values['feed.notify.quietHours'], '22:00-08:00');
+  assert.equal(writeSettings({ 'feed.notify.quietHours': '' }).values['feed.notify.quietHours'], '');
+  assert.throws(() => writeSettings({ 'feed.notify.quietHours': 'night' }), { status: 400 });
+  assert.throws(() => writeSettings({ 'feed.notify.sound.fire': 'board:nope' }), { status: 400 });
 });

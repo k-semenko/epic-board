@@ -9,7 +9,7 @@ function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-const GROUP_LABEL = { epic: 'settings.group.epic', feed: 'settings.group.feed' };
+const GROUP_LABEL = { epic: 'settings.group.epic', feed: 'settings.group.feed', notify: 'settings.group.notify' };
 
 let registry = [];
 let rev = 0;
@@ -66,6 +66,11 @@ function defaultLabel(entry) {
   if (entry.type === 'record') return Object.entries(value).map(([id, n]) => `${t(`sec.${id}`)} ${n}`).join(' · ');
   if (entry.type === 'duration') return durationText(value);
   if (entry.type === 'bool') return t(value ? 'settings.on' : 'settings.off');
+  if (entry.widget === 'sound') return soundLabel(value);
+  if (entry.widget === 'select') return t(`${entry.valueLabel || ''}${value}`);
+  if (entry.widget === 'range') return `${value}%`;
+  if (entry.widget === 'quiet') return value ? value.replace('-', '–') : t('settings.off');
+  if (entry.type === 'string' && value === '') return t('settings.empty');
   if (value === null || value === undefined) return t('settings.auto');
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
@@ -100,39 +105,95 @@ function renderEnum(entry) {
   </div>`;
 }
 
+function soundLabel(id) {
+  if (id === 'none') return t('sound.none');
+  const [kind, name] = id.split(':');
+  return kind === 'board' ? t(`sound.${name}`) || name : name;
+}
+
+const SOUND_GROUPS = [
+  ['sound.group.quiet', ['pop', 'droplet', 'tick']],
+  ['sound.group.notable', ['chime', 'marimba', 'bell', 'ping']],
+  ['sound.group.loud', ['alarm', 'siren', 'klaxon', 'redalert']],
+];
+
+function renderSound(entry, off) {
+  const values = entry.constraints?.values || [];
+  const option = (id) => `<option value="${esc(id)}" ${draft[entry.key] === id ? 'selected' : ''}>${esc(soundLabel(id))}</option>`;
+  const board = SOUND_GROUPS.map(([label, names]) => `<optgroup label="${esc(t(label))}">${names.map((n) => `board:${n}`).filter((id) => values.includes(id)).map(option).join('')}</optgroup>`).join('');
+  const mac = `<optgroup label="${esc(t('sound.group.mac'))}">${values.filter((id) => id.startsWith('mac:')).map(option).join('')}</optgroup>`;
+  return `<div class="settings-sound">
+    <select class="settings-select" data-select ${off ? 'disabled' : ''}>${option('none')}${board}${mac}</select>
+    <button type="button" class="icon-btn settings-play" data-play ${off || draft[entry.key] === 'none' ? 'disabled' : ''} title="${esc(t('sound.play'))}" aria-label="${esc(t('sound.play'))}">${icon('play')}</button>
+  </div>`;
+}
+
+function renderSelect(entry, off) {
+  const values = entry.constraints?.values || [];
+  return `<select class="settings-select" data-select ${off ? 'disabled' : ''}>${values.map((id) => `<option value="${esc(id)}" ${draft[entry.key] === id ? 'selected' : ''}>${esc(t(`${entry.valueLabel || ''}${id}`))}</option>`).join('')}</select>`;
+}
+
+function renderRange(entry, off) {
+  const { min = 0, max = 100 } = entry.constraints || {};
+  return `<label class="settings-range"><input type="range" min="${min}" max="${max}" step="5" value="${esc(draft[entry.key])}" data-range ${off ? 'disabled' : ''} aria-label="${esc(t(entry.label))}"><output>${esc(draft[entry.key])}%</output></label>`;
+}
+
+// Stored as "HH:MM-HH:MM" or ""; edited as a switch and two time fields.
+function renderQuiet(entry, off) {
+  const value = draft[entry.key] || '';
+  const [from = '22:00', to = '08:00'] = value ? value.split('-') : [];
+  return `<div class="settings-quiet">
+    <label class="settings-toggle"><input type="checkbox" role="switch" data-quiet-toggle ${value ? 'checked' : ''} ${off ? 'disabled' : ''} aria-label="${esc(t(entry.label))}"></label>
+    <label class="settings-time"><span>${esc(t('settings.quiet.from'))}</span><input type="time" class="settings-input" data-quiet-from value="${esc(from)}" ${off || !value ? 'disabled' : ''}></label>
+    <label class="settings-time"><span>${esc(t('settings.quiet.to'))}</span><input type="time" class="settings-input" data-quiet-to value="${esc(to)}" ${off || !value ? 'disabled' : ''}></label>
+  </div>`;
+}
+
+// While notifications are off, everything else in the group is shown dimmed and cannot be changed.
+const isOff = (entry) => entry.key.startsWith('feed.notify.') && entry.key !== 'feed.notify.enabled' && !draft['feed.notify.enabled'];
+
+function renderControl(entry, off) {
+  if (entry.type === 'order') return renderOrder(entry);
+  if (entry.type === 'record') return renderRecord(entry);
+  if (entry.widget === 'sound') return renderSound(entry, off);
+  if (entry.widget === 'select') return renderSelect(entry, off);
+  if (entry.widget === 'range') return renderRange(entry, off);
+  if (entry.widget === 'quiet') return renderQuiet(entry, off);
+  if (entry.type === 'enum') return renderEnum(entry);
+  if (entry.type === 'bool') {
+    return `<label class="settings-toggle"><input type="checkbox" role="switch" data-bool ${draft[entry.key] ? 'checked' : ''} ${off ? 'disabled' : ''} aria-label="${esc(t(entry.label))}"></label>`;
+  }
+  if (entry.type === 'duration') {
+    const chips = ['7d', '14d', '30d', '180d', '0'];
+    return `<div class="settings-duration" data-key="${esc(entry.key)}">${chips.map((chip) => `
+      <button type="button" class="chip${draft[entry.key] === chip || (chip === '0' && draft[entry.key] === 0) ? ' is-active' : ''}" data-duration="${chip}">${durationText(chip)}</button>`).join('')}
+      <input type="text" class="settings-input settings-duration-input" data-duration-input placeholder="${esc(t('settings.durationHint'))}" value="${esc(draft[entry.key] === 0 ? '0' : draft[entry.key] ?? '')}" spellcheck="false" aria-label="${esc(t(entry.label))}">
+    </div>`;
+  }
+  return `<input type="text" class="settings-input" data-text value="${esc(typeof draft[entry.key] === 'string' ? draft[entry.key] : JSON.stringify(draft[entry.key]))}" aria-label="${esc(t(entry.label))}">`;
+}
+
 function renderField(entry) {
   const changed = !same(draft[entry.key], saved[entry.key]);
-  const isDefault = same(draft[entry.key], entry.default);
-  let control = '';
-  if (entry.type === 'order') control = renderOrder(entry);
-  else if (entry.type === 'record') control = renderRecord(entry);
-  else if (entry.type === 'enum') control = renderEnum(entry);
-  else if (entry.type === 'bool') {
-    control = `<label class="settings-toggle"><input type="checkbox" role="switch" data-bool ${draft[entry.key] ? 'checked' : ''}><span>${esc(t(draft[entry.key] ? 'settings.on' : 'settings.off'))}</span></label>`;
-  } else if (entry.type === 'duration') {
-    const chips = ['7d', '14d', '30d', '180d', '0'];
-    control = `<div class="settings-duration" data-key="${esc(entry.key)}">${chips.map((chip) => `
-      <button type="button" class="chip${draft[entry.key] === chip || (chip === '0' && draft[entry.key] === 0) ? ' is-active' : ''}" data-duration="${chip}">${durationText(chip)}</button>`).join('')}
-      <input type="text" class="settings-input settings-duration-input" data-duration-input data-i18n-ph="settings.durationHint" placeholder="${esc(t('settings.durationHint'))}" value="${esc(draft[entry.key] === 0 ? '0' : draft[entry.key] ?? '')}" spellcheck="false">
-    </div>`;
-  } else {
-    control = `<input type="text" class="settings-input" data-text value="${esc(typeof draft[entry.key] === 'string' ? draft[entry.key] : JSON.stringify(draft[entry.key]))}">`;
-  }
-  return `<section class="settings-item${changed ? ' is-changed' : ''}" data-setting="${esc(entry.key)}">
-    <header class="settings-item-head">
-      <div><h2>${esc(t(entry.label))}</h2><p class="muted">${esc(t(entry.hint))}</p></div>
-      <div class="settings-item-meta">
-        <span class="muted">${esc(t('settings.defaultValue', { value: defaultLabel(entry) }))}</span>
-        ${changed && !isDefault ? `<button type="button" data-reset>${esc(t('settings.reset'))}</button>` : ''}
-      </div>
-    </header>
-    ${control}
+  const off = isOff(entry);
+  const wide = entry.type === 'order' || entry.type === 'record';
+  const tip = `${t(entry.hint)}\n${t('settings.defaultValue', { value: defaultLabel(entry) })}`;
+  return `<section class="settings-row${wide ? ' is-wide' : ''}${changed ? ' is-changed' : ''}${off ? ' is-off' : ''}" data-setting="${esc(entry.key)}">
+    <div class="settings-row-label">
+      <span class="settings-row-title">${esc(t(entry.label))}</span>
+      <span class="settings-hint" tabindex="0" role="img" aria-label="${esc(tip)}" data-tip="${esc(tip)}">?</span>
+    </div>
+    <div class="settings-row-control">${renderControl(entry, off)}</div>
   </section>`;
 }
 
 function renderFields() {
   const entries = uiEntries().filter((entry) => entry.group === group);
-  $('#settings-fields').innerHTML = entries.map(renderField).join('') || `<p class="muted">${esc(t('settings.emptyGroup'))}</p>`;
+  const allDefault = entries.every((entry) => same(draft[entry.key], entry.default));
+  $('#settings-fields').innerHTML = entries.length
+    ? `<div class="settings-card">${entries.map(renderField).join('')}</div>
+      <div class="settings-card-foot"><button type="button" data-reset-group ${allDefault ? 'disabled' : ''}>${icon('undo')}<span>${esc(t('settings.resetGroup'))}</span></button></div>`
+    : `<p class="muted">${esc(t('settings.emptyGroup'))}</p>`;
   fillChrome($('#settings-fields'));
   renderDraftBar();
 }
@@ -180,7 +241,7 @@ async function save() {
   }
   if (!Object.keys(patch).length) return;
   try {
-    const state = await api('/api/settings', { method: 'PUT', body: { rev, patch } });
+    const state = await api('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rev, patch }) });
     rev = state.rev;
     saved = { ...state.values };
     draft = structuredClone(saved);
@@ -216,21 +277,32 @@ $('#settings-groups').addEventListener('click', (event) => {
 });
 
 $('#settings-fields').addEventListener('click', (event) => {
+  // One reset per group: it fills the draft with defaults, and Save or Discard decides.
+  if (event.target.closest('[data-reset-group]')) {
+    const entries = uiEntries().filter((entry) => entry.group === group);
+    if (!confirm(t('settings.resetGroupConfirm', { group: t(GROUP_LABEL[group] || group) }))) return;
+    draft = { ...draft, ...Object.fromEntries(entries.map((entry) => [entry.key, structuredClone(entry.default)])) };
+    conflict = false;
+    showError('');
+    renderFields();
+    return;
+  }
   const item = event.target.closest('[data-setting]');
   if (!item) return;
   const key = item.dataset.setting;
   const entry = registry.find((row) => row.key === key);
   if (!entry) return;
-  if (event.target.closest('[data-reset]')) {
-    setDraft(key, structuredClone(entry.default));
-    return;
-  }
   const move = event.target.closest('[data-move]');
   if (move && entry.type === 'order') {
     const id = move.closest('[data-order-id]').dataset.orderId;
     const delta = Number(move.dataset.move);
     const order = [...draft[key]];
     setDraft(key, moveSection(order, id, order.indexOf(id) + delta));
+    return;
+  }
+  if (event.target.closest('[data-play]')) {
+    void api('/api/notify/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sound: draft[key], volume: draft['feed.notify.volume'] }) })
+      .catch((error) => showError(error.message));
     return;
   }
   const enumBtn = event.target.closest('[data-enum]');
@@ -255,6 +327,24 @@ $('#settings-fields').addEventListener('change', (event) => {
     setDraft(key, event.target.checked);
     return;
   }
+  if (event.target.matches('[data-quiet-toggle]')) {
+    setDraft(key, event.target.checked ? '22:00-08:00' : '');
+    return;
+  }
+  if (event.target.matches('[data-quiet-from], [data-quiet-to]')) {
+    const from = item.querySelector('[data-quiet-from]').value;
+    const to = item.querySelector('[data-quiet-to]').value;
+    if (from && to) setDraft(key, `${from}-${to}`);
+    return;
+  }
+  if (event.target.matches('[data-select]')) {
+    setDraft(key, event.target.value);
+    return;
+  }
+  if (event.target.matches('[data-range]')) {
+    setDraft(key, Number(event.target.value));
+    return;
+  }
   if (event.target.matches('[data-record-field]')) {
     setDraft(key, { ...draft[key], [event.target.dataset.recordField]: Number(event.target.value) });
   }
@@ -277,6 +367,10 @@ $('#settings-fields').addEventListener('change', (event) => {
   } catch {
     setDraft(key, event.target.value);
   }
+});
+
+$('#settings-fields').addEventListener('input', (event) => {
+  if (event.target.matches('[data-range]')) event.target.nextElementSibling.textContent = `${event.target.value}%`;
 });
 
 $('#settings-save').addEventListener('click', () => { void save(); });

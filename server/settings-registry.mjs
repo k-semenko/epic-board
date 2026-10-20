@@ -1,5 +1,6 @@
 import { ID } from './store.mjs';
 import { DEFAULT_SECTION_ORDER } from './page/section-order.mjs';
+import { SOUND_IDS } from './sounds.mjs';
 
 export const SETTINGS_SCHEMA = 2;
 
@@ -126,7 +127,25 @@ export const SETTINGS_REGISTRY = Object.freeze([
     ui: true,
     since: '0.11.0',
   }),
+  ...notifySettings(),
 ]);
+
+function notifySettings() {
+  const entry = (key, type, def, extra = {}) => Object.freeze({
+    key, type, default: def, group: 'notify', label: `settings.key.${key}`, hint: `settings.hint.${key}`, ui: true, since: '0.12.0', ...extra,
+  });
+  const sound = (level, def) => entry(`feed.notify.sound.${level}`, 'enum', def, { constraints: Object.freeze({ values: SOUND_IDS }), widget: 'sound' });
+  return [
+    entry('feed.notify.enabled', 'bool', false),
+    entry('feed.notify.minLevel', 'enum', 'normal', { constraints: Object.freeze({ values: Object.freeze(['normal', 'important', 'fire']) }), widget: 'select', valueLabel: 'settings.level.' }),
+    sound('fire', 'board:alarm'),
+    sound('important', 'board:chime'),
+    sound('normal', 'board:pop'),
+    entry('feed.notify.volume', 'int', 10, { constraints: Object.freeze({ min: 0, max: 100 }), widget: 'range' }),
+    entry('feed.notify.banner', 'bool', true),
+    entry('feed.notify.quietHours', 'string', '', { constraints: Object.freeze({ pattern: '^$|^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$' }), widget: 'quiet' }),
+  ];
+}
 
 export const LEGACY_SETTING_KEYS = Object.freeze({
   epicSectionOrder: 'epic.sectionOrder',
@@ -138,8 +157,8 @@ export const LEGACY_SETTING_KEYS = Object.freeze({
 export const SETTINGS_BY_KEY = Object.freeze(Object.fromEntries(SETTINGS_REGISTRY.map((entry) => [entry.key, entry])));
 
 export function registryPublic() {
-  return SETTINGS_REGISTRY.map(({ key, type, default: value, constraints, group, label, hint, ui, since }) => ({
-    key, type, default: cloneValue(value), constraints: constraints ? structuredClone(constraints) : undefined, group, label, hint, ui, since,
+  return SETTINGS_REGISTRY.map(({ key, type, default: value, constraints, group, label, hint, ui, since, widget, valueLabel, placeholder }) => ({
+    key, type, default: cloneValue(value), constraints: constraints ? structuredClone(constraints) : undefined, group, label, hint, ui, since, widget, valueLabel, placeholder,
   }));
 }
 

@@ -27,6 +27,8 @@ function defaults() {
   return Object.fromEntries(SETTINGS_REGISTRY.map((entry) => [entry.key, cloneValue(entry.default)]));
 }
 
+const matchesPattern = (entry, value) => !entry.constraints?.pattern || new RegExp(entry.constraints.pattern).test(value);
+
 function normalizeStored(key, value) {
   const entry = SETTINGS_BY_KEY[key];
   if (!entry) return undefined;
@@ -49,7 +51,7 @@ function normalizeStored(key, value) {
     const parsed = parseDuration(value);
     return parsed === null ? entry.default : parsed;
   }
-  if (entry.type === 'string') return typeof value === 'string' ? value : entry.default;
+  if (entry.type === 'string') return typeof value === 'string' && matchesPattern(entry, value) ? value : entry.default;
   if (entry.type === 'enum') return entry.constraints?.values?.includes(value) ? value : entry.default;
   return cloneValue(entry.default);
 }
@@ -181,6 +183,7 @@ function validateWrite(entry, value, current) {
   }
   if (entry.type === 'string') {
     if (typeof value !== 'string') throw new BoardError(400, 'bad-settings', `${entry.key} must be a string`);
+    if (!matchesPattern(entry, value)) throw new BoardError(400, 'bad-settings', `${entry.key} has an invalid format`);
     return value;
   }
   throw new BoardError(400, 'bad-settings', `unsupported settings type ${entry.type}`);

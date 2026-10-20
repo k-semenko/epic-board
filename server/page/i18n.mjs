@@ -65,7 +65,21 @@ const en = {
   'settings.hint': 'Drag blocks into the order you want. Saved for all epics on this board.',
   'settings.up': 'Move {name} up', 'settings.down': 'Move {name} down',
   'settings.moved': '{name}: position {n} of {total}', 'settings.save': 'Save', 'settings.saving': 'Saving…',
-  'settings.draft': 'Unsaved changes', 'settings.discard': 'Discard', 'settings.reset': 'Reset',
+  'settings.draft': 'Unsaved changes', 'settings.discard': 'Discard', 'settings.reset': 'Reset', 'settings.resetGroup': 'Reset to defaults', 'settings.resetGroupConfirm': 'Reset every setting in “{group}” to its default? Nothing is saved until you press Save.',
+  'settings.group.notify': 'Notifications', 'settings.empty': 'empty', 'settings.quietPlaceholder': '22:00-08:00',
+  'settings.key.feed.notify.enabled': 'Notifications on', 'settings.hint.feed.notify.enabled': 'The board service plays one sound per batch of new items, whichever connector wrote them.',
+  'settings.key.feed.notify.minLevel': 'Notify from', 'settings.hint.feed.notify.minLevel': 'Lowest level that makes a sound. A batch sounds at its most severe item.',
+  'settings.level.normal': 'Any batch', 'settings.level.important': 'Important and fire', 'settings.level.fire': 'Fire only',
+  'settings.key.feed.notify.sound.fire': 'Fire sound', 'settings.hint.feed.notify.sound.fire': 'A batch with at least one fire.',
+  'settings.key.feed.notify.sound.important': 'Important sound', 'settings.hint.feed.notify.sound.important': 'A batch with mentions or important items, no fire.',
+  'settings.key.feed.notify.sound.normal': 'Batch sound', 'settings.hint.feed.notify.sound.normal': 'Any other batch: normal items and noise.',
+  'settings.key.feed.notify.volume': 'Volume', 'settings.hint.feed.notify.volume': 'Applies to every notification sound.',
+  'settings.key.feed.notify.banner': 'System banner', 'settings.hint.feed.notify.banner': 'Also show a notification with the title of the most severe item. With terminal-notifier installed (brew install terminal-notifier) a click opens it in the feed.',
+  'settings.key.feed.notify.quietHours': 'Quiet hours', 'settings.hint.feed.notify.quietHours': 'No sound and no banner in this window. It may cross midnight.',
+  'sound.none': 'No sound', 'sound.play': 'Listen', 'sound.group.board': 'Board', 'sound.group.quiet': 'Quiet', 'sound.group.notable': 'Noticeable', 'sound.group.loud': 'Loud', 'sound.group.mac': 'macOS', 'settings.quiet.from': 'from', 'settings.quiet.to': 'to',
+  'sound.pop': 'Pop', 'sound.droplet': 'Droplet', 'sound.tick': 'Tick', 'sound.chime': 'Chime', 'sound.marimba': 'Marimba', 'sound.bell': 'Bell', 'sound.ping': 'Double ping',
+  'sound.alarm': 'Alarm', 'sound.siren': 'Siren', 'sound.klaxon': 'Klaxon', 'sound.redalert': 'Red alert',
+  'notify.title.fire': '🔥 Fire in the feed', 'notify.title.important': 'Important in the feed', 'notify.title.normal': 'New in the feed', 'notify.more': 'and {n} more',
   'settings.default': 'Default', 'settings.defaultValue': 'Default: {value}', 'settings.auto': 'as laid out', 'settings.on': 'On', 'settings.off': 'Off', 'settings.hourUnit': 'h', 'settings.minuteUnit': 'min', 'settings.durationHint': 'e.g. 45d, 12h', 'settings.emptyGroup': 'No settings in this group',
   'settings.conflict': 'Settings changed elsewhere. Latest values are shown; your draft is kept.',
   'settings.group.epic': 'Epic', 'settings.group.feed': 'Feed', 'settings.dayUnit': 'd',
@@ -106,6 +120,13 @@ const en = {
   'search.group.epic': 'Epics', 'search.group.task': 'Tasks', 'search.group.step': 'Steps', 'search.group.branch': 'Branches',
   'search.group.waiting': 'Needs decision', 'search.group.decision': 'Decisions', 'search.group.session': 'Sessions',
   'search.group.doc': 'Documents', 'search.group.feed': 'Feed', 'search.group.setting': 'Settings', 'search.group.open': 'Loose ends',
+  'dash.title': 'Work status',
+  'mr.state.opened': 'Open', 'mr.state.draft': 'Draft', 'mr.state.unchecked': 'No MR data', 'mr.state.merged': 'Merged', 'mr.state.closed': 'Closed',
+  'mr.pipeline': 'Pipeline: {s}', 'mr.pipe.success': '✓ green', 'mr.pipe.failed': '✗ red', 'mr.pipe.running': '⟳ running', 'mr.pipe.pending': '… pending', 'mr.pipe.canceled': 'canceled', 'mr.pipe.skipped': 'skipped', 'mr.pipe.manual': 'manual',
+  'mr.problem.pipeline': 'red pipeline', 'mr.problem.sha': 'MR is not on the local head', 'mr.problem.unpushed': '{n} unpushed', 'mr.problem.missing': 'branch removed', 'mr.problem.error': 'last check failed', 'mr.problem.stale': 'checked {ago} ago',
+  'mr.drift': 'Behind ↓ and ahead ↑ of the base branch', 'mr.checked': 'checked {ago} ago', 'mr.neverChecked': 'never checked',
+  'mr.refresh': 'Check now', 'mr.refreshAll': 'Check all open', 'mr.refreshing': 'Checking…',
+  'mr.tab.open': 'Open · {n}', 'mr.tab.all': 'All · {n}', 'mr.emptyOpen': 'No open merge requests.', 'mr.emptyAll': 'No merge requests on the board yet.',
   'dash.epics': 'Epics', 'dash.epicsMeta': '{total} total · {pinned} pinned',
   'dash.tasks': 'Tasks', 'dash.tasksMeta': '{blocked} blocked · {waiting} waiting',
   'dash.waiting': 'Waiting on you', 'dash.waitingMeta': 'oldest {n}d',
@@ -115,12 +136,12 @@ const en = {
   'feed.mark.important': 'Important', 'feed.mark.unimportant': 'Unimportant', 'feed.mark.noise': 'Noise',
   'feed.unmark': 'Restore', 'feed.delete': 'Delete', 'feed.confirmDelete': 'Delete this feed item?',
   'feed.changed': 'Changed', 'feed.why': 'Why?', 'feed.toast': 'Marked', 'feed.undo': 'Undo',
-  'feed.empty': 'All clear', 'feed.emptyNoise': 'Noise today: {n}', 'feed.fire': 'Fire',
+  'feed.empty': 'All clear', 'feed.emptyNoise': 'Noise today: {n}', 'feed.emptyToday': 'Marked today:', 'feed.emptyLast': 'The last item arrived {ago} ago.', 'feed.openHistory': 'Open history', 'feed.emptyNone': 'The feed is empty', 'feed.emptyNoneText': 'Nothing has arrived yet. A connector — an agent, a script or a scheduled task — writes items through the CLI.', 'feed.emptyFiltered': 'Nothing matches the filters', 'feed.clearFilters': 'Clear filters', 'feed.emptyHistory': 'Nothing marked yet', 'feed.emptyHistoryText': 'Marked items land here; you can restore them or change the mark.', 'feed.fire': 'Fire',
   'feed.allNoise': 'Mark group as noise', 'feed.newCount': 'New: {n}', 'feed.showNew': 'Show',
   'feed.filter.source': 'Source', 'feed.filter.severity': 'Severity', 'feed.filter.mark': 'Mark', 'feed.filter.all': 'All',
   'feed.sev.fire': 'Fire', 'feed.sev.important': 'Important', 'feed.sev.normal': 'Normal', 'feed.sev.noise': 'Noise',
   'feed.noProfile': 'No profile yet', 'feed.helpTitle': 'Keyboard',
-  'feed.showText': 'Show text', 'feed.groupBy': 'Group by', 'feed.groupBy.source': 'Source', 'feed.groupBy.severity': 'Severity', 'feed.readMore': 'Read in full', 'feed.noBody': 'No text, only the title.', 'feed.today': 'today, {time}', 'feed.yesterday': 'yesterday, {time}', 'feed.created': 'Created {at}', 'feed.updated': 'updated {at} ({ago} ago)', 'feed.repeats': 'sent {n} times', 'feed.how': 'How to use', 'feed.howTitle': 'Using the feed', 'feed.howPeople': 'For people', 'feed.howAi': 'Giving it to AI',
+  'feed.showText': 'Show text', 'feed.pop.unseen': '{n} unseen', 'feed.pop.open': 'Open feed', 'feed.pop.more': '{n} more in the feed', 'feed.groupBy': 'Group by', 'feed.groupBy.source': 'Source', 'feed.groupBy.severity': 'Severity', 'feed.readMore': 'Read in full', 'feed.noBody': 'No text, only the title.', 'feed.today': 'today, {time}', 'feed.yesterday': 'yesterday, {time}', 'feed.created': 'Created {at}', 'feed.updated': 'updated {at} ({ago} ago)', 'feed.repeats': 'sent {n} times', 'feed.how': 'How to use', 'feed.howTitle': 'Using the feed', 'feed.howPeople': 'For people', 'feed.howAi': 'Giving it to AI',
   'feed.guide': `**What this is.** Agents and scripts drop signals here: mentions, alerts, run results. The board polls nothing by itself; every item came from a connector.
 
 **Going through it.** Each row ends with three buttons:
@@ -140,6 +161,10 @@ A marked item leaves *Unseen* at once and goes to *History*; the toast lets you 
 **Filters.** Pick one source to see its profile on the right: what it has learned and the week's numbers.
 
 **Keyboard.** \`j\`/\`k\` move · \`1\`/\`2\`/\`3\` mark · \`x\` select several · \`Enter\` open the text · \`c\` comment · \`u\` undo · \`?\` help.
+
+**Sound.** The board plays one sound per batch of new items: a loud one for a fire, a noticeable one for mentions and important items, a quiet one for the rest. Sounds, volume and quiet hours are in *Settings → Notifications*; notifications are off until you turn them on there.
+
+**Banners on macOS.** Install \`terminal-notifier\` (\`brew install terminal-notifier\`) and banners become clickable: a click opens the item in the feed, and a new banner replaces the previous one. Without it the board falls back to a plain system banner that cannot open anything.
 
 **Retention.** How long items are kept is set in *Settings → Feed*.`,
   'feed.aiInterface': `**Interface for agents.** Only the CLI, from the plugin root:
@@ -298,7 +323,21 @@ const ru = {
   'settings.hint': 'Перетащи блоки в нужном порядке. Сохраняется для всех эпиков на доске.',
   'settings.up': 'Переместить «{name}» вверх', 'settings.down': 'Переместить «{name}» вниз',
   'settings.moved': '{name}: позиция {n} из {total}', 'settings.save': 'Сохранить', 'settings.saving': 'Сохраняю…',
-  'settings.draft': 'Есть несохранённые изменения', 'settings.discard': 'Отменить', 'settings.reset': 'Сбросить',
+  'settings.draft': 'Есть несохранённые изменения', 'settings.discard': 'Отменить', 'settings.reset': 'Сбросить', 'settings.resetGroup': 'Сбросить к умолчанию', 'settings.resetGroupConfirm': 'Вернуть все настройки «{group}» к умолчанию? Ничего не сохранится, пока не нажмёшь «Сохранить».',
+  'settings.group.notify': 'Уведомления', 'settings.empty': 'пусто', 'settings.quietPlaceholder': '22:00-08:00',
+  'settings.key.feed.notify.enabled': 'Уведомления включены', 'settings.hint.feed.notify.enabled': 'Сервис доски играет один звук на пачку новых пунктов, от какого бы коннектора они ни пришли.',
+  'settings.key.feed.notify.minLevel': 'Звенеть начиная с', 'settings.hint.feed.notify.minLevel': 'Самый низкий уровень, при котором будет звук. Пачка звучит по самому серьёзному пункту.',
+  'settings.level.normal': 'Любая пачка', 'settings.level.important': 'Важное и пожар', 'settings.level.fire': 'Только пожар',
+  'settings.key.feed.notify.sound.fire': 'Звук пожара', 'settings.hint.feed.notify.sound.fire': 'В пачке есть хотя бы один пожар.',
+  'settings.key.feed.notify.sound.important': 'Звук важного', 'settings.hint.feed.notify.sound.important': 'В пачке есть теги или важное, пожара нет.',
+  'settings.key.feed.notify.sound.normal': 'Звук пачки', 'settings.hint.feed.notify.sound.normal': 'Любая другая пачка: обычное и мусор.',
+  'settings.key.feed.notify.volume': 'Громкость', 'settings.hint.feed.notify.volume': 'Для всех звуков уведомлений.',
+  'settings.key.feed.notify.banner': 'Системный баннер', 'settings.hint.feed.notify.banner': 'Ещё и уведомление с заголовком самого серьёзного пункта. С terminal-notifier (brew install terminal-notifier) клик открывает его в ленте.',
+  'settings.key.feed.notify.quietHours': 'Тихие часы', 'settings.hint.feed.notify.quietHours': 'В это окно ни звука, ни баннера. Окно может переходить через полночь.',
+  'sound.none': 'Без звука', 'sound.play': 'Послушать', 'sound.group.board': 'Доска', 'sound.group.quiet': 'Тихие', 'sound.group.notable': 'Заметные', 'sound.group.loud': 'Громкие', 'sound.group.mac': 'macOS', 'settings.quiet.from': 'с', 'settings.quiet.to': 'до',
+  'sound.pop': 'Поп', 'sound.droplet': 'Капля', 'sound.tick': 'Тик', 'sound.chime': 'Колокольчик', 'sound.marimba': 'Маримба', 'sound.bell': 'Колокол', 'sound.ping': 'Двойной пинг',
+  'sound.alarm': 'Тревога', 'sound.siren': 'Сирена', 'sound.klaxon': 'Клаксон', 'sound.redalert': 'Красная тревога',
+  'notify.title.fire': '🔥 Пожар в ленте', 'notify.title.important': 'Важное в ленте', 'notify.title.normal': 'Новое в ленте', 'notify.more': 'и ещё {n}',
   'settings.default': 'По умолчанию', 'settings.defaultValue': 'По умолчанию: {value}', 'settings.auto': 'как в вёрстке', 'settings.on': 'Вкл', 'settings.off': 'Выкл', 'settings.hourUnit': 'ч', 'settings.minuteUnit': 'мин', 'settings.durationHint': 'например 45d, 12h', 'settings.emptyGroup': 'В этой группе нет настроек',
   'settings.conflict': 'Настройки изменились в другом месте. Показаны новые значения, черновик сохранён.',
   'settings.group.epic': 'Эпик', 'settings.group.feed': 'Лента', 'settings.dayUnit': 'д',
@@ -339,6 +378,13 @@ const ru = {
   'search.group.epic': 'Эпики', 'search.group.task': 'Задачи', 'search.group.step': 'Шаги', 'search.group.branch': 'Ветки',
   'search.group.waiting': 'Ждут решения', 'search.group.decision': 'Решения', 'search.group.session': 'Сессии',
   'search.group.doc': 'Документы', 'search.group.feed': 'Лента', 'search.group.setting': 'Настройки', 'search.group.open': 'Хвосты',
+  'dash.title': 'Статус работы',
+  'mr.state.opened': 'Открыт', 'mr.state.draft': 'Черновик', 'mr.state.unchecked': 'Нет данных MR', 'mr.state.merged': 'Слит', 'mr.state.closed': 'Закрыт',
+  'mr.pipeline': 'Пайплайн: {s}', 'mr.pipe.success': '✓ зелёный', 'mr.pipe.failed': '✗ красный', 'mr.pipe.running': '⟳ идёт', 'mr.pipe.pending': '… в очереди', 'mr.pipe.canceled': 'отменён', 'mr.pipe.skipped': 'пропущен', 'mr.pipe.manual': 'вручную',
+  'mr.problem.pipeline': 'красный пайплайн', 'mr.problem.sha': 'MR не на локальном коммите', 'mr.problem.unpushed': 'не запушено: {n}', 'mr.problem.missing': 'ветка удалена', 'mr.problem.error': 'последняя проверка с ошибкой', 'mr.problem.stale': 'проверено {ago} назад',
+  'mr.drift': 'Отстаёт ↓ и опережает ↑ базовую ветку', 'mr.checked': 'проверено {ago} назад', 'mr.neverChecked': 'не проверялся',
+  'mr.refresh': 'Проверить сейчас', 'mr.refreshAll': 'Проверить все открытые', 'mr.refreshing': 'Проверяю…',
+  'mr.tab.open': 'Открытые · {n}', 'mr.tab.all': 'Все · {n}', 'mr.emptyOpen': 'Открытых MR нет.', 'mr.emptyAll': 'На доске пока нет MR.',
   'dash.epics': 'Эпики', 'dash.epicsMeta': '{total} всего · {pinned} закреплено',
   'dash.tasks': 'Задачи', 'dash.tasksMeta': '{blocked} блок · {waiting} ждут',
   'dash.waiting': 'Ждут тебя', 'dash.waitingMeta': 'старейший {n} дн.',
@@ -348,12 +394,12 @@ const ru = {
   'feed.mark.important': 'Важно', 'feed.mark.unimportant': 'Не важно', 'feed.mark.noise': 'Мусор',
   'feed.unmark': 'Вернуть', 'feed.delete': 'Удалить', 'feed.confirmDelete': 'Удалить этот пункт ленты?',
   'feed.changed': 'Изменено', 'feed.why': 'Почему?', 'feed.toast': 'Отмечено', 'feed.undo': 'Отменить',
-  'feed.empty': 'Всё разобрано', 'feed.emptyNoise': 'Сегодня в мусор: {n}', 'feed.fire': 'Пожары',
+  'feed.empty': 'Всё разобрано', 'feed.emptyNoise': 'Сегодня в мусор: {n}', 'feed.emptyToday': 'Сегодня отмечено:', 'feed.emptyLast': 'Последний пункт пришёл {ago} назад.', 'feed.openHistory': 'Открыть историю', 'feed.emptyNone': 'Лента пуста', 'feed.emptyNoneText': 'Пока ничего не пришло. Пункты пишет коннектор — агент, скрипт или задача по расписанию — через CLI.', 'feed.emptyFiltered': 'Под фильтры ничего не попало', 'feed.clearFilters': 'Сбросить фильтры', 'feed.emptyHistory': 'Отмеченных пока нет', 'feed.emptyHistoryText': 'Сюда попадают отмеченные пункты: их можно вернуть или поменять отметку.', 'feed.fire': 'Пожары',
   'feed.allNoise': 'Всё в группе — мусор', 'feed.newCount': 'Новых: {n}', 'feed.showNew': 'Показать',
   'feed.filter.source': 'Источник', 'feed.filter.severity': 'Важность', 'feed.filter.mark': 'Отметка', 'feed.filter.all': 'Все',
   'feed.sev.fire': 'Пожар', 'feed.sev.important': 'Важно', 'feed.sev.normal': 'Обычно', 'feed.sev.noise': 'Мусор',
   'feed.noProfile': 'Профиля ещё нет', 'feed.helpTitle': 'Клавиатура',
-  'feed.showText': 'Показать текст', 'feed.groupBy': 'Группировать', 'feed.groupBy.source': 'По источнику', 'feed.groupBy.severity': 'По важности', 'feed.readMore': 'Читать полностью', 'feed.noBody': 'Текста нет, только заголовок.', 'feed.today': 'сегодня, {time}', 'feed.yesterday': 'вчера, {time}', 'feed.created': 'Создано {at}', 'feed.updated': 'обновлено {at} ({ago} назад)', 'feed.repeats': 'пришло {n} раза', 'feed.how': 'Как пользоваться', 'feed.howTitle': 'Как пользоваться лентой', 'feed.howPeople': 'Для людей', 'feed.howAi': 'Как отдать AI',
+  'feed.showText': 'Показать текст', 'feed.pop.unseen': 'непросмотренных: {n}', 'feed.pop.open': 'Открыть ленту', 'feed.pop.more': 'Ещё {n} в ленте', 'feed.groupBy': 'Группировать', 'feed.groupBy.source': 'По источнику', 'feed.groupBy.severity': 'По важности', 'feed.readMore': 'Читать полностью', 'feed.noBody': 'Текста нет, только заголовок.', 'feed.today': 'сегодня, {time}', 'feed.yesterday': 'вчера, {time}', 'feed.created': 'Создано {at}', 'feed.updated': 'обновлено {at} ({ago} назад)', 'feed.repeats': 'пришло {n} раза', 'feed.how': 'Как пользоваться', 'feed.howTitle': 'Как пользоваться лентой', 'feed.howPeople': 'Для людей', 'feed.howAi': 'Как отдать AI',
   'feed.guide': `**Что это.** Сюда агенты и скрипты складывают сигналы: упоминания, алерты, итоги прогонов. Сама доска ничего не опрашивает — каждый пункт прислал какой-то коннектор.
 
 **Разбор.** В конце каждой строки три кнопки:
@@ -373,6 +419,10 @@ const ru = {
 **Фильтры.** Если выбрать один источник, справа появится его профиль: чему он научился и цифры за неделю.
 
 **Клавиатура.** \`j\`/\`k\` — ход · \`1\`/\`2\`/\`3\` — отметка · \`x\` — выделить несколько · \`Enter\` — открыть текст · \`c\` — комментарий · \`u\` — отмена · \`?\` — справка.
+
+**Звук.** На каждую пачку новых пунктов доска играет один звук: громкий на пожар, заметный на теги и важное, тихий на остальное. Звуки, громкость и тихие часы — в «Настройки → Уведомления»; пока их там не включить, уведомлений нет.
+
+**Баннеры на macOS.** Поставь \`terminal-notifier\` (\`brew install terminal-notifier\`), и баннеры станут кликабельными: клик открывает пункт в ленте, а новый баннер заменяет предыдущий. Без него доска показывает обычный системный баннер, который никуда не ведёт.
 
 **Хранение.** Сколько держать пункты — в «Настройки → Лента».`,
   'feed.aiInterface': `**Интерфейс для агентов.** Только CLI, из корня плагина:

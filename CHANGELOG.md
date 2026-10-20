@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-20
+
+### Added
+
+- The service plays one sound per feed batch at its most severe unseen item and can show a system banner, whichever connector wrote the items; connectors only set `severity`.
+- Settings → Notifications: on/off, minimum level, a sound per level with preview, volume, banner and quiet hours.
+- Eleven generated board sounds (quiet, noticeable and loud) alongside the macOS system sounds; `scripts/sounds/generate.mjs` rebuilds them.
+- Settings support string patterns, select, sound, range and quiet-hours controls.
+- The settings page shows each setting as a row with its control on the right; explanations and defaults moved behind a `?` hint.
+- Notifications are off by default and start at 10% volume.
+- macOS banners use `terminal-notifier` when installed: clickable, opening the item in the feed, and replacing each other.
+- The header feed button opens a popover with unseen items, their text and marks, so triage does not leave the current page.
+- Feed cards sit in a responsive grid with two-line titles and three-line previews.
+- The work-status strip (epics, tasks, waiting, merge requests, feed, connectors) sits under the header on the home, tasks and feed pages.
+- The merge requests tile opens a dialog with every MR across epics: state, pipeline, drift from the base branch, the last commit and how fresh the check is, with one-click re-checks; `GET /api/merge-requests` serves it.
+- The feed has proper empty states, and its filters hide when there is nothing to sort.
+
+### Fixed
+
+- Saving from the settings page sent an unserialized body and failed.
+
 ## [0.11.0] - 2026-10-19
 
 ### Added
