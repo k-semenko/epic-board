@@ -186,7 +186,7 @@ const MERGE_KEYS = {
   waiting: ['id'], decisions: ['id'], sessions: ['id'], docs: ['id'],
 };
 const APPEND_ONLY = new Set(['decisions']);
-const IMMUTABLE = ['id', 'schema', 'createdAt', 'updatedAt'];
+const IMMUTABLE = ['id', 'schema', 'createdAt', 'updatedAt', 'archived'];
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const keyOf = (item, keys) => keys.map((k) => item[k]).join(':');
 
@@ -281,6 +281,10 @@ function refExists(epic, ref) {
 }
 
 export function validateEpic(epic) {
+  if (epic.archived !== undefined) {
+    const a = epic.archived;
+    if (!a || typeof a !== 'object' || ['at', 'by', 'summary'].some((k) => typeof a[k] !== 'string' || !a[k].trim())) throw new BoardError(400, 'bad-archived', 'archived is {at, by, summary} with nonempty strings');
+  }
   const steps = new Set();
   for (const t of epic.tasks || []) for (const s of t.steps || []) steps.add(`${t.id}/${s.id}`);
   if (epic.docsMode !== undefined && !['board', 'linked'].includes(epic.docsMode)) {
@@ -373,6 +377,7 @@ export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, chec
   }
   return withLock(id, () => {
     const epic = readEpic(id);
+    assertLive(epic);
     const at = new Date().toISOString();
     const changes = [];
     const next = mergeObject(epic, prepareRepositories(epic, prepareDecisions(epic, prepareWaitingPatch(epic, prepareAfter(patch, epic.id), at), at)), '', changes);
@@ -389,6 +394,7 @@ export function patchEpic(id, patch, { by = 'cli', why = '', lockTimeoutMs, chec
 function deleteTaskOrStep(id, taskId, stepId, { cleanupRefs = false, by = 'cli', why = '' } = {}) {
   return withLock(id, () => {
     const epic = readEpic(id);
+    assertLive(epic);
     const { patch, waiting, references } = planDeletion(epic, taskId, stepId);
     const at = new Date().toISOString();
     const changes = [];
@@ -441,6 +447,7 @@ function pendingItem(epic, itemId) {
 function changeWaiting(id, itemId, action, body, { by = 'cli', why = '' } = {}) {
   return withLock(id, () => {
     const epic = readEpic(id);
+    assertLive(epic);
     const before = pendingItem(epic, itemId);
     const at = new Date().toISOString();
     const after = transitionWaiting(before, action, body, { by, at });
@@ -474,6 +481,48 @@ export function removeWaiting(id, itemId, body, opts) {
   return changeWaiting(id, itemId, 'remove', body, opts);
 }
 
+export const isArchived = (epic) => Boolean(epic?.archived);
+
+export function assertLive(epic) {
+  if (isArchived(epic)) throw new BoardError(409, 'epic-archived', `epic ${epic.id} is archived; run epic.mjs reopen ${epic.id} first`);
+}
+
+// Archiving closes unresolved requests with the epic's outcome: an archived epic cannot be written, so they would hang.
+export function archiveEpic(id, { summary } = {}, { by = 'cli', why = '' } = {}) {
+  if (typeof summary !== 'string' || !summary.trim()) throw new BoardError(400, 'summary', 'an archive summary is required');
+  return withLock(id, () => {
+    const epic = readEpic(id);
+    assertLive(epic);
+    const at = new Date().toISOString();
+    const events = [];
+    const waiting = (epic.waiting || []).map((item) => {
+      if (item.status === 'closed' || item.doneAt) return item;
+      const closed = transitionWaiting(item, 'resolve', { resolution: summary.trim() }, { by, at });
+      events.push({ at, by, why, op: 'set', path: `waiting[${item.id}].status`, before: item.status, after: closed.status });
+      return closed;
+    });
+    const archived = { at, by, summary: summary.trim() };
+    const next = { ...epic, waiting, archived, updatedAt: at };
+    validateEpic(next);
+    saveEpic(next);
+    appendHistory(id, [...events, { at, by, why, op: 'set', path: 'archived', before: null, after: archived }]);
+    return next;
+  });
+}
+
+export function reopenEpic(id, { why = '' } = {}, { by = 'cli' } = {}) {
+  return withLock(id, () => {
+    const epic = readEpic(id);
+    if (!isArchived(epic)) throw new BoardError(409, 'epic-live', `epic ${id} is not archived`);
+    const at = new Date().toISOString();
+    const { archived, ...next } = epic;
+    next.updatedAt = at;
+    saveEpic(next);
+    appendHistory(id, [{ at, by, why, op: 'remove', path: 'archived', before: archived, after: null }]);
+    return next;
+  });
+}
+
 export function reopenWaiting() {
   throw new BoardError(400, 'waiting-action', 'use wait revise with version and a reason');
 }
@@ -485,6 +534,7 @@ const pick = (obj, dotted) => dotted.split('.').reduce((v, k) => (v == null ? un
 export function writeFacts(id, results, { at = new Date().toISOString(), repoLocations = {} } = {}) {
   return withLock(id, () => {
     const epic = readEpic(id);
+    assertLive(epic);
     const facts = { ...(epic.facts || {}) };
     const events = [];
     const observedRepos = Object.keys(repoLocations).sort((a, b) => b.length - a.length);
