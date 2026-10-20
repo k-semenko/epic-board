@@ -60,6 +60,7 @@ Right after the event, one command:
 | loose end noticed | `open-item <epic> <task> add "<text>"` |
 | merge order known | `merge <epic> --set '[{"id":"m1","text":"…","branch":"repo:branch"}]'` |
 | stage of work finished | `note <epic> --session <sid> --doing "…" --next "…"` |
+| the human says the epic is done | `archive <epic> --summary "<what was delivered, what was left>"`; unresolved requests close with that summary and the epic becomes read-only; `reopen <epic>` brings it back |
 
 A cross-task dependency is `--after <task>/<step>[,…] --label "<what is handed over>"`; order inside a task is sequential by itself.
 

@@ -171,3 +171,18 @@ test('the agent closes a request from the cli with only an outcome', () => {
   assert.equal(w.status, 'closed');
   assert.equal(w.resolution, 'Agreed in chat: 8006');
 });
+
+test('archive, list and reopen an epic from the cli', () => {
+  ok(['new', 'old', '--title', 'Old work']);
+  const bare = cli(['archive', 'old']);
+  assert.notEqual(bare.status, 0);
+  assert.match(bare.stderr, /summary/);
+  ok(['archive', 'old', '--summary', 'Shipped']);
+  assert.doesNotMatch(ok(['list']).stdout, /^old /m);
+  const archived = ok(['list', '--archived']).stdout;
+  assert.match(archived, /^old /m);
+  assert.doesNotMatch(archived, /^shop /m);
+  assert.match(cli(['bind', 'old', '--session', 'sid-9']).stderr, /epic-archived|archived/);
+  ok(['reopen', 'old', '--why', 'more']);
+  assert.match(ok(['list']).stdout, /^old /m);
+});
