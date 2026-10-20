@@ -1,6 +1,8 @@
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { listEpics } from '../server/store.mjs';
+import { listEpics, isArchived } from '../server/store.mjs';
+
+const liveEpics = () => listEpics().filter((epic) => !isArchived(epic));
 import { dataDir } from '../server/paths.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -81,7 +83,7 @@ export function emitPreCompact(text) {
 // A session may be bound to several epics over its life; the freshest mark wins.
 export function findSessionEpic(sid) {
   let best = null;
-  for (const epic of listEpics()) {
+  for (const epic of liveEpics()) {
     const session = (epic.sessions || []).find((s) => s.id === sid);
     if (session && (!best || String(session.lastAt) > String(best.session.lastAt))) best = { epic, session };
   }
@@ -91,7 +93,7 @@ export function findSessionEpic(sid) {
 export function epicForCwd(cwd) {
   if (!cwd) return null;
   const here = resolve(cwd) + sep;
-  return listEpics().find((e) => Object.values(e.repos || {}).some((r) => r.path && here.startsWith(resolve(r.path) + sep))) || null;
+  return liveEpics().find((e) => Object.values(e.repos || {}).some((r) => r.path && here.startsWith(resolve(r.path) + sep))) || null;
 }
 
 // Hooks must never break a session: errors go to a log file and the hook exits 0.

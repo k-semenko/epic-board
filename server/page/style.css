@@ -711,6 +711,7 @@ button.primary:hover { filter: brightness(1.08); }
 .search-hit-main { display: grid; gap: 2px; min-width: 0; }
 .search-hit-snippet { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .search-hit-where { flex: none; font-size: 12px; }
+.search-archived { padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; }
 .search-more { all: unset; cursor: pointer; padding: 4px 9px; font-size: 12.5px; color: var(--accent); border-radius: 6px; }
 .search-more:hover, .search-more:focus-visible { background: var(--chip); }
 .top-search .search-results { left: 50%; right: auto; translate: -50% 0; width: max(100%, min(620px, 92vw)); }
