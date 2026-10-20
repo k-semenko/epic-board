@@ -136,14 +136,14 @@ function notifySettings() {
   });
   const sound = (level, def) => entry(`feed.notify.sound.${level}`, 'enum', def, { constraints: Object.freeze({ values: SOUND_IDS }), widget: 'sound' });
   return [
-    entry('feed.notify.enabled', 'bool', true),
+    entry('feed.notify.enabled', 'bool', false),
     entry('feed.notify.minLevel', 'enum', 'normal', { constraints: Object.freeze({ values: Object.freeze(['normal', 'important', 'fire']) }), widget: 'select', valueLabel: 'settings.level.' }),
     sound('fire', 'board:alarm'),
     sound('important', 'board:chime'),
     sound('normal', 'board:pop'),
-    entry('feed.notify.volume', 'int', 70, { constraints: Object.freeze({ min: 0, max: 100 }), widget: 'range' }),
+    entry('feed.notify.volume', 'int', 10, { constraints: Object.freeze({ min: 0, max: 100 }), widget: 'range' }),
     entry('feed.notify.banner', 'bool', true),
-    entry('feed.notify.quietHours', 'string', '', { constraints: Object.freeze({ pattern: '^$|^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$' }), widget: 'text', placeholder: 'settings.quietPlaceholder' }),
+    entry('feed.notify.quietHours', 'string', '', { constraints: Object.freeze({ pattern: '^$|^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$' }), widget: 'quiet' }),
   ];
 }
 
