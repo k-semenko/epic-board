@@ -13,7 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The service plays one sound per feed batch at its most severe unseen item and can show a system banner, whichever connector wrote the items; connectors only set `severity`.
 - Settings → Notifications: on/off, minimum level, a sound per level with preview, volume, banner and quiet hours.
 - Eleven generated board sounds (quiet, noticeable and loud) alongside the macOS system sounds; `scripts/sounds/generate.mjs` rebuilds them.
-- Settings support string patterns, select, sound and range controls.
+- Settings support string patterns, select, sound, range and quiet-hours controls.
+- The settings page shows each setting as a row with its control on the right; explanations and defaults moved behind a `?` hint.
+- Notifications are off by default and start at 10% volume.
 
 ### Fixed
 
