@@ -230,6 +230,9 @@ function emptyHtml() {
 function renderList() {
   const list = visible();
   const root = $('#feed-list');
+  // Filters and grouping only make sense when there is something to sort; active filters stay so they can be cleared.
+  const filtering = Boolean(filters.source || filters.severity || (tab === 'history' && filters.mark));
+  $('#feed-filters').hidden = !list.length && !filtering;
   if (!list.length) {
     root.innerHTML = emptyHtml();
     void renderProfile();
