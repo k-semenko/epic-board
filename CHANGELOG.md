@@ -19,6 +19,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - macOS banners use `terminal-notifier` when installed: clickable, opening the item in the feed, and replacing each other.
 - The header feed button opens a popover with unseen items, their text and marks, so triage does not leave the current page.
 - Feed cards sit in a responsive grid with two-line titles and three-line previews.
+- The work-status strip (epics, tasks, waiting, merge requests, feed, connectors) sits under the header on every page.
+- The merge requests tile opens a dialog with every MR across epics: state, pipeline, drift from the base branch, the last commit and how fresh the check is, with one-click re-checks; `GET /api/merge-requests` serves it.
+- The feed has proper empty states, and its filters hide when there is nothing to sort.
 
 ### Fixed
 

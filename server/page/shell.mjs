@@ -144,6 +144,164 @@ export function bindShell({ pollMs = 8000, search = true } = {}) {
   setInterval(() => { void refreshFeedBadge(); }, pollMs);
   if (search) bindBoardSearch();
   bindFeedPopover();
+  bindStatusStrip({ pollMs });
+}
+
+// ---------- Status strip: board-wide work status above every page ----------
+
+const isDashboard = (value) => Boolean(value?.epics && value?.connectors && value?.feed);
+
+export function sparkline(values, { width = 96, height = 22 } = {}) {
+  if (!values?.length) return '';
+  const max = Math.max(1, ...values);
+  const step = values.length > 1 ? width / (values.length - 1) : 0;
+  const points = values.map((v, i) => `${(i * step).toFixed(1)},${(height - 2 - (v / max) * (height - 4)).toFixed(1)}`).join(' ');
+  return `<svg class="stat-spark" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+export function dashboardTiles(d) {
+  const silent = d.connectors.silent || [];
+  return [
+    { icon: 'board', label: 'dash.epics', value: d.epics.total, meta: t('dash.epicsMeta', { total: d.epics.total, pinned: d.epics.pinned }), href: '/' },
+    { icon: 'list', label: 'dash.tasks', value: d.tasks.inWork, meta: t('dash.tasksMeta', { blocked: d.tasks.blocked, waiting: d.tasks.waiting }), href: '/tasks', warn: d.tasks.blocked > 0 },
+    { icon: 'clock', label: 'dash.waiting', value: d.waiting.open, meta: d.waiting.oldestDays === null ? '' : t('dash.waitingMeta', { n: d.waiting.oldestDays }), href: '/tasks?waiting=1', warn: d.waiting.open > 0 },
+    { icon: 'branch', label: 'dash.mr', value: d.mr.open, meta: t('dash.mrMeta', { n: d.mr.red }), action: 'data-open-mr', warn: d.mr.red > 0 },
+    { icon: 'inbox', label: 'dash.feed', value: d.feed.unmarked, meta: d.feed.fire ? `🔥${d.feed.fire}` : '', spark: d.feed.spark, action: 'data-open-feed', href: '/feed', warn: d.feed.fire > 0 },
+    { icon: 'link', label: 'dash.connectors', value: d.connectors.active, meta: silent.length ? t('dash.connectorsSilent', { n: silent.length }) : t('dash.connectorsOk'), title: silent.join(', '), href: '/feed', warn: silent.length > 0 },
+  ].map((tile) => {
+    const body = `<span class="stat-label">${icon(tile.icon)}${esc(t(tile.label))}</span><span class="stat-value">${tile.value}${tile.spark ? sparkline(tile.spark) : ''}</span><span class="stat-meta">${esc(tile.meta || '')}</span>`;
+    const cls = `stat${tile.warn ? ' is-warn' : ''}`;
+    const title = tile.title ? ` title="${esc(tile.title)}"` : '';
+    if (tile.action && !tile.href) return `<button type="button" class="${cls}" ${tile.action}${title}>${body}</button>`;
+    return `<a class="${cls}" href="${tile.href}"${tile.action ? ` ${tile.action}` : ''}${title}>${body}</a>`;
+  }).join('');
+}
+
+export function bindStatusStrip({ pollMs = 8000 } = {}) {
+  const main = document.querySelector('main.wrap');
+  if (!main || !main.prepend || document.querySelector('#status-strip')) return;
+  const strip = Object.assign(document.createElement('section'), { id: 'status-strip', className: 'stats dash status-strip' });
+  strip.setAttribute('aria-label', t('dash.title'));
+  main.prepend(strip);
+  let last = '';
+  const draw = async () => {
+    try {
+      const data = await api('/api/dashboard');
+      if (!isDashboard(data)) return;
+      const html = dashboardTiles(data);
+      if (html !== last) { strip.innerHTML = html; last = html; }
+    } catch { /* service may be offline */ }
+  };
+  void draw();
+  setInterval(() => { void draw(); }, pollMs);
+  document.addEventListener('epic-board:lang', () => { last = ''; void draw(); });
+  strip.addEventListener('click', (event) => {
+    if (event.target.closest('[data-open-mr]')) { event.preventDefault(); void openMergeRequests(); return; }
+    const feed = event.target.closest('[data-open-feed]');
+    // The feed tile opens the header popover where there is one, so triage never leaves the page.
+    if (feed && document.querySelector('#feed-pop') && !event.metaKey && !event.ctrlKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      document.querySelector('.topbar-feed')?.click();
+    }
+  });
+}
+
+// ---------- Merge requests dialog ----------
+
+// Staleness shows in the check time on the right, so it is not repeated as a chip.
+const MR_PROBLEMS = ['pipeline', 'sha', 'unpushed', 'missing', 'error'];
+let mrTab = 'open';
+let mrItems = [];
+
+function mrRow(mr) {
+  const ago = mr.checkedAt ? agoShort(mr.checkedAt) : null;
+  const pipe = mr.pipeline ? `<span class="mr-pipe pipe-${esc(mr.pipeline)}" title="${esc(t('mr.pipeline', { s: mr.pipeline }))}">${esc(t(`mr.pipe.${mr.pipeline}`) || mr.pipeline)}</span>` : '';
+  const problems = mr.problems.filter((p) => MR_PROBLEMS.includes(p)).map((p) => `<span class="chip chip-warn">${esc(t(`mr.problem.${p}`, { n: mr.unpushed ?? 0, ago: ago || '—' }))}</span>`).join('');
+  const drift = [mr.behind ? `↓${mr.behind}` : '', mr.ahead ? `↑${mr.ahead}` : ''].filter(Boolean).join(' ');
+  return `<li class="mr-row state-${esc(mr.state)}" data-mr-epic="${esc(mr.epic)}" data-mr-branch="${esc(`${mr.repo}:${mr.branch}`)}">
+    <div class="mr-main">
+      <div class="mr-line">
+        <span class="mr-state">${esc(t(`mr.state.${mr.state}`))}</span>
+        ${mr.url ? `<a href="${esc(mr.url)}" target="_blank" rel="noopener" class="mr-iid">!${esc(mr.iid ?? '')}</a>` : `<span class="mr-iid">!${esc(mr.iid ?? '')}</span>`}
+        <a href="/e/${encodeURIComponent(mr.epic)}#t-${encodeURIComponent(mr.task)}" class="mr-task">${esc(mr.taskTitle || mr.task)}</a>
+        ${pipe}
+      </div>
+      <div class="mr-sub"><code>${esc(mr.repo)}:${esc(mr.branch)}</code>${mr.base ? ` → <code>${esc(mr.base)}</code>` : ''}${drift ? ` <span title="${esc(t('mr.drift'))}">${esc(drift)}</span>` : ''}${mr.subject ? ` · <span class="mr-subject">${esc(mr.subject)}</span>` : ''}</div>
+      ${problems ? `<div class="mr-problems">${problems}</div>` : ''}
+    </div>
+    <div class="mr-side">
+      <span class="muted${mr.problems.includes('stale') ? ' is-stale' : ''}" title="${esc(mr.checkedAt || '')}">${esc(ago ? t('mr.checked', { ago }) : t('mr.neverChecked'))}</span>
+      <button type="button" class="icon-btn" data-mr-refresh title="${esc(t('mr.refresh'))}" aria-label="${esc(t('mr.refresh'))}">${icon('refresh')}</button>
+    </div>
+  </li>`;
+}
+
+function renderMergeRequests() {
+  const dlg = document.querySelector('#mr-dialog');
+  if (!dlg) return;
+  const open = mrItems.filter((mr) => ['opened', 'draft', 'unchecked'].includes(mr.state));
+  const list = mrTab === 'open' ? open : mrItems;
+  const byEpic = new Map();
+  for (const mr of list) {
+    if (!byEpic.has(mr.epic)) byEpic.set(mr.epic, { title: mr.epicTitle, items: [] });
+    byEpic.get(mr.epic).items.push(mr);
+  }
+  dlg.querySelector('.modal').innerHTML = `
+    <header class="modal-head"><h3>${icon('branch')}${esc(t('dash.mr'))}</h3><button type="button" class="icon-btn" data-mr-close aria-label="${esc(t('close'))}">${icon('close')}</button></header>
+    <div class="mr-toolbar">
+      <div class="view-nav" role="tablist">
+        <button type="button" class="${mrTab === 'open' ? 'is-active' : ''}" data-mr-tab="open">${esc(t('mr.tab.open', { n: open.length }))}</button>
+        <button type="button" class="${mrTab === 'all' ? 'is-active' : ''}" data-mr-tab="all">${esc(t('mr.tab.all', { n: mrItems.length }))}</button>
+      </div>
+      <button type="button" data-mr-refresh-all ${open.length ? '' : 'disabled'}>${icon('refresh')}<span>${esc(t('mr.refreshAll'))}</span></button>
+    </div>
+    ${list.length ? [...byEpic.entries()].map(([id, group]) => `<section class="mr-epic">
+      <h4><a href="/e/${encodeURIComponent(id)}">${esc(id)} · ${esc(group.title || '')}</a></h4>
+      <ul class="mr-list">${group.items.map(mrRow).join('')}</ul>
+    </section>`).join('') : `<p class="muted mr-empty">${esc(t(mrTab === 'open' ? 'mr.emptyOpen' : 'mr.emptyAll'))}</p>`}`;
+}
+
+async function loadMergeRequests() {
+  mrItems = (await api('/api/merge-requests')).items || [];
+  renderMergeRequests();
+}
+
+const refreshBranch = (epic, branch) => api(`/api/epics/${encodeURIComponent(epic)}/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(branch ? { scope: 'branch', branch } : {}) });
+
+export async function openMergeRequests() {
+  let dlg = document.querySelector('#mr-dialog');
+  if (!dlg) {
+    dlg = Object.assign(document.createElement('dialog'), { id: 'mr-dialog', className: 'board-dialog' });
+    dlg.innerHTML = '<div class="modal mr-modal"></div>';
+    document.body.append(dlg);
+    dlg.addEventListener('click', async (event) => {
+      if (event.target === dlg || event.target.closest('[data-mr-close]')) { dlg.close(); return; }
+      const tab = event.target.closest('[data-mr-tab]');
+      if (tab) { mrTab = tab.dataset.mrTab; renderMergeRequests(); return; }
+      const one = event.target.closest('[data-mr-refresh]');
+      if (one) {
+        const row = one.closest('[data-mr-epic]');
+        row.classList.add('is-busy');
+        one.disabled = true;
+        try { await refreshBranch(row.dataset.mrEpic, row.dataset.mrBranch); } catch (error) { row.querySelector('.mr-side .muted').textContent = error.message; }
+        await loadMergeRequests();
+        return;
+      }
+      const all = event.target.closest('[data-mr-refresh-all]');
+      if (all) {
+        all.disabled = true;
+        all.querySelector('span').textContent = t('mr.refreshing');
+        const epics = [...new Set(mrItems.filter((mr) => ['opened', 'draft', 'unchecked'].includes(mr.state)).map((mr) => mr.epic))];
+        // One epic at a time: each refresh fetches git and asks the forge, and the board limits parallel work itself.
+        for (const id of epics) { try { await refreshBranch(id); } catch { /* the row shows the error after reload */ } }
+        await loadMergeRequests();
+      }
+    });
+  }
+  dlg.querySelector('.modal').innerHTML = `<p class="muted">${esc(t('loading'))}</p>`;
+  if (!dlg.open) dlg.showModal();
+  try { await loadMergeRequests(); } catch (error) { dlg.querySelector('.modal').innerHTML = `<p class="crit">${esc(error.message)}</p>`; }
 }
 
 // ---------- Feed popover: triage from any page without leaving it ----------

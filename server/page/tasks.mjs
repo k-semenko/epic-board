@@ -1,6 +1,6 @@
 import { t, getLang, setLang, locale } from './i18n.mjs';
 import { icon, logo } from './icons.mjs';
-import { refreshFeedBadge, bindBoardSearch, bindFeedPopover } from './shell.mjs';
+import { refreshFeedBadge, bindBoardSearch, bindFeedPopover, bindStatusStrip } from './shell.mjs';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const SORTS = ['source', 'name', 'id', 'progress'];
@@ -167,4 +167,5 @@ if (typeof document !== 'undefined' && document.getElementById('tasks-list')) {
   void initTasksPage();
   bindBoardSearch();
   bindFeedPopover();
+  bindStatusStrip();
 }
