@@ -27,7 +27,12 @@ test('archiving stores the summary and closes every unresolved request', () => {
     assert.equal(w.resolution, 'Shipped');
     assert.ok(w.doneAt);
   }
-  assert.ok(store.readHistory('a', { limit: 50 }).some((e) => e.path === 'archived'));
+  const history = store.readHistory('a', { limit: 50 });
+  assert.ok(history.some((e) => e.path === 'archived'));
+  for (const id of ['open', 'ans']) {
+    assert.equal(history.find((e) => e.path === `waiting[${id}].resolution`)?.after, 'Shipped', id);
+    assert.ok(history.some((e) => e.path === `waiting[${id}].doneAt`), id);
+  }
   assert.equal(store.isArchived(store.readEpic('a')), true);
 });
 
@@ -49,9 +54,14 @@ test('an archived epic refuses every write', () => {
 
 test('archive twice and reopen a live epic are refused', () => {
   make('c');
+  const file = store.epicPath('c');
+  let before = readFileSync(file, 'utf8');
   assert.throws(() => store.reopenEpic('c'), { status: 409, code: 'epic-live' });
+  assert.equal(readFileSync(file, 'utf8'), before);
   store.archiveEpic('c', { summary: 'Done' });
+  before = readFileSync(file, 'utf8');
   assert.throws(() => store.archiveEpic('c', { summary: 'Again' }), { status: 409, code: 'epic-archived' });
+  assert.equal(readFileSync(file, 'utf8'), before);
 });
 
 test('reopen removes the flag, keeps closed requests closed and records why', () => {

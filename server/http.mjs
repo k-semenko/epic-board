@@ -63,8 +63,7 @@ function readBody(req) {
 function summary(epic) {
   const stamps = Object.values(epic.facts || {}).map((f) => f.fetchedAt).filter(Boolean).sort();
   const archived = epic.archived ? { at: epic.archived.at, summary: epic.archived.summary } : null;
-  const openTasks = (epic.tasks || []).filter((t) => !(t.steps || []).length || t.steps.some((s) => s.state !== 'done')).length;
-  return { id: epic.id, title: epic.title, goal: epic.goal, archived, openTasks, waiting: (epic.waiting || []).filter((w) => !w.doneAt).length, createdAt: epic.createdAt, updatedAt: epic.updatedAt, oldestFact: stamps[0] ?? null, tasks: (epic.tasks || []).length, branches: (epic.tasks || []).reduce((n, t) => n + (t.branches || []).length, 0) };
+  return { id: epic.id, title: epic.title, goal: epic.goal, archived, waiting: (epic.waiting || []).filter((w) => !w.doneAt).length, createdAt: epic.createdAt, updatedAt: epic.updatedAt, oldestFact: stamps[0] ?? null, tasks: (epic.tasks || []).length, branches: (epic.tasks || []).reduce((n, t) => n + (t.branches || []).length, 0) };
 }
 
 // Loopback is not enough: DNS rebinding lets any page reach 127.0.0.1, so Host and Origin are pinned.

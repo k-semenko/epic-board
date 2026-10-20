@@ -312,7 +312,6 @@ test('archive and reopen over HTTP, with the summary in the epic list', async ()
   const row = (await (await call('/api/epics')).json()).find((e) => e.id === 'arch');
   assert.equal(row.archived.summary, 'Shipped');
   assert.ok(row.archived.at);
-  assert.equal(row.openTasks, 1);
   assert.equal((await call('/api/epics/arch', { method: 'PATCH', body: { patch: { title: 'x' } } })).status, 409);
   assert.equal((await call('/api/epics/arch/reopen', { method: 'POST', body: {} })).status, 200);
   assert.equal((await (await call('/api/epics')).json()).find((e) => e.id === 'arch').archived, null);

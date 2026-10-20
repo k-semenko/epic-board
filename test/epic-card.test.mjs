@@ -249,6 +249,7 @@ test('the archive view lists only archived epics with their summary', () => {
   assert.match(epics.innerHTML, /data-epic-card="gone"/);
   assert.match(epics.innerHTML, /Delivered the hub/);
   assert.doesNotMatch(epics.innerHTML, /goal gone/);
+  assert.doesNotMatch(epics.innerHTML, /data-pin="gone"/);
   toggleArchive();
   assert.match(epics.innerHTML, /data-epic-card="a"/);
   assert.equal(archiveButton.attrs['aria-pressed'], 'false');
