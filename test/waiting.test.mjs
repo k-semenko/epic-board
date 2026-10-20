@@ -24,7 +24,7 @@ test('new requests default to open confirmation with a version', () => {
   assert.deepEqual(w.rounds, []);
 });
 
-test('human submission stays unresolved; agent closure requires current response and outcome', () => {
+test('human submission stays unresolved; closing a stale or empty-outcome answer is refused', () => {
   const initial = add('cycle', { checklist: [{ id: 'c1', text: 'Checked' }] });
   assert.throws(() => submit('cycle'), { code: 'checklist' });
   assert.throws(() => submit('cycle', { checked: ['c1'], confirmed: false }), { status: 400 });
@@ -42,6 +42,36 @@ test('human submission stays unresolved; agent closure requires current response
   assert.equal(w.status, 'closed');
   assert.ok(w.doneAt);
   assert.equal(w.rounds[0].review.outcome, 'accepted');
+});
+
+test('the agent closes an open request with an outcome and no human answer', () => {
+  add('chat');
+  store.resolveWaiting('decisions', 'chat', { resolution: 'Agreed in chat: hub 8006' });
+  const w = get('chat');
+  assert.equal(w.status, 'closed');
+  assert.equal(w.resolution, 'Agreed in chat: hub 8006');
+  assert.ok(w.doneAt);
+  assert.deepEqual(w.rounds, []);
+  assert.equal(w.checked, undefined);
+});
+
+test('resolve without version or submission id closes the current answer', () => {
+  add('loose', { checklist: [{ id: 'c1', text: 'ok' }] });
+  submit('loose', { checked: ['c1'] });
+  store.resolveWaiting('decisions', 'loose', { resolution: 'done' });
+  const w = get('loose');
+  assert.equal(w.rounds.at(-1).review.outcome, 'accepted');
+  assert.deepEqual(w.checked, ['c1']);
+});
+
+test('resolve still checks a given version and submission id, and needs an outcome', () => {
+  add('strict');
+  submit('strict');
+  assert.throws(() => store.resolveWaiting('decisions', 'strict', { resolution: 'x', version: 'stale' }), { code: 'waiting-changed' });
+  assert.throws(() => store.resolveWaiting('decisions', 'strict', { resolution: 'x', submissionId: 'other' }), { code: 'waiting-state' });
+  assert.throws(() => store.resolveWaiting('decisions', 'strict', { resolution: '  ' }), { status: 400 });
+  store.resolveWaiting('decisions', 'strict', { resolution: 'x' });
+  assert.throws(() => store.resolveWaiting('decisions', 'strict', { resolution: 'y' }), { code: 'waiting-state' });
 });
 
 test('choice formats validate cardinality, IDs and all required checklist items', () => {

@@ -162,3 +162,12 @@ test('input-only revision retains choice options and recommendation-only revisio
   w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
   assert.deepEqual(w.input, { type: 'confirm' });
 });
+
+test('the agent closes a request from the cli with only an outcome', () => {
+  ok(['wait', 'shop', 'add', 'hub', '--title', 'Default hub']);
+  assert.match(cli(['wait', 'shop', 'done', 'hub']).stderr, /resolve hub --resolution/);
+  ok(['wait', 'shop', 'resolve', 'hub', '--resolution', 'Agreed in chat: 8006']);
+  const w = show().waiting.find((x) => x.id === 'hub');
+  assert.equal(w.status, 'closed');
+  assert.equal(w.resolution, 'Agreed in chat: 8006');
+});

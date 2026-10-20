@@ -133,7 +133,8 @@ export function transitionWaiting(item, action, body, { by = 'cli', at = new Dat
   if (!object(body)) fail('bad-waiting', 'waiting action body must be an object');
   if (action === 'submit') return recordAnswer(item, body, answerFor, at, by);
   if (action === 'clarify') return recordAnswer(item, body, clarificationFor, at, by);
-  currentVersion(item, body.version);
+  // The agent may close on the human's word in chat, so resolve checks a version only when one is given.
+  if (action !== 'resolve' || body.version !== undefined) currentVersion(item, body.version);
   if (action === 'remove') {
     if (item.status !== 'open' || item.rounds.length || item.legacyClosure) fail('waiting-state', 'a request with answers or a previous closure cannot be removed', 409);
     return null;
@@ -141,8 +142,9 @@ export function transitionWaiting(item, action, body, { by = 'cli', at = new Dat
   const next = structuredClone(item);
   const round = next.rounds.find((entry) => entry.revision === next.revision);
   if (action === 'resolve') {
-    if (item.status !== 'answered' || !round || round.response.submissionId !== body.submissionId) fail('waiting-state', 'resolve requires the current submitted answer', 409);
     const resolution = text(body.resolution, 'resolution');
+    if (item.status === 'open') return { ...next, status: 'closed', version: randomUUID(), doneAt: at, resolution };
+    if (item.status !== 'answered' || !round || (body.submissionId !== undefined && round.response.submissionId !== body.submissionId)) fail('waiting-state', 'resolve requires an open request or the current submitted answer', 409);
     round.review = { outcome: 'accepted', at, by, text: resolution };
     return { ...next, status: 'closed', version: randomUUID(), doneAt: at, resolution, ...(round.response.checked.length ? { checked: round.response.checked.slice() } : {}) };
   }

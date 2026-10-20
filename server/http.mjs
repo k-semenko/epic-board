@@ -246,7 +246,7 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       if (m === 'POST' && parts[3] === 'waiting' && parts.length === 6) {
         const action = parts[5];
         if (action === 'done' || action === 'undo') {
-          throw new BoardError(400, 'waiting-action', `Use waiting/${parts[4]}/${action === 'done' ? 'resolve with version, submissionId and resolution after human submission' : 'revise with version and reason'}`);
+          throw new BoardError(400, 'waiting-action', `Use waiting/${parts[4]}/${action === 'done' ? 'resolve with a resolution' : 'revise with version and reason'}`);
         }
         const mutate = new Map([['submit', store.submitWaiting], ['clarify', store.clarifyWaiting], ['resolve', store.resolveWaiting], ['revise', store.reviseWaiting], ['remove', store.removeWaiting]]).get(action);
         if (mutate) {
