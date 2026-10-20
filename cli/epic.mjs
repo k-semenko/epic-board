@@ -28,14 +28,16 @@ const OPTIONS = {
   doing: { type: 'string' }, next: { type: 'string' }, agent: { type: 'string' }, branch: { type: 'string' }, why: { type: 'string' },
   json: { type: 'boolean' }, delete: { type: 'boolean' }, 'cleanup-refs': { type: 'boolean' }, out: { type: 'string' }, repo: { type: 'string' },
   group: { type: 'string' }, source: { type: 'string' }, since: { type: 'string' }, unmarked: { type: 'boolean' },
-  severity: { type: 'string' }, mark: { type: 'string' },
+  severity: { type: 'string' }, mark: { type: 'string' }, summary: { type: 'string' }, archived: { type: 'boolean' },
   'dry-run': { type: 'boolean' }, 'text-file': { type: 'string' },
 };
 
 const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value clears the field)
 
-  list                                         epics and their pages
+  list [--archived]                            live epics (or archived ones) and their pages
   new <epic> --title T [--goal G] [--url U]    create an epic (id: letters, digits, . _ -)
+  archive <epic> --summary S [--why W]         close the epic as done and move it to the archive
+  reopen <epic> [--why W]                      bring an archived epic back to work
   repo <epic> <name> --path P [--base main] [--provider gitlab|github --project host/owner/name]
   task <epic> <task> --title T [--url U] [--tracker Jira] [--status S] [--role main|side]
   task <epic> <task> --delete [--cleanup-refs]
@@ -254,7 +256,9 @@ const COMMANDS = {
     writeFileSync(out, buildExport(epic));
     return { text: out };
   },
-  list: () => ({ text: store.listEpics().map((e) => `${e.id} · ${e.title} — ${boardUrl(e.id)}`).join('\n') || 'no epics yet' }),
+  archive: ([epic], o) => store.archiveEpic(store.checkId(need(epic, 'epic id')), { summary: need(o.summary, '--summary') }, { by: 'cli', why: o.why || '' }),
+  reopen: ([epic], o) => store.reopenEpic(store.checkId(need(epic, 'epic id')), { why: o.why || '' }, { by: 'cli' }),
+  list: (_, o) => ({ text: store.listEpics().filter((e) => store.isArchived(e) === Boolean(o.archived)).map((e) => `${e.id} · ${e.title} — ${boardUrl(e.id)}`).join('\n') || 'no epics yet' }),
   doctor: async (_, o) => {
     const { selfcheck } = await import('../server/selfcheck.mjs');
     return { text: JSON.stringify(await selfcheck({ repo: o.repo }), null, 2) };

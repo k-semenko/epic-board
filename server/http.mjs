@@ -62,7 +62,9 @@ function readBody(req) {
 
 function summary(epic) {
   const stamps = Object.values(epic.facts || {}).map((f) => f.fetchedAt).filter(Boolean).sort();
-  return { id: epic.id, title: epic.title, goal: epic.goal, waiting: (epic.waiting || []).filter((w) => !w.doneAt).length, createdAt: epic.createdAt, updatedAt: epic.updatedAt, oldestFact: stamps[0] ?? null, tasks: (epic.tasks || []).length, branches: (epic.tasks || []).reduce((n, t) => n + (t.branches || []).length, 0) };
+  const archived = epic.archived ? { at: epic.archived.at, summary: epic.archived.summary } : null;
+  const openTasks = (epic.tasks || []).filter((t) => !(t.steps || []).length || t.steps.some((s) => s.state !== 'done')).length;
+  return { id: epic.id, title: epic.title, goal: epic.goal, archived, openTasks, waiting: (epic.waiting || []).filter((w) => !w.doneAt).length, createdAt: epic.createdAt, updatedAt: epic.updatedAt, oldestFact: stamps[0] ?? null, tasks: (epic.tasks || []).length, branches: (epic.tasks || []).reduce((n, t) => n + (t.branches || []).length, 0) };
 }
 
 // Loopback is not enough: DNS rebinding lets any page reach 127.0.0.1, so Host and Origin are pinned.
@@ -220,6 +222,14 @@ export function createBoardServer({ port, run = execRunner } = {}) {
         const day = new Date().toISOString().slice(0, 10);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="epic-${id}-${day}.html"`, 'Cache-Control': 'no-store' });
         return res.end(html);
+      }
+      if (m === 'POST' && tail === 'archive') {
+        const body = await readBody(req);
+        return send(res, 200, store.archiveEpic(id, { summary: body?.summary }, { by: 'ui', why: String(body?.why || '') }));
+      }
+      if (m === 'POST' && tail === 'reopen') {
+        const body = await readBody(req);
+        return send(res, 200, store.reopenEpic(id, { why: String(body?.why || '') }, { by: 'ui' }));
       }
       if (m === 'PATCH' && tail === '') {
         const body = await readBody(req);
