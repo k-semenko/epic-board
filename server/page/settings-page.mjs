@@ -9,7 +9,7 @@ function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-const GROUP_LABEL = { epic: 'settings.group.epic', feed: 'settings.group.feed' };
+const GROUP_LABEL = { epic: 'settings.group.epic', feed: 'settings.group.feed', notify: 'settings.group.notify' };
 
 let registry = [];
 let rev = 0;
@@ -66,6 +66,10 @@ function defaultLabel(entry) {
   if (entry.type === 'record') return Object.entries(value).map(([id, n]) => `${t(`sec.${id}`)} ${n}`).join(' · ');
   if (entry.type === 'duration') return durationText(value);
   if (entry.type === 'bool') return t(value ? 'settings.on' : 'settings.off');
+  if (entry.widget === 'sound') return soundLabel(value);
+  if (entry.widget === 'select') return t(`${entry.valueLabel || ''}${value}`);
+  if (entry.widget === 'range') return `${value}%`;
+  if (entry.type === 'string' && value === '') return t('settings.empty');
   if (value === null || value === undefined) return t('settings.auto');
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
@@ -100,12 +104,41 @@ function renderEnum(entry) {
   </div>`;
 }
 
+function soundLabel(id) {
+  if (id === 'none') return t('sound.none');
+  const [kind, name] = id.split(':');
+  return kind === 'board' ? t(`sound.${name}`) || name : name;
+}
+
+function renderSound(entry) {
+  const values = entry.constraints?.values || [];
+  const option = (id) => `<option value="${esc(id)}" ${draft[entry.key] === id ? 'selected' : ''}>${esc(soundLabel(id))}</option>`;
+  const group = (prefix, label) => `<optgroup label="${esc(t(label))}">${values.filter((id) => id.startsWith(prefix)).map(option).join('')}</optgroup>`;
+  return `<div class="settings-sound">
+    <select class="settings-select" data-select>${option('none')}${group('board:', 'sound.group.board')}${group('mac:', 'sound.group.mac')}</select>
+    <button type="button" class="settings-play" data-play ${draft[entry.key] === 'none' ? 'disabled' : ''} title="${esc(t('sound.play'))}" aria-label="${esc(t('sound.play'))}">${icon('play')}<span>${esc(t('sound.play'))}</span></button>
+  </div>`;
+}
+
+function renderSelect(entry) {
+  const values = entry.constraints?.values || [];
+  return `<select class="settings-select" data-select>${values.map((id) => `<option value="${esc(id)}" ${draft[entry.key] === id ? 'selected' : ''}>${esc(t(`${entry.valueLabel || ''}${id}`))}</option>`).join('')}</select>`;
+}
+
+function renderRange(entry) {
+  const { min = 0, max = 100 } = entry.constraints || {};
+  return `<label class="settings-range"><input type="range" min="${min}" max="${max}" step="5" value="${esc(draft[entry.key])}" data-range><output>${esc(draft[entry.key])}%</output></label>`;
+}
+
 function renderField(entry) {
   const changed = !same(draft[entry.key], saved[entry.key]);
   const isDefault = same(draft[entry.key], entry.default);
   let control = '';
   if (entry.type === 'order') control = renderOrder(entry);
   else if (entry.type === 'record') control = renderRecord(entry);
+  else if (entry.widget === 'sound') control = renderSound(entry);
+  else if (entry.widget === 'select') control = renderSelect(entry);
+  else if (entry.widget === 'range') control = renderRange(entry);
   else if (entry.type === 'enum') control = renderEnum(entry);
   else if (entry.type === 'bool') {
     control = `<label class="settings-toggle"><input type="checkbox" role="switch" data-bool ${draft[entry.key] ? 'checked' : ''}><span>${esc(t(draft[entry.key] ? 'settings.on' : 'settings.off'))}</span></label>`;
@@ -116,7 +149,7 @@ function renderField(entry) {
       <input type="text" class="settings-input settings-duration-input" data-duration-input data-i18n-ph="settings.durationHint" placeholder="${esc(t('settings.durationHint'))}" value="${esc(draft[entry.key] === 0 ? '0' : draft[entry.key] ?? '')}" spellcheck="false">
     </div>`;
   } else {
-    control = `<input type="text" class="settings-input" data-text value="${esc(typeof draft[entry.key] === 'string' ? draft[entry.key] : JSON.stringify(draft[entry.key]))}">`;
+    control = `<input type="text" class="settings-input" data-text${entry.placeholder ? ` placeholder="${esc(t(entry.placeholder))}"` : ''} value="${esc(typeof draft[entry.key] === 'string' ? draft[entry.key] : JSON.stringify(draft[entry.key]))}">`;
   }
   return `<section class="settings-item${changed ? ' is-changed' : ''}" data-setting="${esc(entry.key)}">
     <header class="settings-item-head">
@@ -180,7 +213,7 @@ async function save() {
   }
   if (!Object.keys(patch).length) return;
   try {
-    const state = await api('/api/settings', { method: 'PUT', body: { rev, patch } });
+    const state = await api('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rev, patch }) });
     rev = state.rev;
     saved = { ...state.values };
     draft = structuredClone(saved);
@@ -233,6 +266,11 @@ $('#settings-fields').addEventListener('click', (event) => {
     setDraft(key, moveSection(order, id, order.indexOf(id) + delta));
     return;
   }
+  if (event.target.closest('[data-play]')) {
+    void api('/api/notify/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sound: draft[key], volume: draft['feed.notify.volume'] }) })
+      .catch((error) => showError(error.message));
+    return;
+  }
   const enumBtn = event.target.closest('[data-enum]');
   if (enumBtn && entry.type === 'enum') {
     setDraft(key, enumBtn.dataset.enum === '' ? null : enumBtn.dataset.enum);
@@ -253,6 +291,14 @@ $('#settings-fields').addEventListener('change', (event) => {
   if (!entry) return;
   if (event.target.matches('[data-bool]')) {
     setDraft(key, event.target.checked);
+    return;
+  }
+  if (event.target.matches('[data-select]')) {
+    setDraft(key, event.target.value);
+    return;
+  }
+  if (event.target.matches('[data-range]')) {
+    setDraft(key, Number(event.target.value));
     return;
   }
   if (event.target.matches('[data-record-field]')) {
@@ -277,6 +323,10 @@ $('#settings-fields').addEventListener('change', (event) => {
   } catch {
     setDraft(key, event.target.value);
   }
+});
+
+$('#settings-fields').addEventListener('input', (event) => {
+  if (event.target.matches('[data-range]')) event.target.nextElementSibling.textContent = `${event.target.value}%`;
 });
 
 $('#settings-save').addEventListener('click', () => { void save(); });

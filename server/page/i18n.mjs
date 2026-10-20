@@ -66,6 +66,20 @@ const en = {
   'settings.up': 'Move {name} up', 'settings.down': 'Move {name} down',
   'settings.moved': '{name}: position {n} of {total}', 'settings.save': 'Save', 'settings.saving': 'Saving…',
   'settings.draft': 'Unsaved changes', 'settings.discard': 'Discard', 'settings.reset': 'Reset',
+  'settings.group.notify': 'Notifications', 'settings.empty': 'empty', 'settings.quietPlaceholder': '22:00-08:00',
+  'settings.key.feed.notify.enabled': 'Sound and banner for new feed items', 'settings.hint.feed.notify.enabled': 'The board service plays one sound per batch of new items, whichever connector wrote them.',
+  'settings.key.feed.notify.minLevel': 'Notify from', 'settings.hint.feed.notify.minLevel': 'Lowest level that makes a sound. A batch sounds at its most severe item.',
+  'settings.level.normal': 'Any batch', 'settings.level.important': 'Important and fire', 'settings.level.fire': 'Fire only',
+  'settings.key.feed.notify.sound.fire': 'Fire sound', 'settings.hint.feed.notify.sound.fire': 'A batch with at least one fire.',
+  'settings.key.feed.notify.sound.important': 'Important sound', 'settings.hint.feed.notify.sound.important': 'A batch with mentions or important items, no fire.',
+  'settings.key.feed.notify.sound.normal': 'Batch sound', 'settings.hint.feed.notify.sound.normal': 'Any other batch: normal items and noise.',
+  'settings.key.feed.notify.volume': 'Volume', 'settings.hint.feed.notify.volume': 'Applies to every notification sound.',
+  'settings.key.feed.notify.banner': 'System banner', 'settings.hint.feed.notify.banner': 'Also show a notification with the title of the most severe item.',
+  'settings.key.feed.notify.quietHours': 'Quiet hours', 'settings.hint.feed.notify.quietHours': 'No sound and no banner in this window, for example 22:00-08:00. Empty — never quiet.',
+  'sound.none': 'No sound', 'sound.play': 'Listen', 'sound.group.board': 'Board', 'sound.group.mac': 'macOS',
+  'sound.pop': 'Pop · quiet', 'sound.droplet': 'Droplet · quiet', 'sound.tick': 'Tick · quiet', 'sound.chime': 'Chime', 'sound.marimba': 'Marimba', 'sound.bell': 'Bell', 'sound.ping': 'Double ping',
+  'sound.alarm': 'Alarm · loud', 'sound.siren': 'Siren · loud', 'sound.klaxon': 'Klaxon · loud', 'sound.redalert': 'Red alert · loud',
+  'notify.title.fire': '🔥 Fire in the feed', 'notify.title.important': 'Important in the feed', 'notify.title.normal': 'New in the feed', 'notify.more': 'and {n} more',
   'settings.default': 'Default', 'settings.defaultValue': 'Default: {value}', 'settings.auto': 'as laid out', 'settings.on': 'On', 'settings.off': 'Off', 'settings.hourUnit': 'h', 'settings.minuteUnit': 'min', 'settings.durationHint': 'e.g. 45d, 12h', 'settings.emptyGroup': 'No settings in this group',
   'settings.conflict': 'Settings changed elsewhere. Latest values are shown; your draft is kept.',
   'settings.group.epic': 'Epic', 'settings.group.feed': 'Feed', 'settings.dayUnit': 'd',
@@ -140,6 +154,8 @@ A marked item leaves *Unseen* at once and goes to *History*; the toast lets you 
 **Filters.** Pick one source to see its profile on the right: what it has learned and the week's numbers.
 
 **Keyboard.** \`j\`/\`k\` move · \`1\`/\`2\`/\`3\` mark · \`x\` select several · \`Enter\` open the text · \`c\` comment · \`u\` undo · \`?\` help.
+
+**Sound.** The board plays one sound per batch of new items: a loud one for a fire, a noticeable one for mentions and important items, a quiet one for the rest. Sounds, volume and quiet hours are in *Settings → Notifications*.
 
 **Retention.** How long items are kept is set in *Settings → Feed*.`,
   'feed.aiInterface': `**Interface for agents.** Only the CLI, from the plugin root:
@@ -299,6 +315,20 @@ const ru = {
   'settings.up': 'Переместить «{name}» вверх', 'settings.down': 'Переместить «{name}» вниз',
   'settings.moved': '{name}: позиция {n} из {total}', 'settings.save': 'Сохранить', 'settings.saving': 'Сохраняю…',
   'settings.draft': 'Есть несохранённые изменения', 'settings.discard': 'Отменить', 'settings.reset': 'Сбросить',
+  'settings.group.notify': 'Уведомления', 'settings.empty': 'пусто', 'settings.quietPlaceholder': '22:00-08:00',
+  'settings.key.feed.notify.enabled': 'Звук и баннер на новые пункты ленты', 'settings.hint.feed.notify.enabled': 'Сервис доски играет один звук на пачку новых пунктов, от какого бы коннектора они ни пришли.',
+  'settings.key.feed.notify.minLevel': 'Звенеть начиная с', 'settings.hint.feed.notify.minLevel': 'Самый низкий уровень, при котором будет звук. Пачка звучит по самому серьёзному пункту.',
+  'settings.level.normal': 'Любая пачка', 'settings.level.important': 'Важное и пожар', 'settings.level.fire': 'Только пожар',
+  'settings.key.feed.notify.sound.fire': 'Звук пожара', 'settings.hint.feed.notify.sound.fire': 'В пачке есть хотя бы один пожар.',
+  'settings.key.feed.notify.sound.important': 'Звук важного', 'settings.hint.feed.notify.sound.important': 'В пачке есть теги или важное, пожара нет.',
+  'settings.key.feed.notify.sound.normal': 'Звук пачки', 'settings.hint.feed.notify.sound.normal': 'Любая другая пачка: обычное и мусор.',
+  'settings.key.feed.notify.volume': 'Громкость', 'settings.hint.feed.notify.volume': 'Для всех звуков уведомлений.',
+  'settings.key.feed.notify.banner': 'Системный баннер', 'settings.hint.feed.notify.banner': 'Ещё и уведомление с заголовком самого серьёзного пункта.',
+  'settings.key.feed.notify.quietHours': 'Тихие часы', 'settings.hint.feed.notify.quietHours': 'В это окно ни звука, ни баннера, например 22:00-08:00. Пусто — без тихих часов.',
+  'sound.none': 'Без звука', 'sound.play': 'Послушать', 'sound.group.board': 'Доска', 'sound.group.mac': 'macOS',
+  'sound.pop': 'Поп · тихо', 'sound.droplet': 'Капля · тихо', 'sound.tick': 'Тик · тихо', 'sound.chime': 'Колокольчик', 'sound.marimba': 'Маримба', 'sound.bell': 'Колокол', 'sound.ping': 'Двойной пинг',
+  'sound.alarm': 'Тревога · громко', 'sound.siren': 'Сирена · громко', 'sound.klaxon': 'Клаксон · громко', 'sound.redalert': 'Красная тревога · громко',
+  'notify.title.fire': '🔥 Пожар в ленте', 'notify.title.important': 'Важное в ленте', 'notify.title.normal': 'Новое в ленте', 'notify.more': 'и ещё {n}',
   'settings.default': 'По умолчанию', 'settings.defaultValue': 'По умолчанию: {value}', 'settings.auto': 'как в вёрстке', 'settings.on': 'Вкл', 'settings.off': 'Выкл', 'settings.hourUnit': 'ч', 'settings.minuteUnit': 'мин', 'settings.durationHint': 'например 45d, 12h', 'settings.emptyGroup': 'В этой группе нет настроек',
   'settings.conflict': 'Настройки изменились в другом месте. Показаны новые значения, черновик сохранён.',
   'settings.group.epic': 'Эпик', 'settings.group.feed': 'Лента', 'settings.dayUnit': 'д',
@@ -373,6 +403,8 @@ const ru = {
 **Фильтры.** Если выбрать один источник, справа появится его профиль: чему он научился и цифры за неделю.
 
 **Клавиатура.** \`j\`/\`k\` — ход · \`1\`/\`2\`/\`3\` — отметка · \`x\` — выделить несколько · \`Enter\` — открыть текст · \`c\` — комментарий · \`u\` — отмена · \`?\` — справка.
+
+**Звук.** На каждую пачку новых пунктов доска играет один звук: громкий на пожар, заметный на теги и важное, тихий на остальное. Звуки, громкость и тихие часы — в «Настройки → Уведомления».
 
 **Хранение.** Сколько держать пункты — в «Настройки → Лента».`,
   'feed.aiInterface': `**Интерфейс для агентов.** Только CLI, из корня плагина:

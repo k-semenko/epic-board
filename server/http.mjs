@@ -13,6 +13,7 @@ import { readSettingsState, writeSettings, translateLegacyPatch, registryPublic 
 import * as feed from './feed.mjs';
 import { searchBoard } from './search.mjs';
 import { buildDashboard } from './dashboard.mjs';
+import { listSounds, playSound, SOUND_IDS } from './sounds.mjs';
 import { tasksForBoard } from './tasks.mjs';
 import { readBoardSnapshot, linksForEpic } from './links.mjs';
 
@@ -164,6 +165,14 @@ export function createBoardServer({ port, run = execRunner } = {}) {
         }));
       }
       if (parts[1] === 'dashboard' && m === 'GET' && parts.length === 2) return send(res, 200, buildDashboard());
+      if (parts[1] === 'notify' && parts[2] === 'sounds' && m === 'GET' && parts.length === 3) return send(res, 200, { sounds: listSounds() });
+      // Preview plays on the machine running the service, which is where real notifications sound too.
+      if (parts[1] === 'notify' && parts[2] === 'test' && m === 'POST' && parts.length === 3) {
+        const body = await readBody(req);
+        if (!SOUND_IDS.includes(body?.sound) || body.sound === 'none') throw new BoardError(400, 'bad-sound', 'unknown sound');
+        const volume = Number.isInteger(body.volume) ? body.volume : readSettingsState().values['feed.notify.volume'];
+        return send(res, 200, { played: playSound(body.sound, { volume }) });
+      }
       if (parts[1] !== 'epics') throw new BoardError(404, 'not-found', 'no such path');
       if (parts.length === 2) {
         if (m === 'GET') {

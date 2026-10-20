@@ -31,3 +31,7 @@ Agents must not mark items for the human. Read `feed profile show` before select
 ## Retention
 
 Configured under Settings → Feed (`feed.retention.*`). Prune runs on service start, hourly, on `feed prune`, and opportunistically during `feed add`.
+
+## Notifications
+
+The board service watches the feed and plays one sound per batch: items written close together, by any connector, are gathered until about ten seconds pass without changes. The most severe unseen item picks the sound (`fire`, then `important`, then anything else). Connectors must not play sounds or show banners themselves; they only set `severity`. Sounds, volume, the minimum level, the system banner and quiet hours are under Settings → Notifications (`feed.notify.*`). Regenerate the bundled sounds with `node scripts/sounds/generate.mjs`.
