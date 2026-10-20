@@ -455,6 +455,8 @@ section, .detail, [data-sid] { scroll-margin-top: 72px; }
 
 /* Export: a read-only snapshot hides every control that needs the service. */
 body.static .live-only { display: none !important; }
+/* An archived epic can still be exported; every other control that writes is gone. */
+body.archived .live-only:not(#export-link) { display: none !important; }
 body.static a.brand { cursor: default; }
 .archived-note { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--s-active); font-size: 14px; }
 .archived-note > div { flex: 1; min-width: 0; }
