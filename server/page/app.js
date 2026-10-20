@@ -854,7 +854,7 @@ function renderDocPanel(doc, extra = '') {
   }
 }
 
-async function openDoc(id, mode = EXPORT ? 'view' : 'edit') {
+async function openDoc(id, mode = epicReadOnly() ? 'view' : 'edit') {
   const request = ++docRequest;
   const r = await api(`/api/epics/${enc(current.id)}/docs/${enc(id)}`);
   if (request !== docRequest) return;
@@ -1478,7 +1478,7 @@ function captureWaitingExpansion() {
 function pageItems(block, items) {
   const data = paginate(items, sectionPages[block], pageSizes[block]);
   sectionPages[block] = data.page;
-  $(`#${block}-pagination`).innerHTML = renderPagination(block, data, pageSizes[block], { readOnly: Boolean(EXPORT), saving: savingPageSizes });
+  $(`#${block}-pagination`).innerHTML = renderPagination(block, data, pageSizes[block], { readOnly: epicReadOnly(), saving: savingPageSizes });
   return data.items;
 }
 
@@ -1499,10 +1499,10 @@ function renderWaiting(epic, revealId, revealHistory = false) {
   }
   const waiting = sortedWaiting(epic);
   root.innerHTML = pageItems('waiting', waiting).map((item) => renderWaitingCard(item, {
-    readOnly: Boolean(EXPORT),
+    readOnly: epicReadOnly(),
     expanded: waitingExpansion.get(`w-${item.id}`)?.get('card'),
     revealHistory: revealHistory && revealId === `w-${item.id}`,
-    draft: EXPORT ? undefined : item.status === 'open' ? decisionDrafts.get(item) : decisionDrafts.peek(item.id),
+    draft: epicReadOnly() ? undefined : item.status === 'open' ? decisionDrafts.get(item) : decisionDrafts.peek(item.id),
     renderDetails: (text) => renderMd(text).html,
     refChip: (ref) => refChip(epic, ref),
   })).join('') || `<li class="muted">${esc(t('none.waiting'))}</li>`;
@@ -1746,6 +1746,7 @@ async function renderEpic(id) {
   }
   $('#title').innerHTML = `${esc(epic.title)}${epic.url ? ` ${external(epic.url, '')}` : ''}`;
   $('#goal').textContent = epic.goal || '';
+  renderArchiveState(epic);
   const stamps = Object.values(epic.facts || {}).map((f) => f.fetchedAt).filter(Boolean).sort();
   const plainAgo = (iso) => t('ago', { t: ago(iso) });
   const stampTip = stamps.length
@@ -1975,6 +1976,68 @@ function alertBox(message) {
   setTimeout(() => p.remove(), 8000);
 }
 
+// An archived epic reads like an export: every control that writes is off, except bringing it back.
+function epicReadOnly() {
+  return Boolean(EXPORT) || Boolean(current?.archived);
+}
+
+function epicLeft(epic) {
+  const tasks = (epic.tasks || []).filter((task) => !(task.steps || []).length || task.steps.some((step) => step.state !== 'done')).length;
+  const waiting = (epic.waiting || []).filter((item) => !item.doneAt && item.status !== 'closed').length;
+  return { tasks, waiting };
+}
+
+function archivedNoteHtml(epic) {
+  const date = new Date(epic.archived.at).toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' });
+  const back = EXPORT ? '' : `<button id="reopen-epic" type="button">${esc(t('archive.reopen'))}</button>`;
+  return `${icon('check')}<div><strong>${esc(t('archive.note', { date }))}</strong><p>${esc(epic.archived.summary)}</p></div>${back}`;
+}
+
+function archiveDialogHtml(epic) {
+  const left = epicLeft(epic);
+  return `<h2>${esc(t('archive.title'))}</h2>
+    <label class="archive-field"><span>${esc(t('archive.summary'))}</span><textarea id="archive-summary" rows="3" required placeholder="${esc(t('archive.summaryHint'))}"></textarea></label>
+    <p class="muted">${esc(t('archive.left', left))}</p>
+    <div class="modal-foot"><button type="button" data-archive-close>${esc(t('archive.cancel'))}</button><button type="button" class="primary" data-archive-confirm disabled>${esc(t('archive.confirm'))}</button></div>`;
+}
+
+function openArchiveDialog(id) {
+  let dlg = $('#archive-dialog');
+  if (!dlg) {
+    dlg = Object.assign(document.createElement('dialog'), { id: 'archive-dialog', className: 'board-dialog' });
+    dlg.innerHTML = '<div class="modal archive-modal"></div>';
+    document.body.append(dlg);
+    dlg.addEventListener('input', () => { dlg.querySelector('[data-archive-confirm]').disabled = !dlg.querySelector('#archive-summary').value.trim(); });
+    dlg.addEventListener('click', async (event) => {
+      if (event.target === dlg || event.target.closest('[data-archive-close]')) { dlg.close(); return; }
+      const confirm = event.target.closest('[data-archive-confirm]');
+      if (!confirm) return;
+      confirm.disabled = true;
+      try {
+        await api(`/api/epics/${enc(id)}/archive`, { method: 'POST', body: { summary: dlg.querySelector('#archive-summary').value.trim() } });
+        dlg.close();
+        await renderEpic(id);
+      } catch (error) {
+        confirm.disabled = false;
+        alertBox(error.message);
+      }
+    });
+  }
+  dlg.querySelector('.modal').innerHTML = archiveDialogHtml(current);
+  dlg.showModal();
+  dlg.querySelector('#archive-summary').focus();
+}
+
+function renderArchiveState(epic) {
+  document.body.classList.toggle('static', epicReadOnly());
+  const button = $('#archive-epic');
+  if (button) button.hidden = Boolean(epic.archived);
+  const note = $('#archived-note');
+  if (!note) return;
+  note.hidden = !epic.archived;
+  note.innerHTML = epic.archived ? archivedNoteHtml(epic) : '';
+}
+
 function markExport() {
   document.body.classList.add('static');
   const note = $('#export-note');
@@ -2024,6 +2087,16 @@ async function bootEpic() {
   if (EXPORT) bindSearch();
   bindDocs();
   if (!EXPORT) bindDecisionForms(id);
+  if (!EXPORT) {
+    $('#archive-epic')?.addEventListener('click', () => openArchiveDialog(id));
+    $('#archived-note')?.addEventListener('click', async (event) => {
+      if (!event.target.closest('#reopen-epic')) return;
+      try {
+        await api(`/api/epics/${enc(id)}/reopen`, { method: 'POST', body: {} });
+        await renderEpic(id);
+      } catch (error) { alertBox(error.message); }
+    });
+  }
   const sectionSettings = bindSectionSettings({ api, onError: alertBox, onSettings: applyPageSettings, readOnly: Boolean(EXPORT) });
   if (sectionSettings.save) saveSettings = sectionSettings.save;
   bindPagination(sectionSettings.save);

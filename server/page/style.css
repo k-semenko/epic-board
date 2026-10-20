@@ -456,6 +456,11 @@ section, .detail, [data-sid] { scroll-margin-top: 72px; }
 /* Export: a read-only snapshot hides every control that needs the service. */
 body.static .live-only { display: none !important; }
 body.static a.brand { cursor: default; }
+.archived-note { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--s-active); font-size: 14px; }
+.archived-note > div { flex: 1; min-width: 0; }
+.archived-note p { margin: 4px 0 0; white-space: pre-wrap; }
+.archive-field { display: grid; gap: 4px; font-size: 13px; }
+.archive-field textarea { font: 14px var(--sans); color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; resize: vertical; }
 .export-note { display: flex; align-items: center; margin: 0; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--s-active); font-size: 14px; }
 a.button { display: inline-flex; align-items: center; font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); }
 a.button:hover { border-color: var(--accent); text-decoration: none; }
