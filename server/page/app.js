@@ -123,6 +123,29 @@ let savingPin = false;
 let indexLinksState = null;
 let indexPolling = false;
 let indexSort = 'created';
+let indexArchive = false;
+
+function bindIndexArchive() {
+  const params = typeof URLSearchParams === 'function' ? new URLSearchParams(location.search || '') : null;
+  indexArchive = params?.get('archive') === '1';
+  $('#epic-archive')?.addEventListener('click', () => {
+    indexArchive = !indexArchive;
+    const next = new URLSearchParams(location.search || '');
+    if (indexArchive) next.set('archive', '1');
+    else next.delete('archive');
+    const query = next.toString();
+    history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash || ''}`);
+    renderEpicList();
+  });
+}
+
+function renderArchiveButton(count) {
+  const button = $('#epic-archive');
+  if (!button) return;
+  button.hidden = !count;
+  button.textContent = t('index.archive', { n: count });
+  button.setAttribute('aria-pressed', String(indexArchive));
+}
 
 function bindIndexSort() {
   const select = $('#epic-sort');
@@ -160,19 +183,25 @@ function renderEpicList() {
     replaceEpicCards(`<p class="muted">${esc(t('links.indexUnavailable'))}</p>`);
     return;
   }
+  const archivedCount = allEpics.filter((e) => e.archived).length;
+  // A stale ?archive=1 with nothing archived falls back to the live list.
+  const archiveView = indexArchive && archivedCount > 0;
+  renderArchiveButton(archivedCount);
+  const shown = allEpics.filter((e) => Boolean(e.archived) === archiveView);
   const q = ($('#q')?.value || '').trim().toLowerCase();
-  const found = allEpics.filter((e) => !q || [e.id, e.title, e.goal].some((v) => String(v ?? '').toLowerCase().includes(q)));
+  const found = shown.filter((e) => !q || [e.id, e.title, e.goal, e.archived?.summary].some((v) => String(v ?? '').toLowerCase().includes(q)));
   if (!found.length) {
-    replaceEpicCards(`<p class="muted">${allEpics.length ? esc(t('index.none')) : t('index.empty')}</p>`);
+    replaceEpicCards(`<p class="muted">${shown.length ? esc(t('index.none')) : allEpics.length ? esc(t('index.allArchived')) : t('index.empty')}</p>`);
     return;
   }
-  const dateField = indexSort === 'updated' ? 'updatedAt' : 'createdAt';
-  const sorted = [...found].sort((a, b) => String(b[dateField] || '').localeCompare(String(a[dateField] || '')));
-  const pinned = sorted.filter((e) => pinnedEpics.has(e.id));
+  const dateOf = (e) => (archiveView && indexSort === 'updated' ? e.archived.at : e[indexSort === 'updated' ? 'updatedAt' : 'createdAt']);
+  const sorted = [...found].sort((a, b) => String(dateOf(b) || '').localeCompare(String(dateOf(a) || '')));
+  const isPinned = (e) => !archiveView && pinnedEpics.has(e.id);
+  const pinned = sorted.filter(isPinned);
   const groups = new Map();
   for (const e of sorted) {
-    if (pinnedEpics.has(e.id)) continue;
-    const label = dayLabel(e[dateField]);
+    if (isPinned(e)) continue;
+    const label = dayLabel(dateOf(e));
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(e);
   }
@@ -187,7 +216,7 @@ function epicCard(e) {
   const waiting = e.waiting
     ? `<span class="warn">${icon('clock')}${esc(t('index.waiting', { n: e.waiting }))}</span>`
     : `<span class="muted">${icon('check')}${esc(t('index.nothing'))}</span>`;
-  return `<li data-epic-card="${esc(e.id)}"><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong><span class="muted">${esc(e.goal)}</span><span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a>${renderRelatedEpics(e.relatedEpics, { incomplete: e.incomplete })}<button type="button" class="icon-btn epic-pin" data-pin="${esc(e.id)}" aria-pressed="${pinned}" aria-label="${pinLabel}" title="${pinLabel}"${savingPin ? ' disabled' : ''}>${icon('pin')}</button></li>`;
+  return `<li data-epic-card="${esc(e.id)}"><a href="/e/${enc(e.id)}" class="epic-link"><strong><span class="mono muted">${esc(e.id)}</span> · ${esc(e.title)}</strong>${e.archived ? `<span class="muted">${esc(t('index.archivedOn', { date: new Date(e.archived.at).toLocaleDateString(locale(), { day: 'numeric', month: 'long' }) }))} · ${esc(e.archived.summary)}</span>` : `<span class="muted">${esc(e.goal)}</span>`}<span class="meta">${waiting}<span class="muted">${icon('list')}${esc(t('index.tasks', { n: e.tasks ?? 0 }))}</span><span class="muted">${icon('branch')}${esc(t('index.branches', { n: e.branches ?? 0 }))}</span><span class="muted">${icon('refresh')}${phrase('index.updated', { t: agoText(e.updatedAt) })}</span></span></a>${renderRelatedEpics(e.relatedEpics, { incomplete: e.incomplete })}<button type="button" class="icon-btn epic-pin" data-pin="${esc(e.id)}" aria-pressed="${pinned}" aria-label="${pinLabel}" title="${pinLabel}"${savingPin ? ' disabled' : ''}>${icon('pin')}</button></li>`;
 }
 
 function renderIndexContent() {
@@ -2068,6 +2097,7 @@ async function bootIndex() {
   bindShell({ search: !EXPORT });
   document.addEventListener('epic-board:lang', renderIndexContent);
   bindIndexSort();
+  bindIndexArchive();
   $('#q')?.addEventListener('input', renderEpicList);
   bindEpicPins();
   await renderIndex();
