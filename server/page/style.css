@@ -784,7 +784,18 @@ html:has(dialog[open]) { overflow: hidden; }
 .feed-toast [data-undo] { display: inline-flex; align-items: center; gap: 6px; }
 .feed-toast [data-undo] svg.i { width: 14px; height: 14px; margin: 0; }
 .feed-new { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; background: var(--chip); }
-.feed-empty { color: var(--muted); }
+.feed-empty { display: grid; justify-items: center; gap: 10px; max-width: 460px; margin: 48px auto; padding: 32px 28px; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.feed-empty h2 { margin: 0; font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.feed-empty p { margin: 0; font-size: 13.5px; line-height: 1.5; }
+.feed-empty-icon { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.feed-empty-icon svg.i { width: 22px; height: 22px; margin: 0; stroke-width: 1.6; }
+.feed-empty-stats { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.feed-empty-stat { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: var(--chip); font-size: 12.5px; color: var(--muted); }
+.feed-empty-stat b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.feed-empty-stat svg.i { width: 13px; height: 13px; margin: 0; }
+.feed-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 6px; }
+.feed-empty-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.feed-empty-actions svg.i { width: 14px; height: 14px; margin: 0; }
 .feed-head-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .feed-head-tools .view-nav { margin-top: 0; height: 36px; box-sizing: border-box; }
 #feed-how-open { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; box-sizing: border-box; padding: 0 14px; border-radius: 8px; font-size: 13px; }

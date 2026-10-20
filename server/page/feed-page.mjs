@@ -202,12 +202,37 @@ function closeItem() {
   if (dlg.open) dlg.close();
 }
 
+// Three different empties: nothing ever arrived, filters hide everything, or everything is triaged.
+function emptyHtml() {
+  const card = (iconName, title, text, actions) => `<div class="feed-empty">
+    <span class="feed-empty-icon">${icon(iconName)}</span>
+    <h2>${esc(title)}</h2>
+    ${text ? `<p class="muted">${text}</p>` : ''}
+    <div class="feed-empty-actions">${actions}</div>
+  </div>`;
+  const howBtn = (cls = '') => `<button type="button" class="${cls}" data-open-how>${icon('info')}<span>${esc(t('feed.how'))}</span></button>`;
+  if (!items.length) {
+    return card('inbox', t('feed.emptyNone'), esc(t('feed.emptyNoneText')), `<button type="button" class="primary" data-open-how-ai>${esc(t('feed.howAi'))}</button>${howBtn()}`);
+  }
+  if (filters.source || filters.severity || (tab === 'history' && filters.mark)) {
+    return card('search', t('feed.emptyFiltered'), '', `<button type="button" class="primary" data-clear-filters>${esc(t('feed.clearFilters'))}</button>`);
+  }
+  if (tab === 'history') return card('undo', t('feed.emptyHistory'), esc(t('feed.emptyHistoryText')), '');
+  const today = new Date().toDateString();
+  const marked = items.filter((item) => item.mark?.at && new Date(item.mark.at).toDateString() === today);
+  const count = (value) => marked.filter((item) => item.mark.value === value).length;
+  const stats = MARKS.map((m) => `<span class="feed-empty-stat">${icon(m.icon)}${esc(t(m.label))} <b>${count(m.value)}</b></span>`).join('');
+  const last = items.reduce((max, item) => (String(item.updatedAt) > max ? String(item.updatedAt) : max), '');
+  return card('check', t('feed.empty'), `${esc(t('feed.emptyToday'))}</p><div class="feed-empty-stats">${stats}</div><p class="muted">${esc(t('feed.emptyLast', { ago: ago(last) }))}`,
+    `<button type="button" data-show-history>${esc(t('feed.openHistory'))}</button>${howBtn()}`);
+}
+
 function renderList() {
   const list = visible();
   const root = $('#feed-list');
   if (!list.length) {
-    const noiseToday = items.filter((item) => item.mark?.value === 'noise' && item.mark.at?.slice(0, 10) === new Date().toISOString().slice(0, 10)).length;
-    root.innerHTML = `<p class="feed-empty">${esc(t('feed.empty'))}<br><span class="muted">${esc(t('feed.emptyNoise', { n: noiseToday }))}</span><br><button type="button" data-open-how>${esc(t('feed.how'))}</button></p>`;
+    root.innerHTML = emptyHtml();
+    void renderProfile();
     return;
   }
   let html = '';
@@ -498,6 +523,14 @@ function showHowTab(name) {
 $('#feed-how-open').addEventListener('click', openHow);
 $('#feed-list').addEventListener('click', (event) => {
   if (event.target.closest('[data-open-how]')) openHow();
+  if (event.target.closest('[data-open-how-ai]')) { openHow(); showHowTab('ai'); }
+  if (event.target.closest('[data-clear-filters]')) {
+    filters = { source: '', severity: '', mark: '' };
+    focus = 0;
+    renderFilters();
+    renderList();
+  }
+  if (event.target.closest('[data-show-history]')) document.querySelector('[data-tab="history"]')?.click();
 });
 $('#feed-how').addEventListener('click', (event) => {
   if (event.target.closest('[data-how-close]')) $('#feed-how').close();
