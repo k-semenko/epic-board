@@ -167,10 +167,9 @@ function rowHtml(item, index) {
     <header class="feed-card-head">${headHtml(item)}</header>
     <h3 class="feed-title">${esc(item.title)}</h3>
     ${body ? `<div class="feed-preview markdown${isLong(body) ? ' is-clamped' : ''}">${renderMarkdown(body).html}</div>` : ''}
-    ${body && isLong(body) ? `<span class="feed-readmore">${esc(t('feed.readMore'))}</span>` : ''}
     <div class="feed-comment" hidden><input type="text" data-i18n-ph="feed.why" placeholder="${esc(t('feed.why'))}"></div>
     <footer class="feed-card-foot">
-      <div class="feed-refs">${tab === 'history' ? markNote(item) : ''}${refChips(item)}</div>
+      <div class="feed-refs">${body && isLong(body) ? `<span class="feed-readmore">${esc(t('feed.readMore'))}</span>` : ''}${tab === 'history' ? markNote(item) : ''}${refChips(item)}</div>
       <div class="feed-actions">${actionsHtml(item)}</div>
     </footer>
   </li>`;
