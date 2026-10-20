@@ -33,6 +33,7 @@ export function waitingAnswer(item) {
 // Hook output after compaction: short enough to read in one glance, never more than 25 lines.
 export function buildBrief(epic, { session, now = Date.now() } = {}) {
   const lines = [`Epic ${epic.id} · ${epic.title} — ${boardUrl(epic.id)}`];
+  if (epic.archived) lines.unshift(`Epic archived: ${epic.archived.summary}. Run epic.mjs reopen ${epic.id} to continue.`);
   if (epic.goal) lines.push(`Goal: ${epic.goal}`);
   const active = [];
   for (const t of epic.tasks || []) for (const s of t.steps || []) if (s.state === 'active') active.push(`▶ ${t.id}/${s.id} ${s.title}`);

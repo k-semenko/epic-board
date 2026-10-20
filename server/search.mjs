@@ -205,7 +205,7 @@ function indexEpicFile(file) {
       });
     }
   }
-  return entries;
+  return epic.archived ? entries.map((entry) => ({ ...entry, archived: true })) : entries;
 }
 
 function refreshParts() {
@@ -276,7 +276,7 @@ export function searchBoard(q, { scope = 'all', limit = 40, lang = 'en' } = {}) 
       break;
     }
   }
-  hits.sort((a, b) => b.score - a.score || String(b.at || '').localeCompare(String(a.at || '')));
+  hits.sort((a, b) => Number(Boolean(a.archived)) - Number(Boolean(b.archived)) || b.score - a.score || String(b.at || '').localeCompare(String(a.at || '')));
   const groupsMap = new Map();
   for (const hit of hits.slice(0, limit * 3)) {
     if (!groupsMap.has(hit.type)) groupsMap.set(hit.type, []);

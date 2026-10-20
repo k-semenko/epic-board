@@ -1,4 +1,4 @@
-import { listEpics, readEpic } from './store.mjs';
+import { listEpics, readEpic, isArchived } from './store.mjs';
 import { feedSummary, feedSparkline, listFeedSources } from './feed.mjs';
 import { readSettings } from './settings.mjs';
 import { durationMs } from './settings-registry.mjs';
@@ -8,7 +8,7 @@ function openWaiting(epic) {
 }
 
 export function buildDashboard() {
-  const summaries = listEpics();
+  const summaries = listEpics().filter((epic) => !isArchived(epic));
   const settings = readSettings();
   const pins = new Set(settings['epic.pinned'] || []);
   let tasksInWork = 0;
@@ -95,7 +95,7 @@ const DAY = 86_400_000;
 // Every branch with a merge request across epics, with what is known about it and how fresh that knowledge is.
 export function listMergeRequests({ now = Date.now() } = {}) {
   const out = [];
-  for (const summary of listEpics()) {
+  for (const summary of listEpics().filter((epic) => !isArchived(epic))) {
     let epic;
     try { epic = readEpic(summary.id); } catch { continue; }
     for (const task of epic.tasks || []) {
