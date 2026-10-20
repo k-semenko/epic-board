@@ -2029,7 +2029,7 @@ function openArchiveDialog(id) {
 }
 
 function renderArchiveState(epic) {
-  document.body.classList.toggle('static', epicReadOnly());
+  if (!EXPORT) document.body.classList.toggle('archived', Boolean(epic.archived));
   const button = $('#archive-epic');
   if (button) button.hidden = Boolean(epic.archived);
   const note = $('#archived-note');

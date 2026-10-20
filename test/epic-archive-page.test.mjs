@@ -5,7 +5,7 @@ import { bundleScript } from '../server/export.mjs';
 
 function epicPage({ exported = false } = {}) {
   const document = {
-    body: { classList: { add() {}, toggle() {} } },
+    body: { classes: new Set(), classList: { add(c) { document.body.classes.add(c); }, toggle(c, on) { if (on) document.body.classes.add(c); else document.body.classes.delete(c); } } },
     documentElement: {},
     addEventListener() {},
     createElement() { return { remove() {} }; },
@@ -17,7 +17,7 @@ function epicPage({ exported = false } = {}) {
   const bootstrap = bundle.lastIndexOf('\nif (EXPORT || location.pathname');
   assert.ok(bootstrap > 0);
   const script = `${bundle.slice(0, bootstrap)}
-    globalThis.page = { archivedNoteHtml, archiveDialogHtml, epicReadOnly, setCurrent(epic) { current = epic; } };
+    globalThis.page = { archivedNoteHtml, archiveDialogHtml, epicReadOnly, renderArchiveState, setCurrent(epic) { current = epic; }, bodyClasses: () => [...document.body.classes] };
   })();`;
   const context = vm.createContext({
     document,
@@ -61,4 +61,17 @@ test('an exported archived epic keeps the note but not the reopen button', () =>
   const note = page.archivedNoteHtml(archived);
   assert.match(note, /Delivered/);
   assert.doesNotMatch(note, /reopen-epic/);
+});
+
+test('an archived epic hides write controls but keeps export available', async () => {
+  const page = epicPage();
+  page.setCurrent(archived);
+  page.renderArchiveState(archived);
+  assert.deepEqual(Array.from(page.bodyClasses()), ['archived']);
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../server/page/style.css', import.meta.url), 'utf8');
+  assert.match(css, /body\.archived \.live-only:not\(#export-link\)\s*\{\s*display: none !important;/);
+  page.setCurrent(epic);
+  page.renderArchiveState(epic);
+  assert.deepEqual(Array.from(page.bodyClasses()), []);
 });

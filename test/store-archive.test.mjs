@@ -1,6 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { tmpHome } from './helpers.mjs';
 
 const home = tmpHome();
@@ -74,4 +75,26 @@ test('summary must be a non-empty string', () => {
   make('f');
   for (const summary of ['', '   ', undefined]) assert.throws(() => store.archiveEpic('f', { summary }), { status: 400 });
   assert.equal(store.readEpic('f').archived, undefined);
+});
+
+test('documents cannot be added to an archived epic, and nothing is left on disk', () => {
+  make('g');
+  store.archiveEpic('g', { summary: 'Done' });
+  const before = readdirSync(join(home, 'epics')).length;
+  const refused = { status: 409, code: 'epic-archived' };
+  assert.throws(() => docs.newDoc('g', { kind: 'note', title: 'Late' }), refused);
+  assert.throws(() => docs.importDoc('g', { kind: 'note', title: 'Late', path: '/nonexistent.md' }), refused);
+  assert.throws(() => docs.linkDoc('g', { kind: 'note', title: 'Late', path: '/nonexistent.md' }), refused);
+  assert.equal(readdirSync(join(home, 'epics')).length, before);
+  assert.deepEqual(readdirSync(join(home, 'epics')).filter((name) => name === 'g'), []);
+});
+
+test('refreshing an archived epic is refused before any git or forge call', async () => {
+  make('h');
+  store.patchEpic('h', { repos: { app: { path: process.cwd(), base: 'main' } }, tasks: [{ id: 'T1', branches: [{ repo: 'app', name: 'dev' }] }] });
+  store.archiveEpic('h', { summary: 'Done' });
+  const { refreshEpic } = await import('../server/refresh.mjs');
+  const calls = [];
+  await assert.rejects(refreshEpic('h', { run: async (...args) => { calls.push(args); return { code: 0, stdout: '', stderr: '' }; } }), { code: 'epic-archived' });
+  assert.deepEqual(calls, []);
 });
