@@ -89,3 +89,39 @@ export function buildDashboard() {
     },
   };
 }
+
+const DAY = 86_400_000;
+
+// Every branch with a merge request across epics, with what is known about it and how fresh that knowledge is.
+export function listMergeRequests({ now = Date.now() } = {}) {
+  const out = [];
+  for (const summary of listEpics()) {
+    let epic;
+    try { epic = readEpic(summary.id); } catch { continue; }
+    for (const task of epic.tasks || []) {
+      for (const branch of task.branches || []) {
+        if (!branch.mr) continue;
+        const fact = epic.facts?.[`${branch.repo}:${branch.name}`] || null;
+        const mr = fact?.mr || null;
+        const checkedAt = mr?.fetchedAt || fact?.fetchedAt || null;
+        const state = mr?.state ? (mr.draft && mr.state === 'opened' ? 'draft' : mr.state) : 'unchecked';
+        const problems = [];
+        if (mr?.pipeline === 'failed') problems.push('pipeline');
+        if (mr?.shaMatchesHead === false && state !== 'merged' && state !== 'closed') problems.push('sha');
+        if (typeof fact?.unpushed === 'number' && fact.unpushed > 0) problems.push('unpushed');
+        if (fact?.branchMissing && state !== 'merged') problems.push('missing');
+        if (mr?.error || fact?.error) problems.push('error');
+        if (!checkedAt || now - Date.parse(checkedAt) > DAY) problems.push('stale');
+        out.push({
+          epic: epic.id, epicTitle: epic.title, task: task.id, taskTitle: task.title,
+          repo: branch.repo, branch: branch.name, base: epic.repos?.[branch.repo]?.base || null,
+          iid: branch.mr.iid ?? null, url: mr?.url || null, state, pipeline: mr?.pipeline || null,
+          behind: fact?.behind ?? null, ahead: fact?.ahead ?? null, unpushed: fact?.unpushed ?? null,
+          subject: fact?.subject || null, checkedAt, error: mr?.error || fact?.error || null, problems,
+        });
+      }
+    }
+  }
+  const rank = { opened: 0, draft: 1, unchecked: 2, merged: 3, closed: 4 };
+  return out.sort((a, b) => (rank[a.state] ?? 5) - (rank[b.state] ?? 5) || b.problems.length - a.problems.length || String(b.checkedAt || '').localeCompare(String(a.checkedAt || '')));
+}

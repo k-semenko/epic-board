@@ -634,6 +634,46 @@ button.primary:hover { filter: brightness(1.08); }
 /* Drawn on a 16px grid; at 18px a thinner stroke keeps them as light as the rest of the header. */
 .topbar-settings svg.i, .topbar-feed svg.i { width: 18px; height: 18px; stroke-width: 1.3; }
 .topbar-feed { margin-left: auto; margin-right: -8px; }
+.status-strip { margin-top: -8px; }
+.stats button.stat { all: unset; box-sizing: border-box; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 4px; color: inherit; cursor: pointer; text-align: left; }
+.stats a.stat:hover, .stats button.stat:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+.stats button.stat:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.board-dialog { position: fixed; inset: 0; margin: auto; width: min(860px, calc(100vw - 32px)); height: fit-content; max-height: 86vh; border: 0; padding: 0; background: transparent; color: inherit; }
+.board-dialog::backdrop { background: rgba(0, 0, 0, .5); }
+.board-dialog .modal { width: 100%; max-height: 86vh; overscroll-behavior: contain; gap: 12px; }
+.board-dialog .modal-head h3 { display: inline-flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.board-dialog .modal-head h3 svg.i { width: 16px; height: 16px; margin: 0; }
+.mr-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.mr-toolbar .view-nav { margin: 0; }
+.mr-toolbar > button { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.mr-toolbar svg.i { width: 14px; height: 14px; margin: 0; }
+.mr-epic h4 { margin: 4px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--muted); }
+.mr-epic h4 a { color: inherit; }
+.mr-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
+.mr-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--mr, var(--line)); border-radius: 8px; background: var(--surface); }
+.mr-row.state-opened { --mr: var(--accent); }
+.mr-row.state-draft { --mr: var(--muted); }
+.mr-row.state-unchecked { --mr: var(--warn); }
+.mr-row.state-merged { --mr: var(--ok); opacity: .75; }
+.mr-row.state-closed { opacity: .6; }
+.mr-row.is-busy { opacity: .5; }
+.mr-main { display: grid; gap: 4px; min-width: 0; }
+.mr-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13.5px; }
+.mr-state { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--mr, var(--muted)); }
+.mr-iid { font-family: var(--mono); font-size: 12.5px; }
+.mr-task { color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
+.mr-pipe { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+.mr-pipe.pipe-success { color: var(--ok); }
+.mr-pipe.pipe-failed { color: var(--crit); }
+.mr-pipe.pipe-running, .mr-pipe.pipe-pending { color: var(--accent); }
+.mr-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mr-sub code { font-size: 11.5px; }
+.mr-problems { display: flex; flex-wrap: wrap; gap: 4px; }
+.mr-side { display: flex; align-items: center; gap: 8px; font-size: 12px; white-space: nowrap; }
+.mr-side .is-stale { color: var(--warn); }
+.mr-side svg.i { width: 14px; height: 14px; margin: 0; }
+.mr-empty { margin: 8px 0; }
+@media (max-width: 640px) { .mr-row { grid-template-columns: 1fr; } }
 .feed-pop { position: absolute; top: calc(100% + 6px); right: 12px; z-index: 40; width: min(460px, calc(100vw - 24px)); max-height: min(72vh, 680px); overflow: auto; overscroll-behavior: contain; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, .3); }
 .feed-pop-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: baseline; gap: 10px; padding: 12px 14px 10px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .feed-pop-head .muted { font-size: 12.5px; }
