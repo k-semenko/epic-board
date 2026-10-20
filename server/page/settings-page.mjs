@@ -175,7 +175,6 @@ function renderControl(entry, off) {
 
 function renderField(entry) {
   const changed = !same(draft[entry.key], saved[entry.key]);
-  const isDefault = same(draft[entry.key], entry.default);
   const off = isOff(entry);
   const wide = entry.type === 'order' || entry.type === 'record';
   const tip = `${t(entry.hint)}\n${t('settings.defaultValue', { value: defaultLabel(entry) })}`;
@@ -183,7 +182,6 @@ function renderField(entry) {
     <div class="settings-row-label">
       <span class="settings-row-title">${esc(t(entry.label))}</span>
       <span class="settings-hint" tabindex="0" role="img" aria-label="${esc(tip)}" data-tip="${esc(tip)}">?</span>
-      ${!isDefault && !off ? `<button type="button" class="icon-btn settings-reset" data-reset title="${esc(t('settings.reset'))}" aria-label="${esc(t('settings.reset'))}">${icon('undo')}</button>` : ''}
     </div>
     <div class="settings-row-control">${renderControl(entry, off)}</div>
   </section>`;
@@ -191,8 +189,10 @@ function renderField(entry) {
 
 function renderFields() {
   const entries = uiEntries().filter((entry) => entry.group === group);
+  const allDefault = entries.every((entry) => same(draft[entry.key], entry.default));
   $('#settings-fields').innerHTML = entries.length
-    ? `<div class="settings-card">${entries.map(renderField).join('')}</div>`
+    ? `<div class="settings-card">${entries.map(renderField).join('')}</div>
+      <div class="settings-card-foot"><button type="button" data-reset-group ${allDefault ? 'disabled' : ''}>${icon('undo')}<span>${esc(t('settings.resetGroup'))}</span></button></div>`
     : `<p class="muted">${esc(t('settings.emptyGroup'))}</p>`;
   fillChrome($('#settings-fields'));
   renderDraftBar();
@@ -277,15 +277,21 @@ $('#settings-groups').addEventListener('click', (event) => {
 });
 
 $('#settings-fields').addEventListener('click', (event) => {
+  // One reset per group: it fills the draft with defaults, and Save or Discard decides.
+  if (event.target.closest('[data-reset-group]')) {
+    const entries = uiEntries().filter((entry) => entry.group === group);
+    if (!confirm(t('settings.resetGroupConfirm', { group: t(GROUP_LABEL[group] || group) }))) return;
+    draft = { ...draft, ...Object.fromEntries(entries.map((entry) => [entry.key, structuredClone(entry.default)])) };
+    conflict = false;
+    showError('');
+    renderFields();
+    return;
+  }
   const item = event.target.closest('[data-setting]');
   if (!item) return;
   const key = item.dataset.setting;
   const entry = registry.find((row) => row.key === key);
   if (!entry) return;
-  if (event.target.closest('[data-reset]')) {
-    setDraft(key, structuredClone(entry.default));
-    return;
-  }
   const move = event.target.closest('[data-move]');
   if (move && entry.type === 'order') {
     const id = move.closest('[data-order-id]').dataset.orderId;

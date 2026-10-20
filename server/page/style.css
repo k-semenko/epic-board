@@ -815,6 +815,11 @@ html:has(dialog[open]) { overflow: hidden; }
 .settings-hint:hover, .settings-hint:focus-visible { color: var(--fg); border-color: var(--muted); outline: none; }
 .settings-hint::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); translate: -50% 4px; width: max-content; max-width: 300px; padding: 8px 10px; border-radius: 8px; background: var(--fg); color: var(--bg); font-size: 12.5px; font-weight: 400; line-height: 1.45; white-space: pre-line; text-align: left; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); opacity: 0; pointer-events: none; transition: opacity .12s, translate .12s; z-index: 20; }
 .settings-hint:hover::after, .settings-hint:focus-visible::after { opacity: 1; translate: -50% 0; }
+.settings-card-foot { display: flex; justify-content: flex-end; }
+.settings-card-foot button { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 6px 12px; border-radius: 8px; color: var(--muted); background: transparent; }
+.settings-card-foot button:hover:not(:disabled) { color: var(--fg); background: var(--chip); }
+.settings-card-foot button:disabled { opacity: .45; cursor: default; }
+.settings-card-foot svg.i { width: 13px; height: 13px; margin: 0; }
 .settings-reset { width: 26px; height: 26px; padding: 0; color: var(--muted); border-color: transparent; background: transparent; }
 .settings-reset:hover { color: var(--fg); background: var(--chip); }
 .settings-reset svg.i { width: 14px; height: 14px; margin: 0; }
