@@ -130,8 +130,8 @@ function stampTitle(item) {
   return lines.join('\n');
 }
 
-const LONG_BODY = 320;
-const isLong = (body) => body.length > LONG_BODY || body.split('\n').length > 5;
+const LONG_BODY = 180;
+const isLong = (body) => body.length > LONG_BODY || body.split('\n').length > 3;
 
 function headHtml(item) {
   return `<span class="feed-sev sev-${esc(item.severity)}">${esc(t(`feed.sev.${item.severity}`))}</span>
