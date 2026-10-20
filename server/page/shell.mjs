@@ -177,7 +177,11 @@ export function dashboardTiles(d) {
   }).join('');
 }
 
+// The overview pages carry the strip; epic and settings pages keep their space for their own content.
+const STRIP_PAGES = ['/', '/tasks', '/feed'];
+
 export function bindStatusStrip({ pollMs = 8000 } = {}) {
+  if (!STRIP_PAGES.includes(location.pathname)) return;
   const main = document.querySelector('main.wrap');
   if (!main || !main.prepend || document.querySelector('#status-strip')) return;
   const strip = Object.assign(document.createElement('section'), { id: 'status-strip', className: 'stats dash status-strip' });
