@@ -22,7 +22,7 @@ function harness({ settings = {}, items = [] } = {}) {
     readItems: () => state.items,
     settings: () => ({ ...base, ...settings }),
     play: (id, opts) => state.played.push([id, opts.volume]),
-    banner: (title, body) => state.banners.push([title, body]),
+    banner: (title, body, opts) => state.banners.push([title, body, opts?.url]),
     now: () => state.clock,
     quietMs: 10,
     lang: 'en',
@@ -106,4 +106,21 @@ test('every board sound ships and players get the right arguments', () => {
   assert.equal(playSound('board:pop', { volume: 0, platform: 'darwin', spawnFn }), false);
   assert.equal(playSound('nope', { platform: 'darwin', spawnFn }), false);
   assert.deepEqual(calls[0].slice(0, 3), ['afplay', '-v', '0.50']);
+});
+
+test('the banner links to the most severe item and terminal-notifier is preferred when present', async () => {
+  const h = harness();
+  h.n.tick();
+  h.write([item('a', 'normal'), item('b', 'fire')]);
+  h.after(1);
+  h.after(20);
+  assert.match(h.state.banners[0][2], /\/feed#b$/);
+  const { showBanner } = await import('../server/sounds.mjs');
+  const calls = [];
+  const spawnFn = (cmd, args) => { calls.push([cmd, ...args]); return { on() {}, unref() {} }; };
+  showBanner('Fire', 'Farm is down', { url: 'http://x/feed#b', platform: 'darwin', spawnFn, notifier: '/bin/tn' });
+  showBanner('Fire', 'Farm "down"', { platform: 'darwin', spawnFn, notifier: null });
+  assert.deepEqual(calls[0], ['/bin/tn', '-title', 'EpicBoard', '-subtitle', 'Fire', '-message', 'Farm is down', '-group', 'epic-board-feed', '-open', 'http://x/feed#b']);
+  assert.equal(calls[1][0], 'osascript');
+  assert.match(calls[1][2], /\\"down\\"/);
 });

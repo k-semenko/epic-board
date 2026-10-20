@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, accessSync, constants } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,7 +50,27 @@ export function playSound(id, { volume = 70, platform = process.platform, spawnF
 
 const appleString = (text) => `"${String(text).replace(/[\\"]/g, '\\$&').replace(/[\r\n]+/g, ' ')}"`;
 
-export function showBanner(title, body, { platform = process.platform, spawnFn = spawn } = {}) {
+let notifierPath;
+
+// terminal-notifier gives clickable banners that replace each other; it is optional (brew install terminal-notifier).
+export function findTerminalNotifier(env = process.env) {
+  if (notifierPath !== undefined && env === process.env) return notifierPath;
+  const dirs = [...String(env.PATH || '').split(':'), '/opt/homebrew/bin', '/usr/local/bin'].filter(Boolean);
+  let found = null;
+  for (const dir of dirs) {
+    const candidate = join(dir, 'terminal-notifier');
+    try { accessSync(candidate, constants.X_OK); found = candidate; break; } catch { /* keep looking */ }
+  }
+  if (env === process.env) notifierPath = found;
+  return found;
+}
+
+export function showBanner(title, body, { url, platform = process.platform, spawnFn = spawn, notifier = platform === 'darwin' ? findTerminalNotifier() : null } = {}) {
+  if (platform === 'darwin' && notifier) {
+    const args = ['-title', 'EpicBoard', '-subtitle', String(title), '-message', String(body), '-group', 'epic-board-feed'];
+    if (url) args.push('-open', url);
+    return run(notifier, args, spawnFn);
+  }
   if (platform === 'darwin') {
     return run('osascript', ['-e', `display notification ${appleString(body)} with title ${appleString(title)}`], spawnFn);
   }
