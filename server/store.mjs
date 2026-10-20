@@ -444,6 +444,10 @@ function pendingItem(epic, itemId) {
   return item;
 }
 
+const waitingChanges = (itemId, before, after) => [...new Set([...Object.keys(before), ...Object.keys(after)])]
+  .filter((key) => !same(before[key], after[key]))
+  .map((key) => ({ op: 'set', path: `waiting[${itemId}].${key}`, before: before[key] ?? null, after: after[key] ?? null }));
+
 function changeWaiting(id, itemId, action, body, { by = 'cli', why = '' } = {}) {
   return withLock(id, () => {
     const epic = readEpic(id);
@@ -454,7 +458,7 @@ function changeWaiting(id, itemId, action, body, { by = 'cli', why = '' } = {}) 
     if (after === before) return epic;
     const next = { ...epic, updatedAt: at, waiting: epic.waiting.flatMap((item) => item.id === itemId ? (after ? [after] : []) : [item]) };
     validateEpic(next);
-    const changes = after ? [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => !same(before[key], after[key])).map((key) => ({ op: 'set', path: `waiting[${itemId}].${key}`, before: before[key] ?? null, after: after[key] ?? null })) : [{ op: 'remove', path: `waiting[${itemId}]`, before, after: null }];
+    const changes = after ? waitingChanges(itemId, before, after) : [{ op: 'remove', path: `waiting[${itemId}]`, before, after: null }];
     saveEpic(next);
     appendHistory(id, changes.map((change) => ({ at, by, why, ...change })));
     return next;
@@ -498,7 +502,7 @@ export function archiveEpic(id, { summary } = {}, { by = 'cli', why = '' } = {})
     const waiting = (epic.waiting || []).map((item) => {
       if (item.status === 'closed' || item.doneAt) return item;
       const closed = transitionWaiting(item, 'resolve', { resolution: summary.trim() }, { by, at });
-      events.push({ at, by, why, op: 'set', path: `waiting[${item.id}].status`, before: item.status, after: closed.status });
+      events.push(...waitingChanges(item.id, item, closed).map((change) => ({ at, by, why, ...change })));
       return closed;
     });
     const archived = { at, by, summary: summary.trim() };

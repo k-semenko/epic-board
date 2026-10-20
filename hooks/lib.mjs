@@ -1,8 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { listEpics, isArchived } from '../server/store.mjs';
-
-const liveEpics = () => listEpics().filter((epic) => !isArchived(epic));
 import { dataDir } from '../server/paths.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -79,6 +77,8 @@ export function emitPreCompact(text) {
     process.stdout.write(text);
   }
 }
+
+const liveEpics = () => listEpics().filter((epic) => !isArchived(epic));
 
 // A session may be bound to several epics over its life; the freshest mark wins.
 export function findSessionEpic(sid) {
