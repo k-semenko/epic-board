@@ -42,7 +42,7 @@ h1 { overflow-wrap: anywhere; }
 .index-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* Floating label: the caption sits on the field's top border; a select always has a value, so it never drops. */
 .float-field { position: relative; display: inline-grid; }
-.float-field > span { position: absolute; left: 8px; top: 0; transform: translateY(-50%); padding: 0 4px; background: var(--surface); color: var(--muted); font-size: 11px; line-height: 1; pointer-events: none; }
+.float-field > span { position: absolute; left: 8px; top: 0; transform: translateY(-50%); padding: 0 4px; background: linear-gradient(var(--bg) 50%, var(--surface) 50%); color: var(--muted); font-size: 11px; line-height: 1; pointer-events: none; }
 .archive-toggle { font-size: 13px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
 .archive-toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--s-active); }
 .sort-control select, .tasks-filters select { width: 100%; min-width: 0; font: 13px var(--sans); color: var(--fg); background-color: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 36px 7px 10px; -webkit-appearance: none; appearance: none; background-image: var(--select-arrow); background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 12px; }
