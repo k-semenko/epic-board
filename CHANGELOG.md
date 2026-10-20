@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Settings support string patterns, select, sound, range and quiet-hours controls.
 - The settings page shows each setting as a row with its control on the right; explanations and defaults moved behind a `?` hint.
 - Notifications are off by default and start at 10% volume.
+- macOS banners use `terminal-notifier` when installed: clickable, opening the item in the feed, and replacing each other.
+- The header feed button opens a popover with unseen items, their text and marks, so triage does not leave the current page.
+- Feed cards sit in a responsive grid with two-line titles and three-line previews.
 
 ### Fixed
 

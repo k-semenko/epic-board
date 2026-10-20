@@ -74,7 +74,7 @@ const en = {
   'settings.key.feed.notify.sound.important': 'Important sound', 'settings.hint.feed.notify.sound.important': 'A batch with mentions or important items, no fire.',
   'settings.key.feed.notify.sound.normal': 'Batch sound', 'settings.hint.feed.notify.sound.normal': 'Any other batch: normal items and noise.',
   'settings.key.feed.notify.volume': 'Volume', 'settings.hint.feed.notify.volume': 'Applies to every notification sound.',
-  'settings.key.feed.notify.banner': 'System banner', 'settings.hint.feed.notify.banner': 'Also show a notification with the title of the most severe item.',
+  'settings.key.feed.notify.banner': 'System banner', 'settings.hint.feed.notify.banner': 'Also show a notification with the title of the most severe item. With terminal-notifier installed (brew install terminal-notifier) a click opens it in the feed.',
   'settings.key.feed.notify.quietHours': 'Quiet hours', 'settings.hint.feed.notify.quietHours': 'No sound and no banner in this window. It may cross midnight.',
   'sound.none': 'No sound', 'sound.play': 'Listen', 'sound.group.board': 'Board', 'sound.group.quiet': 'Quiet', 'sound.group.notable': 'Noticeable', 'sound.group.loud': 'Loud', 'sound.group.mac': 'macOS', 'settings.quiet.from': 'from', 'settings.quiet.to': 'to',
   'sound.pop': 'Pop', 'sound.droplet': 'Droplet', 'sound.tick': 'Tick', 'sound.chime': 'Chime', 'sound.marimba': 'Marimba', 'sound.bell': 'Bell', 'sound.ping': 'Double ping',
@@ -134,7 +134,7 @@ const en = {
   'feed.filter.source': 'Source', 'feed.filter.severity': 'Severity', 'feed.filter.mark': 'Mark', 'feed.filter.all': 'All',
   'feed.sev.fire': 'Fire', 'feed.sev.important': 'Important', 'feed.sev.normal': 'Normal', 'feed.sev.noise': 'Noise',
   'feed.noProfile': 'No profile yet', 'feed.helpTitle': 'Keyboard',
-  'feed.showText': 'Show text', 'feed.groupBy': 'Group by', 'feed.groupBy.source': 'Source', 'feed.groupBy.severity': 'Severity', 'feed.readMore': 'Read in full', 'feed.noBody': 'No text, only the title.', 'feed.today': 'today, {time}', 'feed.yesterday': 'yesterday, {time}', 'feed.created': 'Created {at}', 'feed.updated': 'updated {at} ({ago} ago)', 'feed.repeats': 'sent {n} times', 'feed.how': 'How to use', 'feed.howTitle': 'Using the feed', 'feed.howPeople': 'For people', 'feed.howAi': 'Giving it to AI',
+  'feed.showText': 'Show text', 'feed.pop.unseen': '{n} unseen', 'feed.pop.open': 'Open feed', 'feed.pop.more': '{n} more in the feed', 'feed.groupBy': 'Group by', 'feed.groupBy.source': 'Source', 'feed.groupBy.severity': 'Severity', 'feed.readMore': 'Read in full', 'feed.noBody': 'No text, only the title.', 'feed.today': 'today, {time}', 'feed.yesterday': 'yesterday, {time}', 'feed.created': 'Created {at}', 'feed.updated': 'updated {at} ({ago} ago)', 'feed.repeats': 'sent {n} times', 'feed.how': 'How to use', 'feed.howTitle': 'Using the feed', 'feed.howPeople': 'For people', 'feed.howAi': 'Giving it to AI',
   'feed.guide': `**What this is.** Agents and scripts drop signals here: mentions, alerts, run results. The board polls nothing by itself; every item came from a connector.
 
 **Going through it.** Each row ends with three buttons:
@@ -155,7 +155,9 @@ A marked item leaves *Unseen* at once and goes to *History*; the toast lets you 
 
 **Keyboard.** \`j\`/\`k\` move · \`1\`/\`2\`/\`3\` mark · \`x\` select several · \`Enter\` open the text · \`c\` comment · \`u\` undo · \`?\` help.
 
-**Sound.** The board plays one sound per batch of new items: a loud one for a fire, a noticeable one for mentions and important items, a quiet one for the rest. Sounds, volume and quiet hours are in *Settings → Notifications*.
+**Sound.** The board plays one sound per batch of new items: a loud one for a fire, a noticeable one for mentions and important items, a quiet one for the rest. Sounds, volume and quiet hours are in *Settings → Notifications*; notifications are off until you turn them on there.
+
+**Banners on macOS.** Install \`terminal-notifier\` (\`brew install terminal-notifier\`) and banners become clickable: a click opens the item in the feed, and a new banner replaces the previous one. Without it the board falls back to a plain system banner that cannot open anything.
 
 **Retention.** How long items are kept is set in *Settings → Feed*.`,
   'feed.aiInterface': `**Interface for agents.** Only the CLI, from the plugin root:
@@ -323,7 +325,7 @@ const ru = {
   'settings.key.feed.notify.sound.important': 'Звук важного', 'settings.hint.feed.notify.sound.important': 'В пачке есть теги или важное, пожара нет.',
   'settings.key.feed.notify.sound.normal': 'Звук пачки', 'settings.hint.feed.notify.sound.normal': 'Любая другая пачка: обычное и мусор.',
   'settings.key.feed.notify.volume': 'Громкость', 'settings.hint.feed.notify.volume': 'Для всех звуков уведомлений.',
-  'settings.key.feed.notify.banner': 'Системный баннер', 'settings.hint.feed.notify.banner': 'Ещё и уведомление с заголовком самого серьёзного пункта.',
+  'settings.key.feed.notify.banner': 'Системный баннер', 'settings.hint.feed.notify.banner': 'Ещё и уведомление с заголовком самого серьёзного пункта. С terminal-notifier (brew install terminal-notifier) клик открывает его в ленте.',
   'settings.key.feed.notify.quietHours': 'Тихие часы', 'settings.hint.feed.notify.quietHours': 'В это окно ни звука, ни баннера. Окно может переходить через полночь.',
   'sound.none': 'Без звука', 'sound.play': 'Послушать', 'sound.group.board': 'Доска', 'sound.group.quiet': 'Тихие', 'sound.group.notable': 'Заметные', 'sound.group.loud': 'Громкие', 'sound.group.mac': 'macOS', 'settings.quiet.from': 'с', 'settings.quiet.to': 'до',
   'sound.pop': 'Поп', 'sound.droplet': 'Капля', 'sound.tick': 'Тик', 'sound.chime': 'Колокольчик', 'sound.marimba': 'Маримба', 'sound.bell': 'Колокол', 'sound.ping': 'Двойной пинг',
@@ -383,7 +385,7 @@ const ru = {
   'feed.filter.source': 'Источник', 'feed.filter.severity': 'Важность', 'feed.filter.mark': 'Отметка', 'feed.filter.all': 'Все',
   'feed.sev.fire': 'Пожар', 'feed.sev.important': 'Важно', 'feed.sev.normal': 'Обычно', 'feed.sev.noise': 'Мусор',
   'feed.noProfile': 'Профиля ещё нет', 'feed.helpTitle': 'Клавиатура',
-  'feed.showText': 'Показать текст', 'feed.groupBy': 'Группировать', 'feed.groupBy.source': 'По источнику', 'feed.groupBy.severity': 'По важности', 'feed.readMore': 'Читать полностью', 'feed.noBody': 'Текста нет, только заголовок.', 'feed.today': 'сегодня, {time}', 'feed.yesterday': 'вчера, {time}', 'feed.created': 'Создано {at}', 'feed.updated': 'обновлено {at} ({ago} назад)', 'feed.repeats': 'пришло {n} раза', 'feed.how': 'Как пользоваться', 'feed.howTitle': 'Как пользоваться лентой', 'feed.howPeople': 'Для людей', 'feed.howAi': 'Как отдать AI',
+  'feed.showText': 'Показать текст', 'feed.pop.unseen': 'непросмотренных: {n}', 'feed.pop.open': 'Открыть ленту', 'feed.pop.more': 'Ещё {n} в ленте', 'feed.groupBy': 'Группировать', 'feed.groupBy.source': 'По источнику', 'feed.groupBy.severity': 'По важности', 'feed.readMore': 'Читать полностью', 'feed.noBody': 'Текста нет, только заголовок.', 'feed.today': 'сегодня, {time}', 'feed.yesterday': 'вчера, {time}', 'feed.created': 'Создано {at}', 'feed.updated': 'обновлено {at} ({ago} назад)', 'feed.repeats': 'пришло {n} раза', 'feed.how': 'Как пользоваться', 'feed.howTitle': 'Как пользоваться лентой', 'feed.howPeople': 'Для людей', 'feed.howAi': 'Как отдать AI',
   'feed.guide': `**Что это.** Сюда агенты и скрипты складывают сигналы: упоминания, алерты, итоги прогонов. Сама доска ничего не опрашивает — каждый пункт прислал какой-то коннектор.
 
 **Разбор.** В конце каждой строки три кнопки:
@@ -404,7 +406,9 @@ const ru = {
 
 **Клавиатура.** \`j\`/\`k\` — ход · \`1\`/\`2\`/\`3\` — отметка · \`x\` — выделить несколько · \`Enter\` — открыть текст · \`c\` — комментарий · \`u\` — отмена · \`?\` — справка.
 
-**Звук.** На каждую пачку новых пунктов доска играет один звук: громкий на пожар, заметный на теги и важное, тихий на остальное. Звуки, громкость и тихие часы — в «Настройки → Уведомления».
+**Звук.** На каждую пачку новых пунктов доска играет один звук: громкий на пожар, заметный на теги и важное, тихий на остальное. Звуки, громкость и тихие часы — в «Настройки → Уведомления»; пока их там не включить, уведомлений нет.
+
+**Баннеры на macOS.** Поставь \`terminal-notifier\` (\`brew install terminal-notifier\`), и баннеры станут кликабельными: клик открывает пункт в ленте, а новый баннер заменяет предыдущий. Без него доска показывает обычный системный баннер, который никуда не ведёт.
 
 **Хранение.** Сколько держать пункты — в «Настройки → Лента».`,
   'feed.aiInterface': `**Интерфейс для агентов.** Только CLI, из корня плагина:

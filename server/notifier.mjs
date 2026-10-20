@@ -2,6 +2,7 @@ import { feedRev, listFeedItems } from './feed.mjs';
 import { readSettings } from './settings.mjs';
 import { playSound, showBanner } from './sounds.mjs';
 import { DICT } from './page/i18n.mjs';
+import { boardUrl } from './paths.mjs';
 
 export const NOTIFY_LEVELS = Object.freeze(['normal', 'important', 'fire']);
 const rank = (level) => NOTIFY_LEVELS.indexOf(level);
@@ -29,7 +30,7 @@ function bannerText(level, items, lang) {
   const t = (key, vars = {}) => String(dict[key] || DICT.en[key] || key).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   const top = items.find((item) => levelOf(item) === level) || items[0];
   const more = items.length > 1 ? ` ${t('notify.more', { n: items.length - 1 })}` : '';
-  return { title: t(`notify.title.${level}`), body: `${top.title}${more}` };
+  return { title: t(`notify.title.${level}`), body: `${top.title}${more}`, id: top.id };
 }
 
 /**
@@ -62,8 +63,8 @@ export function createNotifier({
     const sound = s[`feed.notify.sound.${level}`];
     if (sound && sound !== 'none') play(sound, { volume: s['feed.notify.volume'] });
     if (s['feed.notify.banner']) {
-      const { title, body } = bannerText(level, items, lang);
-      banner(title, body);
+      const { title, body, id } = bannerText(level, items, lang);
+      banner(title, body, { url: `${boardUrl()}feed#${encodeURIComponent(id)}` });
     }
     return { level, count: items.length };
   }
