@@ -51,3 +51,7 @@ test('style.css has balanced braces and no orphan selectors', () => {
     }
   }
 });
+
+test('the floating field label style exists', () => {
+  assert.match(readFileSync(new URL('../server/page/style.css', import.meta.url), 'utf8'), /\.float-field\b/);
+});

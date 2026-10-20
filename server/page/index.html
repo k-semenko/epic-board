@@ -29,12 +29,16 @@
         <a href="/feed" data-i18n="nav.feed">Feed</a>
       </nav>
     </div>
-    <label class="sort-control"><span data-i18n="index.sort">Sort</span>
-      <select id="epic-sort">
-        <option value="created" data-i18n="index.sortCreated">Date created</option>
-        <option value="updated" data-i18n="index.sortUpdated">Last modified</option>
-      </select>
-    </label>
+    <div class="index-controls">
+      <label class="sort-control float-field">
+        <select id="epic-sort">
+          <option value="created" data-i18n="index.sortCreated">Date created</option>
+          <option value="updated" data-i18n="index.sortUpdated">Last modified</option>
+        </select>
+        <span data-i18n="index.sort">Sort</span>
+      </label>
+      <button id="epic-archive" type="button" class="archive-toggle" aria-pressed="false" hidden></button>
+    </div>
   </header>
   <div id="stats" class="stats"></div>
   <div id="epics"><p class="muted" data-i18n="loading">Loading…</p></div>
