@@ -157,7 +157,7 @@ A marked item leaves *Unseen* at once and goes to *History*; the toast lets you 
 
 **Sound.** The board plays one sound per batch of new items: a loud one for a fire, a noticeable one for mentions and important items, a quiet one for the rest. Sounds, volume and quiet hours are in *Settings → Notifications*; notifications are off until you turn them on there.
 
-**Banners on macOS.** Install `terminal-notifier` (`brew install terminal-notifier`) and banners become clickable: a click opens the item in the feed, and a new banner replaces the previous one. Without it the board falls back to a plain system banner that cannot open anything.
+**Banners on macOS.** Install \`terminal-notifier\` (\`brew install terminal-notifier\`) and banners become clickable: a click opens the item in the feed, and a new banner replaces the previous one. Without it the board falls back to a plain system banner that cannot open anything.
 
 **Retention.** How long items are kept is set in *Settings → Feed*.`,
   'feed.aiInterface': `**Interface for agents.** Only the CLI, from the plugin root:
@@ -408,7 +408,7 @@ const ru = {
 
 **Звук.** На каждую пачку новых пунктов доска играет один звук: громкий на пожар, заметный на теги и важное, тихий на остальное. Звуки, громкость и тихие часы — в «Настройки → Уведомления»; пока их там не включить, уведомлений нет.
 
-**Баннеры на macOS.** Поставь `terminal-notifier` (`brew install terminal-notifier`), и баннеры станут кликабельными: клик открывает пункт в ленте, а новый баннер заменяет предыдущий. Без него доска показывает обычный системный баннер, который никуда не ведёт.
+**Баннеры на macOS.** Поставь \`terminal-notifier\` (\`brew install terminal-notifier\`), и баннеры станут кликабельными: клик открывает пункт в ленте, а новый баннер заменяет предыдущий. Без него доска показывает обычный системный баннер, который никуда не ведёт.
 
 **Хранение.** Сколько держать пункты — в «Настройки → Лента».`,
   'feed.aiInterface': `**Интерфейс для агентов.** Только CLI, из корня плагина:
