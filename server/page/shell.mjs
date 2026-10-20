@@ -1,5 +1,6 @@
 import { icon, logo } from './icons.mjs';
 import { t, getLang, setLang, locale } from './i18n.mjs';
+import { renderMarkdown } from './markdown.mjs';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -142,6 +143,110 @@ export function bindShell({ pollMs = 8000, search = true } = {}) {
   void refreshFeedBadge();
   setInterval(() => { void refreshFeedBadge(); }, pollMs);
   if (search) bindBoardSearch();
+  bindFeedPopover();
+}
+
+// ---------- Feed popover: triage from any page without leaving it ----------
+
+const SEV_ORDER = ['fire', 'important', 'normal', 'noise'];
+const POP_LIMIT = 20;
+const POP_MARKS = [['important', 'thumbUp', 'feed.mark.important'], ['unimportant', 'thumbDown', 'feed.mark.unimportant'], ['noise', 'trash', 'feed.mark.noise']];
+
+function agoShort(iso) {
+  const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+  return m < 60 ? t('unit.min', { n: m }) : m < 1440 ? t('unit.h', { n: Math.round(m / 60) }) : t('unit.d', { n: Math.round(m / 1440) });
+}
+
+const postFeed = (action, body) => api(`/api/feed/${action}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+export function bindFeedPopover() {
+  const btn = document.querySelector('.topbar-feed');
+  // On the feed page itself the button stays a plain link.
+  if (!btn || !btn.closest || location.pathname === '/feed') return;
+  const pop = Object.assign(document.createElement('div'), { id: 'feed-pop', className: 'feed-pop', hidden: true });
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', t('nav.feed'));
+  btn.parentElement.append(pop);
+  let items = [];
+  let total = 0;
+  let undo = null;
+
+  const render = () => {
+    const list = items.slice(0, POP_LIMIT);
+    pop.innerHTML = `
+      <header class="feed-pop-head"><strong>${esc(t('nav.feed'))}</strong><span class="muted">${esc(t('feed.pop.unseen', { n: total }))}</span><a href="/feed" class="feed-pop-open">${esc(t('feed.pop.open'))}</a></header>
+      ${undo ? `<div class="feed-pop-undo">${icon('check')}<span>${esc(t('feed.toast'))}</span><button type="button" data-pop-undo>${esc(t('feed.undo'))}</button></div>` : ''}
+      ${list.length ? `<ul class="feed-pop-list">${list.map((item) => `
+        <li class="feed-pop-item sev-${esc(item.severity)}" data-pop-id="${esc(item.id)}">
+          <button type="button" class="feed-pop-main" data-pop-toggle aria-expanded="false">
+            <span class="feed-pop-title">${esc(item.title)}</span>
+            <span class="feed-pop-meta">${esc(item.channel || item.source)} · ${esc(agoShort(item.ts || item.updatedAt))}${item.count > 1 ? ` · ×${item.count}` : ''}</span>
+          </button>
+          <div class="feed-pop-acts">${POP_MARKS.map(([value, ic, label]) => `<button type="button" class="icon-btn feed-act" data-pop-mark="${value}" title="${esc(t(label))}" aria-label="${esc(t(label))}">${icon(ic)}</button>`).join('')}</div>
+          <div class="feed-pop-body markdown" hidden></div>
+        </li>`).join('')}</ul>` : `<p class="feed-pop-empty muted">${esc(t('feed.empty'))}</p>`}
+      ${total > list.length ? `<a href="/feed" class="feed-pop-more">${esc(t('feed.pop.more', { n: total - list.length }))}</a>` : ''}`;
+  };
+
+  const load = async () => {
+    const data = await api('/api/feed?unmarked=1');
+    const sorted = (data.items || []).sort((a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity) || String(b.ts || b.updatedAt).localeCompare(String(a.ts || a.updatedAt)));
+    items = sorted;
+    total = sorted.length;
+    render();
+  };
+
+  const close = () => { pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  const open = async () => {
+    pop.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    pop.innerHTML = `<p class="feed-pop-empty muted">${esc(t('loading'))}</p>`;
+    try { await load(); } catch (error) { pop.innerHTML = `<p class="feed-pop-empty crit">${esc(error.message)}</p>`; }
+  };
+  const refreshBadge = () => { feedRev = null; void refreshFeedBadge(); };
+
+  btn.setAttribute('aria-haspopup', 'dialog');
+  btn.addEventListener('click', (event) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button === 1) return;
+    event.preventDefault();
+    if (pop.hidden) void open();
+    else close();
+  });
+  pop.addEventListener('click', async (event) => {
+    const row = event.target.closest('[data-pop-id]');
+    const markBtn = event.target.closest('[data-pop-mark]');
+    if (markBtn && row) {
+      const id = row.dataset.popId;
+      await postFeed('mark', { ids: [id], value: markBtn.dataset.popMark });
+      undo = id;
+      items = items.filter((item) => item.id !== id);
+      total -= 1;
+      render();
+      refreshBadge();
+      return;
+    }
+    if (event.target.closest('[data-pop-undo]') && undo) {
+      await postFeed('unmark', { ids: [undo] });
+      undo = null;
+      await load();
+      refreshBadge();
+      return;
+    }
+    const toggle = event.target.closest('[data-pop-toggle]');
+    if (toggle && row) {
+      const item = items.find((x) => x.id === row.dataset.popId);
+      const body = row.querySelector('.feed-pop-body');
+      body.hidden = !body.hidden;
+      toggle.setAttribute('aria-expanded', String(!body.hidden));
+      if (!body.hidden) body.innerHTML = item?.body ? renderMarkdown(item.body).html : `<p class="muted">${esc(t('feed.noBody'))}</p>`;
+    }
+  });
+  document.addEventListener('click', (event) => {
+    if (!pop.hidden && !event.target.closest('#feed-pop') && !event.target.closest('.topbar-feed')) close();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !pop.hidden) { close(); btn.focus(); }
+  });
 }
 
 // The header field searches the whole board; pages may still filter their own list from the same field.
