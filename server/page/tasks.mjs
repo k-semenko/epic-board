@@ -77,6 +77,7 @@ function translate(document) {
   for (const element of document.querySelectorAll('[data-i18n]')) element.textContent = t(element.dataset.i18n);
   for (const element of document.querySelectorAll('[data-i18n-ph]')) element.placeholder = t(element.dataset.i18nPh);
   for (const element of document.querySelectorAll('[data-i18n-aria]')) element.setAttribute('aria-label', t(element.dataset.i18nAria));
+  for (const element of document.querySelectorAll('[data-i18n-title]')) element.title = t(element.dataset.i18nTitle);
 }
 
 export async function initTasksPage({ document = globalThis.document, window = globalThis.window, fetch = globalThis.fetch, interval = globalThis.setInterval } = {}) {
