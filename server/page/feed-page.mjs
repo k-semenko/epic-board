@@ -15,7 +15,9 @@ let toastTimer = 0;
 let knownIds = new Set();
 let pending = null;
 const SEVERITIES = ['fire', 'important', 'normal', 'noise'];
-let groupBy = (() => { try { return localStorage.getItem('epic-board.feedGroup') === 'severity' ? 'severity' : 'source'; } catch { return 'source'; } })(); // { id, value } waits for an optional "why?" before marking
+let groupBy = (() => { try { return localStorage.getItem('epic-board.feedGroup') === 'severity' ? 'severity' : 'source'; } catch { return 'source'; } })();
+let profileSource = '';
+let profileOpen = false;
 
 const MARKS = [
   { value: 'important', key: '1', label: 'feed.mark.important', icon: 'thumbUp' },
@@ -127,6 +129,7 @@ function stampTitle(item) {
   const lines = [t('feed.created', { at: full(item.ts) })];
   if (item.updatedAt && item.updatedAt !== item.ts) lines.push(t('feed.updated', { at: full(item.updatedAt), ago: ago(item.updatedAt) }));
   if (item.count > 1) lines.push(t('feed.repeats', { n: item.count }));
+  if (item.changedSinceMark) lines.push(t('feed.changedHint'));
   return lines.join('\n');
 }
 
@@ -134,12 +137,14 @@ const LONG_BODY = 180;
 const isLong = (body) => body.length > LONG_BODY || body.split('\n').length > 3;
 
 function headHtml(item) {
-  return `<span class="feed-sev sev-${esc(item.severity)}">${esc(t(`feed.sev.${item.severity}`))}</span>
-    <span class="feed-source">${esc(item.source)}</span>
+  const changed = item.changedSinceMark
+    ? `<span class="feed-changed" title="${esc(t('feed.changedHint'))}"><span class="sr-only">${esc(t('feed.changedHint'))}</span></span>`
+    : '';
+  return `<span class="feed-sev sev-${esc(item.severity)}"><span class="sr-only">${esc(t(`feed.sev.${item.severity}`))}</span></span>
     ${item.channel ? `<span class="feed-channel">${esc(item.channel)}</span>` : ''}
     <span class="feed-card-meta">
-      ${item.changedSinceMark ? `<span class="chip chip-warn">${esc(t('feed.changed'))}</span>` : ''}
-      ${item.count > 1 ? `<span class="chip" title="${esc(t('feed.repeats', { n: item.count }))}">×${item.count}</span>` : ''}
+      ${changed}
+      ${item.count > 1 ? `<span class="feed-count" title="${esc(t('feed.repeats', { n: item.count }))}">×${item.count}</span>` : ''}
       <time datetime="${esc(item.ts)}" title="${esc(stampTitle(item))}">${esc(stamp(item.ts))}</time>
     </span>`;
 }
@@ -169,7 +174,7 @@ function rowHtml(item, index) {
     ${body ? `<div class="feed-preview markdown${isLong(body) ? ' is-clamped' : ''}">${renderMarkdown(body).html}</div>` : ''}
     <div class="feed-comment" hidden><input type="text" data-i18n-ph="feed.why" placeholder="${esc(t('feed.why'))}"></div>
     <footer class="feed-card-foot">
-      <div class="feed-refs">${body && isLong(body) ? `<span class="feed-readmore">${esc(t('feed.readMore'))}</span>` : ''}${tab === 'history' ? markNote(item) : ''}${refChips(item)}</div>
+      <div class="feed-refs"><span class="feed-source">${esc(item.source)}</span>${tab === 'history' ? markNote(item) : ''}${refChips(item)}</div>
       <div class="feed-actions">${actionsHtml(item)}</div>
     </footer>
   </li>`;
@@ -192,7 +197,7 @@ function openItem(id) {
     ${item.refs?.length ? `<div class="feed-refs">${refChips(item)}</div>` : ''}
     ${tab === 'history' && item.mark ? `<p>${markNote(item)}</p>` : ''}
     <div class="feed-comment" hidden><input type="text" placeholder="${esc(t('feed.why'))}"></div>
-    <footer class="modal-foot feed-item-foot">${actionsHtml(item, { labels: true })}</footer>`;
+    <footer class="modal-foot feed-item-foot"><span class="feed-source">${esc(item.source)}</span><div class="feed-item-acts">${actionsHtml(item, { labels: true })}</div></footer>`;
   if (!dlg.open) dlg.showModal();
 }
 
@@ -253,22 +258,68 @@ function renderList() {
   void renderProfile();
 }
 
+function profileExcerpt(text, source) {
+  const lines = String(text || '').split('\n').map((row) => row.trim().replace(/^#{1,6}\s*/, '').replace(/^[-*]\s*/, '').replace(/\s+/g, ' ')).filter(Boolean);
+  const name = String(source || '').toLowerCase();
+  for (const line of lines) {
+    const rest = name && line.toLowerCase().startsWith(`${name}:`) ? line.slice(name.length + 1).trim() : line;
+    if (rest && rest.toLowerCase() !== name) return rest;
+  }
+  return lines[0] || '';
+}
+
+function matrixCount(matrix, severity, mark) {
+  return Number(matrix?.[`${severity}:${mark}`]) || 0;
+}
+
+function profileHtml(source, text, matrix) {
+  const body = text.trim() ? text : t('feed.noProfile');
+  const excerpt = profileExcerpt(body, source);
+  const totals = MARKS.map((mark) => {
+    const n = SEVERITIES.reduce((sum, severity) => sum + matrixCount(matrix, severity, mark.value), 0);
+    return n ? `<span class="chip">${esc(t(mark.label))} ${n}</span>` : '';
+  }).join('');
+  const pairs = SEVERITIES.flatMap((severity) => MARKS.map((mark) => {
+    const n = matrixCount(matrix, severity, mark.value);
+    return n ? `<span class="chip">${esc(t(`feed.sev.${severity}`))} · ${esc(t(mark.label))} ${n}</span>` : '';
+  })).join('');
+  const open = profileOpen;
+  return `<button type="button" class="feed-profile-bar" data-profile-toggle aria-expanded="${open}">
+      <span class="feed-profile-name">${esc(source)}</span>
+      <span class="feed-profile-excerpt">${esc(excerpt)}</span>
+      ${totals ? `<span class="feed-profile-counts">${totals}</span>` : ''}
+      <span class="feed-profile-toggle">${icon('arrowDown')}<span class="feed-profile-toggle-label">${esc(t(open ? 'feed.profileCollapse' : 'feed.profileExpand'))}</span></span>
+    </button>
+    <div class="feed-profile-body"${open ? '' : ' hidden'}>
+      <pre class="feed-profile-text">${esc(body)}</pre>
+      ${pairs ? `<div class="feed-profile-matrix">${pairs}</div>` : ''}
+    </div>`;
+}
+
 async function renderProfile() {
   const panel = $('#feed-profile');
   if (!filters.source) {
+    profileSource = '';
+    profileOpen = false;
     panel.hidden = true;
+    panel.classList.remove('is-open');
     panel.innerHTML = '';
     return;
   }
+  if (profileSource !== filters.source) {
+    profileSource = filters.source;
+    profileOpen = false;
+  }
   panel.hidden = false;
+  panel.classList.toggle('is-open', profileOpen);
   try {
     const [agg, text] = await Promise.all([
       api(`/api/feed/profile?source=${encodeURIComponent(filters.source)}`),
       api(`/api/feed/profile?source=${encodeURIComponent(filters.source)}&text=1`),
     ]);
-    panel.innerHTML = `<h3>${esc(filters.source)}</h3>
-      <pre class="feed-profile-text">${esc(text.text || t('feed.noProfile'))}</pre>
-      <table class="feed-matrix">${Object.entries(agg.matrix).filter(([, n]) => n).map(([k, n]) => `<tr><td>${esc(k)}</td><td>${n}</td></tr>`).join('')}</table>`;
+    if (filters.source !== profileSource) return;
+    panel.innerHTML = profileHtml(filters.source, text.text || '', agg.matrix || {});
+    panel.classList.toggle('is-open', profileOpen);
   } catch (error) {
     panel.innerHTML = `<p class="crit">${esc(error.message)}</p>`;
   }
@@ -387,6 +438,19 @@ $('#feed-filters').addEventListener('change', (event) => {
   filters[sel.dataset.filter] = sel.value;
   focus = 0;
   renderList();
+});
+
+$('#feed-profile').addEventListener('click', (event) => {
+  if (!event.target.closest('[data-profile-toggle]')) return;
+  profileOpen = !profileOpen;
+  const panel = $('#feed-profile');
+  panel.classList.toggle('is-open', profileOpen);
+  const body = panel.querySelector('.feed-profile-body');
+  if (body) body.hidden = !profileOpen;
+  const bar = panel.querySelector('[data-profile-toggle]');
+  if (bar) bar.setAttribute('aria-expanded', String(profileOpen));
+  const label = panel.querySelector('.feed-profile-toggle-label');
+  if (label) label.textContent = t(profileOpen ? 'feed.profileCollapse' : 'feed.profileExpand');
 });
 
 $('#feed-list').addEventListener('click', async (event) => {
