@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-21
+
+### Added
+
+- Archive and reopen an epic from the CLI and the API. The list can include archived epics, and an epic can be closed as done from its page.
+- An archived epic stays readable and exportable. Writes, documents and refresh are refused, and archiving keeps each waiting item's outcome.
+- The header links to the GitHub repository.
+
+### Changed
+
+- Archived epics leave the dashboard, tasks, hooks and the top of search. The archived page is read-only.
+- An agent can close a waiting item when the person agrees in chat, without an answer submitted on the page first.
+- Feed cards keep a long channel on one line, put the connector in the footer, and mark a change since the last mark with a dot.
+- Choosing a feed source shows its profile in a strip above the cards, so the list keeps its width and the page does not gain a horizontal scrollbar.
+
+### Fixed
+
+- The epic list's floating sort label blends into the page background.
+
 ## [0.12.0] - 2026-10-20
 
 ### Added
