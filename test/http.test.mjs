@@ -302,4 +302,19 @@ test('pages are served', async () => {
   assert.ok((await legacy.arrayBuffer()).byteLength > 32);
 });
 
+test('archive and reopen over HTTP, with the summary in the epic list', async () => {
+  await call('/api/epics', { method: 'POST', body: { id: 'arch', title: 'A' } });
+  await call('/api/epics/arch', { method: 'PATCH', body: { patch: { tasks: [{ id: 't1', title: 'T', steps: [{ id: 's1', title: 'S', state: 'done' }] }, { id: 't2', title: 'Open' }] } } });
+  assert.equal((await call('/api/epics/arch/archive', { method: 'POST', body: { summary: ' ' } })).status, 400);
+  const archived = await call('/api/epics/arch/archive', { method: 'POST', body: { summary: 'Shipped' } });
+  assert.equal(archived.status, 200);
+  assert.equal((await archived.json()).archived.by, 'ui');
+  const row = (await (await call('/api/epics')).json()).find((e) => e.id === 'arch');
+  assert.equal(row.archived.summary, 'Shipped');
+  assert.ok(row.archived.at);
+  assert.equal((await call('/api/epics/arch', { method: 'PATCH', body: { patch: { title: 'x' } } })).status, 409);
+  assert.equal((await call('/api/epics/arch/reopen', { method: 'POST', body: {} })).status, 200);
+  assert.equal((await (await call('/api/epics')).json()).find((e) => e.id === 'arch').archived, null);
+});
+
 test.after(() => server.close());

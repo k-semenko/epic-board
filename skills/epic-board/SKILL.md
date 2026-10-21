@@ -60,6 +60,7 @@ Right after the event, one command:
 | loose end noticed | `open-item <epic> <task> add "<text>"` |
 | merge order known | `merge <epic> --set '[{"id":"m1","text":"…","branch":"repo:branch"}]'` |
 | stage of work finished | `note <epic> --session <sid> --doing "…" --next "…"` |
+| the human says the epic is done | `archive <epic> --summary "<what was delivered, what was left>"`; unresolved requests close with that summary and the epic becomes read-only; `reopen <epic>` brings it back |
 
 A cross-task dependency is `--after <task>/<step>[,…] --label "<what is handed over>"`; order inside a task is sequential by itself.
 
@@ -73,7 +74,7 @@ A pending item must be actionable without reading the chat:
 - `--input confirm|single|multi` — confirmation by default, one option or several options. Choice inputs need two or more stable `--option id=text` flags. `--recommend id` marks advice without selecting for the human.
 - `--check` (repeatable) — conditions required to agree; separate from selectable options. A clarification does not check them.
 
-The human agrees on the page, or sends the item back with a comment and no checklist. Either way it becomes `answered` and stays unresolved. A response with `clarification: true` is not an agreement. Review answers only when the user asks in chat (“Check agreed decisions”, `$epic-board:review-answers` in Codex, `/review-answers`, `/epic-board:review-answers`), never on your own from a hook or a page submission; then follow `reference/waiting.md`. Never invent a human answer to close a request.
+The human agrees on the page, or sends the item back with a comment and no checklist. Either way it becomes `answered` and stays unresolved. A response with `clarification: true` is not an agreement. Review answers only when the user asks in chat (“Check agreed decisions”, `$epic-board:review-answers` in Codex, `/review-answers`, `/epic-board:review-answers`), never on your own from a hook or a page submission; then follow `reference/waiting.md`. When the human tells you in chat to close an item (open or answered), close it yourself: `wait <epic> resolve <id> --resolution "<concrete outcome>"`. Never close one on your own judgement, and never record a human answer with `wait submit` to get there.
 
 ## Do not write
 

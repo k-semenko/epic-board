@@ -1,12 +1,12 @@
 import { execRunner } from './refresh.mjs';
-import { listEpics } from './store.mjs';
+import { listEpics, isArchived } from './store.mjs';
 import { dataDir } from './paths.mjs';
 import { VERSION } from './version.mjs';
 
 const CLI = { gitlab: 'glab', github: 'gh' };
 
 // Runs inside the service, so it shows exactly what PATH and credentials the service really has.
-export async function selfcheck({ run = execRunner, repo, epics = listEpics() } = {}) {
+export async function selfcheck({ run = execRunner, repo, epics = listEpics().filter((epic) => !isArchived(epic)) } = {}) {
   const which = async (bin) => {
     const r = await run('/usr/bin/which', [bin]);
     return r.code === 0 ? r.stdout.trim() : null;

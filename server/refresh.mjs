@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { readEpic, writeFacts } from './store.mjs';
+import { readEpic, writeFacts, assertLive } from './store.mjs';
 import { BoardError } from './errors.mjs';
 import { branchLine } from './brief.mjs';
 import { stripProxy } from './paths.mjs';
@@ -154,6 +154,7 @@ async function pool(items, limit, fn) {
 // Network runs without the epic lock; only the final merge of facts takes it.
 export async function refreshEpic(id, { scope = 'all', task, branch, run = execRunner, onProgress = () => {} } = {}) {
   const epic = readEpic(id);
+  assertLive(epic);
   const targets = targetsOf(epic, { scope, task, branch });
   const repoErrors = {};
   const locations = {};

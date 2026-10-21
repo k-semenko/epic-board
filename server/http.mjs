@@ -62,7 +62,8 @@ function readBody(req) {
 
 function summary(epic) {
   const stamps = Object.values(epic.facts || {}).map((f) => f.fetchedAt).filter(Boolean).sort();
-  return { id: epic.id, title: epic.title, goal: epic.goal, waiting: (epic.waiting || []).filter((w) => !w.doneAt).length, createdAt: epic.createdAt, updatedAt: epic.updatedAt, oldestFact: stamps[0] ?? null, tasks: (epic.tasks || []).length, branches: (epic.tasks || []).reduce((n, t) => n + (t.branches || []).length, 0) };
+  const archived = epic.archived ? { at: epic.archived.at, summary: epic.archived.summary } : null;
+  return { id: epic.id, title: epic.title, goal: epic.goal, archived, waiting: (epic.waiting || []).filter((w) => !w.doneAt).length, createdAt: epic.createdAt, updatedAt: epic.updatedAt, oldestFact: stamps[0] ?? null, tasks: (epic.tasks || []).length, branches: (epic.tasks || []).reduce((n, t) => n + (t.branches || []).length, 0) };
 }
 
 // Loopback is not enough: DNS rebinding lets any page reach 127.0.0.1, so Host and Origin are pinned.
@@ -221,6 +222,14 @@ export function createBoardServer({ port, run = execRunner } = {}) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Disposition': `attachment; filename="epic-${id}-${day}.html"`, 'Cache-Control': 'no-store' });
         return res.end(html);
       }
+      if (m === 'POST' && tail === 'archive') {
+        const body = await readBody(req);
+        return send(res, 200, store.archiveEpic(id, { summary: body?.summary }, { by: 'ui', why: String(body?.why || '') }));
+      }
+      if (m === 'POST' && tail === 'reopen') {
+        const body = await readBody(req);
+        return send(res, 200, store.reopenEpic(id, { why: String(body?.why || '') }, { by: 'ui' }));
+      }
       if (m === 'PATCH' && tail === '') {
         const body = await readBody(req);
         return send(res, 200, store.patchEpic(id, body.patch, { by: BY.has(body.by) ? body.by : 'agent', why: String(body.why || '') }));
@@ -246,7 +255,7 @@ export function createBoardServer({ port, run = execRunner } = {}) {
       if (m === 'POST' && parts[3] === 'waiting' && parts.length === 6) {
         const action = parts[5];
         if (action === 'done' || action === 'undo') {
-          throw new BoardError(400, 'waiting-action', `Use waiting/${parts[4]}/${action === 'done' ? 'resolve with version, submissionId and resolution after human submission' : 'revise with version and reason'}`);
+          throw new BoardError(400, 'waiting-action', `Use waiting/${parts[4]}/${action === 'done' ? 'resolve with a resolution' : 'revise with version and reason'}`);
         }
         const mutate = new Map([['submit', store.submitWaiting], ['clarify', store.clarifyWaiting], ['resolve', store.resolveWaiting], ['revise', store.reviseWaiting], ['remove', store.removeWaiting]]).get(action);
         if (mutate) {

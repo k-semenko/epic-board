@@ -3,8 +3,9 @@ import { BoardError } from './errors.mjs';
 
 export function tasksForBoard(snapshot) {
   if (!snapshot.epics.length && snapshot.errors.length) throw new BoardError(500, 'unavailable-board', 'cannot read any epic files');
-  const epics = snapshot.epics.map((epic) => ({ id: String(epic.id), title: epic.title || String(epic.id) }));
-  const tasks = snapshot.epics.flatMap((epic, index) => (epic.tasks || []).map((task) => {
+  const live = snapshot.epics.filter((epic) => !epic.archived);
+  const epics = live.map((epic) => ({ id: String(epic.id), title: epic.title || String(epic.id) }));
+  const tasks = live.flatMap((epic, index) => (epic.tasks || []).map((task) => {
     const steps = task.steps || [];
     return {
       epic: epics[index],

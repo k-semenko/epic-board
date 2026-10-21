@@ -75,10 +75,10 @@ const PER_GROUP = 5;
 let lastResults = null;
 const expanded = new Set();
 
-function hitHtml(item) {
+export function hitHtml(item) {
   return `<a class="search-hit" href="${esc(item.href)}" data-search-href="${esc(item.href)}" data-search-title="${esc(item.text)}">
     <span class="search-hit-main"><span class="search-hit-text">${markText(item.text, item.marks)}</span>${item.snippet && !item.marks?.length ? `<span class="search-hit-snippet muted">${markText(item.snippet, item.snippetMarks)}</span>` : ''}</span>
-    <span class="muted search-hit-where">${esc(item.where || '')}</span>
+    <span class="muted search-hit-where">${item.archived ? `<span class="search-archived">${esc(t('search.archived'))}</span> ` : ''}${esc(item.where || '')}</span>
   </a>`;
 }
 

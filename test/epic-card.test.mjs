@@ -16,7 +16,7 @@ function settingsState(pins = []) {
   };
 }
 
-function indexApp({ request = async () => settingsState() } = {}) {
+function indexApp({ request = async () => settingsState(), search = '' } = {}) {
   const listeners = {};
   const query = { value: '', addEventListener() {} };
   const language = { addEventListener(type, listener) { listeners.language = listener; } };
@@ -41,6 +41,7 @@ function indexApp({ request = async () => settingsState() } = {}) {
     querySelectorAll() { return buttons; },
   };
   const alerts = [];
+  const archiveButton = { hidden: true, textContent: '', attrs: {}, setAttribute(k, v) { this.attrs[k] = String(v); }, addEventListener(type, listener) { listeners.archive = listener; } };
   const document = {
     body: {},
     documentElement: {},
@@ -51,6 +52,7 @@ function indexApp({ request = async () => settingsState() } = {}) {
       if (selector === '#epics') return epics;
       if (selector === '#q') return query;
       if (selector === '#lang') return language;
+      if (selector === '#epic-archive') return archiveButton;
       if (selector === '#stats') return { innerHTML: '' };
       if (selector === '.head') return { after(node) { alerts.push(node.textContent); } };
       return null;
@@ -65,6 +67,7 @@ function indexApp({ request = async () => settingsState() } = {}) {
       show(list, pins = []) { allEpics = list; pinnedEpics = new Set(pins); renderEpicList(); },
       render: renderIndex,
       bindPins() { bindEpicPins(); },
+      bindArchive() { bindIndexArchive(); },
       boot: bootIndex,
     };
   })();`;
@@ -80,12 +83,12 @@ function indexApp({ request = async () => settingsState() } = {}) {
     },
     URLSearchParams,
     history: { replaceState() {} },
-    location: { pathname: '/', search: '' },
+    location: { pathname: '/', search },
   });
   document.dispatchEvent = () => {};
   vm.runInContext(script, context);
   return {
-    app: context.app, epics, query, alerts,
+    app: context.app, epics, query, alerts, archiveButton, toggleArchive: () => listeners.archive(),
     changeLanguage: () => listeners.language(),
     buttons: () => buttons,
     click(id) {
@@ -221,4 +224,50 @@ test('switching language during a pin save does not reload stale settings or los
   assert.deepEqual(settings.values['epic.pinned'], ['old']);
   assert.equal(page.buttons()[0].dataset.pin, 'old');
   assert.match(page.epics.innerHTML, /aria-pressed="true"/);
+});
+
+const row = (id, extra = {}) => ({ id, title: id, goal: `goal ${id}`, waiting: 0, tasks: 1, branches: 0, createdAt: '2026-10-17T00:00:00.000Z', updatedAt: '2026-10-17T00:00:00.000Z', archived: null, ...extra });
+const gone = row('gone', { archived: { at: '2026-10-20T10:00:00.000Z', summary: 'Delivered the hub' } });
+
+test('the live list hides archived epics and the archive button counts them', () => {
+  const { app, epics, archiveButton } = indexApp();
+  app.bindArchive();
+  app.show([row('a'), row('b'), gone], ['gone']);
+  assert.doesNotMatch(epics.innerHTML, /data-epic-card="gone"/);
+  assert.match(epics.innerHTML, /data-epic-card="a"/);
+  assert.equal(archiveButton.hidden, false);
+  assert.match(archiveButton.textContent, /\(1\)/);
+  assert.equal(archiveButton.attrs['aria-pressed'], 'false');
+});
+
+test('the archive view lists only archived epics with their summary', () => {
+  const { app, epics, archiveButton, toggleArchive } = indexApp({ search: '?archive=1' });
+  app.bindArchive();
+  app.show([row('a'), gone]);
+  assert.equal(archiveButton.attrs['aria-pressed'], 'true');
+  assert.doesNotMatch(epics.innerHTML, /data-epic-card="a"/);
+  assert.match(epics.innerHTML, /data-epic-card="gone"/);
+  assert.match(epics.innerHTML, /Delivered the hub/);
+  assert.doesNotMatch(epics.innerHTML, /goal gone/);
+  assert.doesNotMatch(epics.innerHTML, /data-pin="gone"/);
+  toggleArchive();
+  assert.match(epics.innerHTML, /data-epic-card="a"/);
+  assert.equal(archiveButton.attrs['aria-pressed'], 'false');
+});
+
+test('no archived epics hides the button and ignores archive=1', () => {
+  const { app, epics, archiveButton } = indexApp({ search: '?archive=1' });
+  app.bindArchive();
+  app.show([row('a')]);
+  assert.equal(archiveButton.hidden, true);
+  assert.match(epics.innerHTML, /data-epic-card="a"/);
+});
+
+test('all epics archived shows the live empty state and keeps the button', () => {
+  const { app, epics, archiveButton } = indexApp();
+  app.bindArchive();
+  app.show([gone]);
+  assert.doesNotMatch(epics.innerHTML, /data-epic-card/);
+  assert.match(epics.innerHTML, /archive/i);
+  assert.equal(archiveButton.hidden, false);
 });

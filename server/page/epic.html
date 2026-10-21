@@ -19,6 +19,7 @@
   <a href="/feed" class="icon-btn topbar-feed" data-i18n-aria="nav.feed" data-i18n-title="nav.feed"><span data-icon="inbox"></span><span id="feed-badge" class="feed-badge" hidden></span></a>
   <a href="/settings" class="icon-btn topbar-settings" data-i18n-aria="settings.title" data-i18n-title="settings.title"><span data-icon="settings"></span></a>
   <button type="button" id="lang" class="lang-btn">RU</button>
+  <a href="https://github.com/k-semenko/epic-board" class="icon-btn topbar-repo" target="_blank" rel="noopener noreferrer" data-i18n-aria="nav.repo" data-i18n-title="nav.repo"><span data-icon="git"></span></a>
 </div></nav>
 <main class="wrap" id="epic">
   <header class="head">
@@ -29,6 +30,7 @@
       </div>
       <div class="actions">
         <span id="updated" class="icon-btn updated-stamp muted" role="img" hidden></span>
+        <button id="archive-epic" type="button" class="live-only" hidden><span data-icon="check"></span><span data-i18n="archive.button">Done</span></button>
         <button id="refresh-all" type="button" class="live-only"><span data-icon="refresh"></span><span data-i18n="epic.refreshAll">Refresh all</span></button>
         <a id="export-link" class="button live-only" href="#" download data-i18n-title="epic.exportTip"><span data-icon="download"></span><span data-i18n="epic.export">Export</span></a>
       </div>
@@ -36,6 +38,7 @@
     <p id="goal" class="muted"></p>
   </header>
   <p id="export-note" class="export-note" hidden></p>
+  <div id="archived-note" class="archived-note" hidden></div>
   <section class="waiting-section" data-section="waiting"><h2><span data-i18n="sec.waiting">Needs decision</span> <span id="waiting-count" class="waiting-counts"></span></h2><ul id="waiting" class="list"></ul><div id="waiting-pagination"></div><div id="waiting-announcement" class="sr-only" role="status" aria-live="polite"></div></section>
   <section class="map-section" data-section="map"><div class="section-head"><h2 data-i18n="sec.map">Map</h2>
     <div class="map-tools">

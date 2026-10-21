@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { dataDir } from './paths.mjs';
-import { readEpic, patchEpic, writeAtomic, checkId } from './store.mjs';
+import { readEpic, patchEpic, writeAtomic, checkId, assertLive } from './store.mjs';
 import { BoardError } from './errors.mjs';
 import { checkDocPath } from './doc-paths.mjs';
 
@@ -45,6 +45,7 @@ function base(fields, docId, extra) {
 
 export function newDoc(id, fields) {
   const epic = readEpic(id);
+  assertLive(epic);
   checkPlace(epic, fields);
   const docId = newId();
   const file = ownedPath(id, fields, docId);
@@ -54,6 +55,7 @@ export function newDoc(id, fields) {
 
 export function linkDoc(id, fields) {
   const epic = readEpic(id);
+  assertLive(epic);
   checkPlace(epic, fields);
   const file = checkDocPath(epic, fields.path, docsDir(epic.id));
   if (!fs.existsSync(file)) throw new BoardError(404, 'no-file', `no such file: ${fields.path}`);
@@ -62,6 +64,7 @@ export function linkDoc(id, fields) {
 
 export function importDoc(id, fields) {
   const epic = readEpic(id);
+  assertLive(epic);
   checkPlace(epic, fields);
   const source = checkDocPath(epic, fields.path, docsDir(epic.id));
   if (!fs.existsSync(source)) throw new BoardError(404, 'no-file', `no such file: ${fields.path}`);
@@ -88,6 +91,7 @@ const versionsDir = (id, docId) => path.join(docsDir(id), '.versions', docId);
 
 // A save based on a stale read is refused: an agent may have rewritten the file meanwhile.
 export function writeDoc(id, docId, text, baseMtimeMs) {
+  assertLive(readEpic(id));
   const { file } = findDoc(id, docId);
   if (typeof text !== 'string') throw new BoardError(400, 'no-text', 'document text is required');
   const exists = fs.existsSync(file);

@@ -28,14 +28,16 @@ const OPTIONS = {
   doing: { type: 'string' }, next: { type: 'string' }, agent: { type: 'string' }, branch: { type: 'string' }, why: { type: 'string' },
   json: { type: 'boolean' }, delete: { type: 'boolean' }, 'cleanup-refs': { type: 'boolean' }, out: { type: 'string' }, repo: { type: 'string' },
   group: { type: 'string' }, source: { type: 'string' }, since: { type: 'string' }, unmarked: { type: 'boolean' },
-  severity: { type: 'string' }, mark: { type: 'string' },
+  severity: { type: 'string' }, mark: { type: 'string' }, summary: { type: 'string' }, archived: { type: 'boolean' },
   'dry-run': { type: 'boolean' }, 'text-file': { type: 'string' },
 };
 
 const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value clears the field)
 
-  list                                         epics and their pages
+  list [--archived]                            live epics (or archived ones) and their pages
   new <epic> --title T [--goal G] [--url U]    create an epic (id: letters, digits, . _ -)
+  archive <epic> --summary S [--why W]         close the epic as done and move it to the archive
+  reopen <epic> [--why W]                      bring an archived epic back to work
   repo <epic> <name> --path P [--base main] [--provider gitlab|github --project host/owner/name]
   task <epic> <task> --title T [--url U] [--tracker Jira] [--status S] [--role main|side]
   task <epic> <task> --delete [--cleanup-refs]
@@ -49,7 +51,7 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
   wait <epic> show <id> [--json]              full request, version and responses
   wait <epic> submit <id> --version V --submission-id S [--confirmed | --selected a,b] [--checked c1,c2] [--comment C]
   wait <epic> clarify <id> --version V --submission-id S --comment C
-  wait <epic> resolve <id> --version V --submission-id S --resolution R
+  wait <epic> resolve <id> --resolution R [--version V] [--submission-id S]
   wait <epic> revise <id> --version V --reason R [request flags from add]
   wait <epic> remove <id> --version V          only unanswered requests without history
   decide <epic> --text T [--task T] [--by NAME]
@@ -180,10 +182,10 @@ const COMMANDS = {
       return o.json ? item : { text: JSON.stringify(item, null, 2) };
     }
     if (action === 'add') return patch(epic, { waiting: [{ id: itemId, kind: o.kind || 'decision', ...waitingRequest(o), since: now() }] }, o.why);
-    if (action === 'done' || action === 'undo') throw new BoardError(400, 'usage', `Use wait ${epic} ${action === 'done' ? `resolve ${itemId} --version V --submission-id S --resolution R after human submission` : `revise ${itemId} --version V --reason R`}`);
+    if (action === 'done' || action === 'undo') throw new BoardError(400, 'usage', `Use wait ${epic} ${action === 'done' ? `resolve ${itemId} --resolution R` : `revise ${itemId} --version V --reason R`}`);
     if (action === 'submit') return store.submitWaiting(epic, itemId, defined({ version: need(o.version, '--version'), submissionId: need(o['submission-id'], '--submission-id'), confirmed: o.confirmed, selected: listIds(o.selected), checked: listIds(o.checked), comment: o.comment }), opts);
     if (action === 'clarify') return store.clarifyWaiting(epic, itemId, { version: need(o.version, '--version'), submissionId: need(o['submission-id'], '--submission-id'), comment: need(o.comment, '--comment') }, opts);
-    if (action === 'resolve') return store.resolveWaiting(epic, itemId, { version: need(o.version, '--version'), submissionId: need(o['submission-id'], '--submission-id'), resolution: need(o.resolution, '--resolution') }, opts);
+    if (action === 'resolve') return store.resolveWaiting(epic, itemId, defined({ version: o.version, submissionId: o['submission-id'], resolution: need(o.resolution, '--resolution') }), opts);
     if (action === 'revise') {
       const version = need(o.version, '--version');
       const reason = need(o.reason, '--reason');
@@ -254,7 +256,9 @@ const COMMANDS = {
     writeFileSync(out, buildExport(epic));
     return { text: out };
   },
-  list: () => ({ text: store.listEpics().map((e) => `${e.id} · ${e.title} — ${boardUrl(e.id)}`).join('\n') || 'no epics yet' }),
+  archive: ([epic], o) => store.archiveEpic(store.checkId(need(epic, 'epic id')), { summary: need(o.summary, '--summary') }, { by: 'cli', why: o.why || '' }),
+  reopen: ([epic], o) => store.reopenEpic(store.checkId(need(epic, 'epic id')), { why: o.why || '' }, { by: 'cli' }),
+  list: (_, o) => ({ text: store.listEpics().filter((e) => store.isArchived(e) === Boolean(o.archived)).map((e) => `${e.id} · ${e.title} — ${boardUrl(e.id)}`).join('\n') || 'no epics yet' }),
   doctor: async (_, o) => {
     const { selfcheck } = await import('../server/selfcheck.mjs');
     return { text: JSON.stringify(await selfcheck({ repo: o.repo }), null, 2) };

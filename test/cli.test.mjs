@@ -162,3 +162,27 @@ test('input-only revision retains choice options and recommendation-only revisio
   w = JSON.parse(ok(['wait', 'shop', 'show', 'input-patch', '--json']).stdout);
   assert.deepEqual(w.input, { type: 'confirm' });
 });
+
+test('the agent closes a request from the cli with only an outcome', () => {
+  ok(['wait', 'shop', 'add', 'hub', '--title', 'Default hub']);
+  assert.match(cli(['wait', 'shop', 'done', 'hub']).stderr, /resolve hub --resolution/);
+  ok(['wait', 'shop', 'resolve', 'hub', '--resolution', 'Agreed in chat: 8006']);
+  const w = show().waiting.find((x) => x.id === 'hub');
+  assert.equal(w.status, 'closed');
+  assert.equal(w.resolution, 'Agreed in chat: 8006');
+});
+
+test('archive, list and reopen an epic from the cli', () => {
+  ok(['new', 'old', '--title', 'Old work']);
+  const bare = cli(['archive', 'old']);
+  assert.notEqual(bare.status, 0);
+  assert.match(bare.stderr, /summary/);
+  ok(['archive', 'old', '--summary', 'Shipped']);
+  assert.doesNotMatch(ok(['list']).stdout, /^old /m);
+  const archived = ok(['list', '--archived']).stdout;
+  assert.match(archived, /^old /m);
+  assert.doesNotMatch(archived, /^shop /m);
+  assert.match(cli(['bind', 'old', '--session', 'sid-9']).stderr, /epic-archived|archived/);
+  ok(['reopen', 'old', '--why', 'more']);
+  assert.match(ok(['list']).stdout, /^old /m);
+});

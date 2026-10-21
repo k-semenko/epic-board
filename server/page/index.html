@@ -19,6 +19,7 @@
   <a href="/feed" class="icon-btn topbar-feed" data-i18n-aria="nav.feed" data-i18n-title="nav.feed"><span data-icon="inbox"></span><span id="feed-badge" class="feed-badge" hidden></span></a>
   <a href="/settings" class="icon-btn topbar-settings" data-i18n-aria="settings.title" data-i18n-title="settings.title"><span data-icon="settings"></span></a>
   <button type="button" id="lang" class="lang-btn">RU</button>
+  <a href="https://github.com/k-semenko/epic-board" class="icon-btn topbar-repo" target="_blank" rel="noopener noreferrer" data-i18n-aria="nav.repo" data-i18n-title="nav.repo"><span data-icon="git"></span></a>
 </div></nav>
 <main class="wrap">
   <header class="head">
@@ -29,12 +30,16 @@
         <a href="/feed" data-i18n="nav.feed">Feed</a>
       </nav>
     </div>
-    <label class="sort-control"><span data-i18n="index.sort">Sort</span>
-      <select id="epic-sort">
-        <option value="created" data-i18n="index.sortCreated">Date created</option>
-        <option value="updated" data-i18n="index.sortUpdated">Last modified</option>
-      </select>
-    </label>
+    <div class="index-controls">
+      <label class="sort-control float-field">
+        <select id="epic-sort">
+          <option value="created" data-i18n="index.sortCreated">Date created</option>
+          <option value="updated" data-i18n="index.sortUpdated">Last modified</option>
+        </select>
+        <span data-i18n="index.sort">Sort</span>
+      </label>
+      <button id="epic-archive" type="button" class="archive-toggle" aria-pressed="false" hidden></button>
+    </div>
   </header>
   <div id="stats" class="stats"></div>
   <div id="epics"><p class="muted" data-i18n="loading">Loading…</p></div>
