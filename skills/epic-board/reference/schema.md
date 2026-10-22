@@ -49,7 +49,7 @@ One JSON file per epic in `<data>/epics/<id>.json`, plus `<id>.history.ndjson` (
     { "id": "m2", "text": "Migration on staging", "waiting": "migration" }
   ],
   "decisions": [{ "id": "d1", "at": "2026-10-16T08:00:00Z", "task": "WEB-31", "text": "Cards first", "by": "product" }],
-  "sessions": [{ "id": "<session id>", "agent": "claude", "task": "WEB-31", "startedAt": "…", "lastAt": "…", "doing": "…", "next": "…" }],
+  "sessions": [{ "id": "<session id>", "agent": "claude", "task": "WEB-31", "cwd": "/abs/path", "startedAt": "…", "lastAt": "…", "doing": "…", "next": "…" }],
   "docsMode": "linked",
   "docs": [{ "id": "…", "task": "WEB-31", "step": "wire", "kind": "plan", "title": "Wiring plan", "path": "…", "owned": true }],
   "facts": {

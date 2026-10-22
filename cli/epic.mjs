@@ -25,7 +25,7 @@ const OPTIONS = {
   comment: { type: 'string' }, confirmed: { type: 'boolean' }, reason: { type: 'string' },
   check: { type: 'string', multiple: true }, checked: { type: 'string' }, resolution: { type: 'string' },
   task: { type: 'string' }, by: { type: 'string' }, set: { type: 'string' }, session: { type: 'string' },
-  doing: { type: 'string' }, next: { type: 'string' }, agent: { type: 'string' }, branch: { type: 'string' }, why: { type: 'string' },
+  doing: { type: 'string' }, next: { type: 'string' }, agent: { type: 'string' }, cwd: { type: 'string' }, branch: { type: 'string' }, why: { type: 'string' },
   json: { type: 'boolean' }, delete: { type: 'boolean' }, 'cleanup-refs': { type: 'boolean' }, out: { type: 'string' }, repo: { type: 'string' },
   group: { type: 'string' }, source: { type: 'string' }, since: { type: 'string' }, unmarked: { type: 'boolean' },
   severity: { type: 'string' }, mark: { type: 'string' }, summary: { type: 'string' }, archived: { type: 'boolean' },
@@ -56,7 +56,7 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
   wait <epic> remove <id> --version V          only unanswered requests without history
   decide <epic> --text T [--task T] [--by NAME]
   merge <epic> --set '[{"id":"m1","text":"...","branch":"repo:branch"}]'
-  bind <epic> --session SID [--task T] [--agent claude|codex|...]
+  bind <epic> --session SID [--task T] [--agent claude|codex|...] [--cwd PATH]
   note <epic> --session SID [--doing D] [--next N]
   refresh <epic> [--task T | --branch repo:branch]
   show <epic> [--session SID] [--json]
@@ -209,8 +209,9 @@ const COMMANDS = {
   },
   bind: ([epic], o) => {
     const sid = need(o.session, '--session');
-    const exists = (store.readEpic(epic).sessions || []).some((s) => s.id === sid);
-    return patch(epic, { sessions: [defined({ id: sid, task: o.task, agent: o.agent, startedAt: exists ? undefined : now(), lastAt: now() })] }, o.why);
+    const existing = (store.readEpic(epic).sessions || []).find((s) => s.id === sid);
+    const cwd = o.cwd !== undefined ? o.cwd : existing ? undefined : process.cwd();
+    return patch(epic, { sessions: [defined({ id: sid, task: o.task, agent: o.agent, cwd, startedAt: existing ? undefined : now(), lastAt: now() })] }, o.why);
   },
   note: ([epic], o) => {
     const sid = need(o.session, '--session');

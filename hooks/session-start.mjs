@@ -1,6 +1,7 @@
 import { readInput, findSessionEpic, epicForCwd, run, CLI, sessionId, cwdOf, agentName, emitSessionContext, isCursor, outdatedNote } from './lib.mjs';
 import { buildBrief } from '../server/brief.mjs';
 import { boardUrl } from '../server/paths.mjs';
+import { shQuote } from '../server/page/session-command.mjs';
 
 async function syncNotes() {
   try {
@@ -15,6 +16,7 @@ async function syncNotes() {
 function boardNotes(input, sid) {
   const notes = [];
   const bound = sid ? findSessionEpic(sid) : null;
+  const cwdFlag = `--cwd ${shQuote(cwdOf(input))}`;
   if (bound && (input.source === 'compact' || input.source === 'resume')) {
     notes.push(`${buildBrief(bound.epic, { session: sid })}\nThe board is the source of truth for this epic; update it through ${CLI} (skill epic-board).`);
   } else if (bound) {
@@ -22,7 +24,11 @@ function boardNotes(input, sid) {
   } else if (sid) {
     // After /clear the session id is new, so it is treated like any unbound session.
     const epic = epicForCwd(cwdOf(input));
-    if (epic) notes.push(`epic-board: session ${sid}; if this work belongs to epic ${epic.id}, bind it: ${CLI} bind ${epic.id} --session ${sid} --agent ${agentName()}`);
+    if (epic) notes.push(`epic-board: session ${sid}; if this work belongs to epic ${epic.id}, bind it: ${CLI} bind ${epic.id} --session ${sid} --agent ${agentName()} ${cwdFlag}`);
+  }
+  if (bound && !bound.session.cwd) {
+    const agent = bound.session.agent || agentName();
+    notes.push(`epic-board: session ${sid} has no directory; record it: ${CLI} bind ${bound.epic.id} --session ${sid} --agent ${agent} ${cwdFlag}`);
   }
   return notes;
 }

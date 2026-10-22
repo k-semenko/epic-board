@@ -1,7 +1,7 @@
 import { t } from './i18n.mjs';
 
 // History events as people read them: where, what, and the value before and after.
-const FIELDS = new Set(['state', 'title', 'note', 'status', 'statusCheckedAt', 'after', 'label', 'role', 'doing', 'next', 'lastAt', 'head', 'behind', 'ahead', 'unpushed',
+const FIELDS = new Set(['state', 'title', 'note', 'status', 'statusCheckedAt', 'after', 'label', 'role', 'doing', 'next', 'lastAt', 'cwd', 'head', 'behind', 'ahead', 'unpushed',
   'remoteBehind', 'dirty', 'branchMissing', 'error', 'doneAt', 'agent', 'task', 'startedAt', 'text', 'worktree', 'goal', 'url', 'details', 'resolution', 'checklist', 'checked', 'refs', 'kind',
   'tracker', 'mr.state', 'mr.draft', 'mr.pipeline']);
 // Events written before schema 2 still carry the old field names.

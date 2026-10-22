@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-22
+
+### Added
+
+- A session card copies a shell command that resumes that session in its own directory: `claude`, `grok`, `codex` and `cursor-agent`.
+- `bind --cwd` records the directory. A new session stores the CLI working directory, and the session-start hook asks for it when a bound session has none.
+
+### Changed
+
+- Session cards sit two per row. Doing and next are one line each, shown with an icon, and end in an ellipsis.
+
 ## [0.13.0] - 2026-10-21
 
 ### Added

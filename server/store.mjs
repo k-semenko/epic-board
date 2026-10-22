@@ -302,6 +302,9 @@ export function validateEpic(epic) {
     if (s.agent !== undefined && !/^[a-z0-9-]{1,20}$/.test(String(s.agent))) {
       throw new BoardError(400, 'bad-agent', `session ${s.id}: agent is a lowercase name such as cursor, claude, codex, grok`);
     }
+    if (s.cwd !== undefined && (typeof s.cwd !== 'string' || !s.cwd.startsWith('/'))) {
+      throw new BoardError(400, 'bad-cwd', `session ${s.id}: cwd must be an absolute path`);
+    }
   }
   for (const t of epic.tasks || []) {
     if (!ID.test(String(t.id))) throw new BoardError(400, 'bad-task-id', `task id must match ${ID.source}, got "${t.id}"`);
