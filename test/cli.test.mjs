@@ -86,6 +86,14 @@ test('build an epic through the cli', () => {
   assert.equal(show().waiting.some((w) => w.id === 'temporary'), false);
   ok(['bind', 'shop', '--session', 'sid-2', '--agent', 'codex']);
   assert.equal(show().sessions.find((s) => s.id === 'sid-2').agent, 'codex');
+  assert.equal(show().sessions.find((s) => s.id === 'sid-2').cwd, process.cwd());
+  ok(['bind', 'shop', '--session', 'sid-2', '--agent', 'codex']);
+  assert.equal(show().sessions.find((s) => s.id === 'sid-2').cwd, process.cwd());
+  ok(['bind', 'shop', '--session', 'sid-2', '--cwd', '/tmp/other']);
+  assert.equal(show().sessions.find((s) => s.id === 'sid-2').cwd, '/tmp/other');
+  ok(['note', 'shop', '--session', 'sid-2', '--doing', 'still']);
+  assert.equal(show().sessions.find((s) => s.id === 'sid-2').cwd, '/tmp/other');
+  assert.equal(cli(['bind', 'shop', '--session', 'sid-4', '--cwd', 'relative']).status, 1);
   assert.equal(cli(['bind', 'shop', '--session', 'sid-3', '--agent', 'Bad Agent!']).status, 1);
 });
 

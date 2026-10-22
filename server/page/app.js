@@ -9,6 +9,7 @@ import { paginate, renderPagination } from './pagination.mjs';
 import { createDocEditor } from './doc-editor.mjs';
 import { linkPollState, renderStepLinks, renderLinkBadge, renderRelatedEpics, renderLinkStatus, updateLinksDom, indexRevision } from './links.mjs';
 import { bindShell } from './shell.mjs';
+import { sessionCopyButton, sessionFacts } from './session-command.mjs';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1762,8 +1763,8 @@ async function renderEpic(id) {
   $('#branches').innerHTML = branchRows(epic);
   renderDecisions(epic);
   $('#sessions').innerHTML = [...(epic.sessions || [])].sort((a, b) => String(b.lastAt).localeCompare(String(a.lastAt))).map((x) => `<li class="session" data-sid="s-${esc(x.id)}">
-      <div class="session-head">${agentBadge(x.agent)}<code class="muted">${esc(x.id.slice(0, 8))}</code>${x.task ? `<span class="chip">${esc(x.task)}</span>` : ''}<span class="muted session-time">${icon('clock')}<span class="phrase">${agoText(x.lastAt)}</span></span></div>
-      <dl class="session-body"><dt>${esc(t('session.doing'))}</dt><dd>${esc(x.doing ?? '—')}</dd><dt>${esc(t('session.next'))}</dt><dd>${esc(x.next ?? '—')}</dd></dl></li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
+      <div class="session-head">${agentBadge(x.agent)}<code class="muted">${esc(x.id.slice(0, 8))}</code>${x.task ? `<span class="chip">${esc(x.task)}</span>` : ''}<span class="muted session-time">${icon('clock')}<span class="phrase">${agoText(x.lastAt)}</span></span>${sessionCopyButton(x, { esc, icon, t })}</div>
+      ${sessionFacts(x, { esc, icon, t })}</li>`).join('') || `<li class="muted">${esc(t('none.sessions'))}</li>`;
   renderHistory(history);
   // The live page uses the board-wide search; an export has no service and keeps its own index.
   if (EXPORT) buildSearchIndex(epic, history);
@@ -2104,6 +2105,27 @@ async function bootEpic() {
   $('#refresh-all').addEventListener('click', () => refreshModal(current));
   document.addEventListener('click', (e) => {
     const el = e.target;
+    const copySession = el.closest('[data-copy-command]');
+    if (copySession) {
+      const command = copySession.dataset.copyCommand;
+      navigator.clipboard.writeText(command).then(() => {
+        copySession.classList.add('is-copied');
+        copySession.innerHTML = icon('check');
+        copySession.title = t('session.copied');
+        copySession.setAttribute('aria-label', t('session.copied'));
+        setTimeout(() => {
+          if (!copySession.isConnected) return;
+          copySession.classList.remove('is-copied');
+          copySession.innerHTML = icon('copy');
+          copySession.title = command;
+          copySession.setAttribute('aria-label', command);
+        }, 1400);
+      }).catch(() => {
+        copySession.title = t('session.copyFailed');
+        copySession.setAttribute('aria-label', t('session.copyFailed'));
+      });
+      return;
+    }
     const info = el.closest('[data-info]');
     if (info) {
       e.stopPropagation();

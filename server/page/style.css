@@ -434,13 +434,23 @@ a.stat:hover { text-decoration: none; border-color: var(--accent); }
 #branches th:nth-child(6), #branches td:nth-child(6) { min-width: 90px; }
 #branches td:last-child { width: 1%; white-space: nowrap; }
 
-/* Sessions */
-.list li.session { display: grid; gap: 6px; padding: 10px 12px; }
-.session-head { display: flex; align-items: center; gap: 10px; }
+/* Sessions: two cards per row; each fact is one line that ends in an ellipsis */
+#sessions { grid-template-columns: 1fr 1fr; gap: 8px; }
+#sessions > li { min-width: 0; }
+.list li.session { display: grid; gap: 4px; padding: 8px 10px; align-items: stretch; }
+.session-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .session-time { margin-left: auto; display: inline-flex; align-items: center; font-size: 12.5px; }
-.session-body { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; font-size: 14px; }
-.session-body dt { color: var(--muted); font-size: 12.5px; }
-.session-body dd { margin: 0; }
+.session-copy { width: 26px; height: 26px; padding: 0; justify-content: center; border-color: transparent; background: transparent; color: var(--muted); flex: none; }
+.session-copy:hover { color: var(--fg); background: var(--chip); }
+.session-copy:disabled { opacity: .4; cursor: default; }
+.session-copy:disabled:hover { color: var(--muted); background: transparent; }
+.session-copy.is-copied { color: var(--ok); }
+.session-copy svg.i { width: 14px; height: 14px; margin: 0; }
+.session-line { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; }
+.session-line .mark { display: inline-flex; flex: none; color: var(--muted); }
+.session-line .mark svg.i { margin: 0; }
+.session-line .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) { #sessions { grid-template-columns: 1fr; } }
 
 /* History: who and where on the first line, the change itself on its own full-width line */
 .history li { display: grid; grid-template-columns: 1fr; gap: 3px; }

@@ -41,7 +41,7 @@ An id from the link that is not in `show --json` is a question for the user. Pen
 
 1. `epic.mjs list` — is there an epic already? An epic id is any short key: a tracker key (`PROJ-12`), a number, a slug.
 2. If not: `epic.mjs new <id> --title … --goal … [--url <link to the epic in the tracker>]`, then `repo` for each repository (`--provider gitlab|github --project <host>/<owner>/<name>` when merge request facts are wanted), `task` for each task (`--url`, `--tracker`, `--role side` for side tasks).
-3. `epic.mjs bind <epic> --session <session_id> --task <task> --agent <agent>` with the session id and agent from above.
+3. `epic.mjs bind <epic> --session <session_id> --task <task> --agent <agent> --cwd <absolute path>` with the session id, agent and directory from above. Pass the session's own directory, not whichever directory the shell happens to be in.
 4. Before any status report: `epic.mjs refresh <epic>`; take branch and MR facts only from the board.
 5. Ask the user once where stage documents should live and record it: `docs-mode <epic> board` or `docs-mode <epic> linked`.
 
