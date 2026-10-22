@@ -28,10 +28,11 @@ test('compact: brief of the freshest bound epic', () => {
   assert.match(text, /doing: Coding/);
 });
 
-test('startup bound: one line', () => {
+test('startup bound without a directory: binding line plus a record hint', () => {
   const text = claudeContext(hook('session-start.mjs', { session_id: 'sid', source: 'startup', cwd: '/tmp' }));
-  assert.equal(text.split('\n').length, 1);
+  assert.equal(text.split('\n').length, 2);
   assert.match(text, /epic 3/);
+  assert.match(text, /--cwd '\/tmp'/);
 });
 
 test('unbound: hint only inside an epic repo', () => {
