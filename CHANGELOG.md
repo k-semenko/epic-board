@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-12
+
+### Added
+
+- The feed can be cleared without a judgment: *Read all* at the top of Unseen, and *All seen* on every group. Seen items leave Unseen and can be restored; the source profile does not treat them as noise.
+- Settings → Feed keeps seen items for 7 days (`feed.retention.seen`).
+
+### Changed
+
+- Bulk clearing uses the seen mark. Noise stays a per-item judgment.
+
 ## [0.14.0] - 2026-10-22
 
 ### Added

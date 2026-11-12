@@ -105,6 +105,35 @@ test('profile aggregates accumulate marks across prune', () => {
   assert.match(feed.showFeedProfile('chat-triage').text, /Noise/);
 });
 
+test('seen clears the inbox without teaching the source that it was noise', () => {
+  const { items } = feed.addFeedItems([
+    sample('seen-1', { severity: 'fire', channel: 'ops' }),
+    sample('seen-2', { severity: 'normal', channel: 'ops' }),
+    sample('seen-3', { severity: 'normal', channel: 'ops' }),
+  ]);
+  feed.markFeedItems(items.map((item) => item.id), 'seen');
+  assert.equal(feed.listFeedItems({ unmarked: true }).length, 0);
+  assert.equal(feed.listFeedItems({ mark: 'seen' }).length, 3);
+  const agg = feed.feedProfileAggregates('chat-triage');
+  assert.equal(agg.matrix['fire:seen'], 1);
+  assert.equal(agg.matrix['normal:seen'], 2);
+  assert.equal(agg.mismatches.length, 0);
+  assert.deepEqual(agg.noisyChannels, []);
+});
+
+test('seen items follow the seen retention, not the important one', () => {
+  const old = new Date(Date.now() - 10 * 86_400_000).toISOString();
+  const { items } = feed.addFeedItems(sample('seen-old'));
+  feed.markFeedItems([items[0].id], 'seen');
+  const file = join(home, 'feed', 'items', 'chat-triage.json');
+  const data = JSON.parse(readFileSync(file, 'utf8'));
+  data.items[0].updatedAt = old;
+  data.items[0].mark.at = old;
+  writeFileSync(file, JSON.stringify(data, null, 2));
+  feed.pruneFeed();
+  assert.equal(feed.listFeedItems({ source: 'chat-triage' }).length, 0);
+});
+
 test('a missing id rejects the whole mark without touching items or stats', () => {
   const { items } = feed.addFeedItems([sample('t1'), sample('t2')]);
   const before = feed.feedProfileAggregates('chat-triage');
