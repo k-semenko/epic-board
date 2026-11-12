@@ -19,11 +19,13 @@ let groupBy = (() => { try { return localStorage.getItem('epic-board.feedGroup')
 let profileSource = '';
 let profileOpen = false;
 
-const MARKS = [
+const JUDGMENTS = [
   { value: 'important', key: '1', label: 'feed.mark.important', icon: 'thumbUp' },
   { value: 'unimportant', key: '2', label: 'feed.mark.unimportant', icon: 'thumbDown' },
   { value: 'noise', key: '3', label: 'feed.mark.noise', icon: 'trash' },
 ];
+// Seen clears the inbox. It is not a judgment, so it stays off the card buttons.
+const MARKS = [...JUDGMENTS, { value: 'seen', label: 'feed.mark.seen', icon: 'check' }];
 
 function actionButton(attrs, iconName, label, active = false) {
   return `<button type="button" class="icon-btn feed-act${active ? ' is-active' : ''}" ${attrs} title="${esc(label)}" aria-label="${esc(label)}"${active ? ' aria-pressed="true"' : ''}>${icon(iconName)}</button>`;
@@ -49,18 +51,18 @@ function groups() {
   if (groupBy === 'severity') {
     for (const sev of SEVERITIES) {
       const part = list.filter((item) => item.severity === sev);
-      if (part.length) out.push({ key: sev, label: t(`feed.sev.${sev}`), items: part, sev, noise: sev !== 'fire' });
+      if (part.length) out.push({ key: sev, label: t(`feed.sev.${sev}`), items: part, sev });
     }
     return out;
   }
   const fire = list.filter((item) => item.severity === 'fire');
-  if (fire.length) out.push({ key: 'fire', label: t('feed.fire'), items: fire, sev: 'fire', noise: false });
+  if (fire.length) out.push({ key: 'fire', label: t('feed.fire'), items: fire, sev: 'fire' });
   const bySource = new Map();
   for (const item of list.filter((x) => x.severity !== 'fire')) {
     if (!bySource.has(item.source)) bySource.set(item.source, []);
     bySource.get(item.source).push(item);
   }
-  for (const [source, part] of bySource) out.push({ key: source, label: source, items: part, noise: true });
+  for (const [source, part] of bySource) out.push({ key: source, label: source, items: part });
   return out;
 }
 
@@ -154,7 +156,7 @@ function actionsHtml(item, { labels = false } = {}) {
     ? `<button type="button" class="feed-act-wide${active ? ' is-active' : ''}" ${attrs}>${icon(iconName)}<span>${esc(label)}</span></button>`
     : actionButton(attrs, iconName, label, active);
   return `${tab === 'history' ? btn('data-unmark', 'undo', t('feed.unmark')) : ''}
-    ${MARKS.map((m) => btn(`data-mark="${m.value}"`, m.icon, labels ? t(m.label) : `${t(m.label)} · ${m.key}`, item.mark?.value === m.value)).join('')}
+    ${JUDGMENTS.map((m) => btn(`data-mark="${m.value}"`, m.icon, labels ? t(m.label) : `${t(m.label)} · ${m.key}`, item.mark?.value === m.value)).join('')}
     ${tab === 'history' ? btn('data-delete', 'close', t('feed.delete')) : ''}`;
 }
 
@@ -191,11 +193,13 @@ function openItem(id) {
   const dlg = $('#feed-item');
   dlg.querySelector('.modal').innerHTML = `
     <header class="modal-head feed-card-head">${headHtml(item)}<button type="button" class="icon-btn" data-item-close aria-label="${esc(t('close'))}">${icon('close')}</button></header>
-    <h2 class="feed-item-title">${esc(item.title)}</h2>
-    <p class="muted feed-item-times">${esc(stampTitle(item)).replaceAll('\n', ' · ')}</p>
-    ${item.body ? `<div class="markdown feed-item-body">${renderMarkdown(item.body).html}</div>` : `<p class="muted">${esc(t('feed.noBody'))}</p>`}
-    ${item.refs?.length ? `<div class="feed-refs">${refChips(item)}</div>` : ''}
-    ${tab === 'history' && item.mark ? `<p>${markNote(item)}</p>` : ''}
+    <div class="feed-item-scroll">
+      <h2 class="feed-item-title">${esc(item.title)}</h2>
+      <p class="muted feed-item-times">${esc(stampTitle(item)).replaceAll('\n', ' · ')}</p>
+      ${item.body ? `<div class="markdown feed-item-body">${renderMarkdown(item.body).html}</div>` : `<p class="muted">${esc(t('feed.noBody'))}</p>`}
+      ${item.refs?.length ? `<div class="feed-refs">${refChips(item)}</div>` : ''}
+      ${tab === 'history' && item.mark ? `<p>${markNote(item)}</p>` : ''}
+    </div>
     <div class="feed-comment" hidden><input type="text" placeholder="${esc(t('feed.why'))}"></div>
     <footer class="modal-foot feed-item-foot"><span class="feed-source">${esc(item.source)}</span><div class="feed-item-acts">${actionsHtml(item, { labels: true })}</div></footer>`;
   if (!dlg.open) dlg.showModal();
@@ -234,6 +238,8 @@ function emptyHtml() {
 
 function renderList() {
   const list = visible();
+  const readAll = $('#feed-read-all');
+  if (readAll) readAll.hidden = tab !== 'unmarked' || !list.length;
   const root = $('#feed-list');
   // Filters and grouping only make sense when there is something to sort; active filters stay so they can be cleared.
   const filtering = Boolean(filters.source || filters.severity || (tab === 'history' && filters.mark));
@@ -246,10 +252,9 @@ function renderList() {
   let html = '';
   let index = 0;
   for (const group of groups()) {
-    const noise = tab === 'unmarked' && group.noise;
     html += `<section class="feed-group"${group.sev ? ` data-sev="${esc(group.sev)}"` : ''}><header class="day-head">
       <h2>${group.sev ? `<span class="feed-sev sev-${esc(group.sev)}"></span>` : ''}${esc(group.label)} · ${group.items.length}</h2>
-      ${noise ? `<button type="button" class="feed-group-noise" data-noise-group="${esc(group.key)}">${icon('trash')}<span>${esc(t('feed.allNoise'))}</span></button>` : ''}
+      ${tab === 'unmarked' ? `<button type="button" class="feed-group-seen" data-seen-group="${esc(group.key)}">${icon('check')}<span>${esc(t('feed.groupSeen'))}</span></button>` : ''}
     </header><ul class="list feed-rows">${group.items.map((item) => rowHtml(item, index++)).join('')}</ul></section>`;
   }
   root.innerHTML = html;
@@ -456,11 +461,10 @@ $('#feed-profile').addEventListener('click', (event) => {
 $('#feed-list').addEventListener('click', async (event) => {
   const row = event.target.closest('[data-id]');
   if (row) focus = Number(row.dataset.index);
-  if (event.target.closest('[data-noise-group]')) {
-    const key = event.target.closest('[data-noise-group]').dataset.noiseGroup;
+  if (event.target.closest('[data-seen-group]')) {
+    const key = event.target.closest('[data-seen-group]').dataset.seenGroup;
     const group = groups().find((g) => g.key === key);
-    const ids = (group?.items || []).filter((item) => item.severity !== 'fire').map((item) => item.id);
-    await markIds(ids, 'noise');
+    await markIds((group?.items || []).map((item) => item.id), 'seen');
     return;
   }
   if (event.target.closest('[data-mark]')) {
@@ -507,6 +511,11 @@ $('#feed-item').addEventListener('keydown', async (event) => {
 
 $('#feed-new').addEventListener('click', (event) => {
   if (event.target.closest('[data-show-new]')) void load();
+});
+
+$('#feed-read-all').addEventListener('click', async () => {
+  if (tab !== 'unmarked') return;
+  await markIds(visible().map((item) => item.id), 'seen');
 });
 
 $('#feed-toast').addEventListener('click', async (event) => {

@@ -88,6 +88,16 @@ export const SETTINGS_REGISTRY = Object.freeze([
     since: '0.11.0',
   }),
   Object.freeze({
+    key: 'feed.retention.seen',
+    type: 'duration',
+    default: '7d',
+    group: 'feed',
+    label: 'settings.key.feed.retention.seen',
+    hint: 'settings.hint.feed.retention.seen',
+    ui: true,
+    since: '0.15.0',
+  }),
+  Object.freeze({
     key: 'feed.retention.unimportant',
     type: 'duration',
     default: '30d',

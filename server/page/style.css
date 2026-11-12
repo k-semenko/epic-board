@@ -809,9 +809,9 @@ button.primary:hover { filter: brightness(1.08); }
 .feed-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 28px; margin-top: auto; min-width: 0; max-width: 100%; overflow: hidden; }
 .feed-mark-note { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); margin-right: 6px; }
 .feed-mark-note svg.i { width: 13px; height: 13px; margin: 0; }
-.feed-group-noise { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 6px; color: var(--muted); background: transparent; border: 1px solid var(--line); order: 2; }
-.feed-group-noise:hover { color: var(--crit, #c44); border-color: currentColor; }
-.feed-group-noise svg.i { width: 13px; height: 13px; margin: 0; }
+.feed-group-seen { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 6px; color: var(--muted); background: transparent; border: 1px solid var(--line); order: 2; }
+.feed-group-seen:hover { color: var(--fg); border-color: var(--accent); }
+.feed-group-seen svg.i { width: 13px; height: 13px; margin: 0; }
 .feed-group header.day-head::after { order: 1; }
 .feed-item-dialog { position: fixed; inset: 0; margin: auto; width: min(760px, calc(100vw - 32px)); height: fit-content; max-height: 88vh; border: 0; padding: 0; background: transparent; color: inherit; }
 /* The page under an open dialog stays still; the wheel scrolls only the dialog. */
@@ -827,7 +827,9 @@ html:has(dialog[open]) { overflow: hidden; }
 .feed-group h2 { display: inline-flex; align-items: center; gap: 6px; }
 .feed-group h2 .feed-sev::before { width: 8px; height: 8px; }
 .feed-item-dialog::backdrop { background: rgba(0, 0, 0, .5); }
-.feed-item { width: 100%; max-height: 88vh; gap: 12px; }
+.feed-item { width: 100%; max-height: 88vh; gap: 12px; display: flex; flex-direction: column; overflow: hidden; }
+.feed-item-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; display: grid; gap: 12px; align-content: start; }
+.feed-item .modal-head, .feed-item-foot, .feed-item > .feed-comment { flex: none; }
 .feed-item .modal-head { flex-wrap: nowrap; min-width: 0; }
 .feed-item .modal-head .icon-btn { flex: none; }
 .feed-item .feed-card-meta { margin-left: auto; }
@@ -835,7 +837,7 @@ html:has(dialog[open]) { overflow: hidden; }
 .feed-item-times { margin: -4px 0 0; font-size: 12px; }
 .feed-item-body { font-size: 14.5px; line-height: 1.65; overflow-wrap: anywhere; }
 .feed-item-body > :first-child { margin-top: 0; }
-.feed-item-foot { justify-content: flex-start; align-items: center; flex-wrap: wrap; position: sticky; bottom: -16px; padding: 10px 0 2px; background: var(--surface); border-top: 1px solid var(--line); }
+.feed-item-foot { justify-content: flex-start; align-items: center; flex-wrap: wrap; padding: 10px 0 2px; background: var(--surface); border-top: 1px solid var(--line); }
 .feed-item-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .feed-act-wide { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 12px; border-radius: 8px; }
 .feed-act-wide svg.i { width: 15px; height: 15px; margin: 0; }
@@ -876,8 +878,10 @@ html:has(dialog[open]) { overflow: hidden; }
 .feed-empty-actions svg.i { width: 14px; height: 14px; margin: 0; }
 .feed-head-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .feed-head-tools .view-nav { margin-top: 0; height: 36px; box-sizing: border-box; }
-#feed-how-open { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; box-sizing: border-box; padding: 0 14px; border-radius: 8px; font-size: 13px; }
-#feed-how-open svg.i { width: 14px; height: 14px; margin: 0; }
+#feed-how-open, #feed-read-all { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; box-sizing: border-box; padding: 0 14px; border-radius: 8px; font-size: 13px; }
+#feed-how-open svg.i, #feed-read-all svg.i { width: 14px; height: 14px; margin: 0; }
+#feed-read-all[hidden] { display: none; }
+#feed-read-all:hover { color: var(--fg); border-color: var(--accent); }
 #feed-how, #feed-help { position: fixed; inset: 0; margin: auto; width: min(720px, calc(100vw - 32px)); height: fit-content; max-height: 85vh; border: 0; padding: 0; background: transparent; color: inherit; }
 #feed-how .modal, #feed-help .modal { width: 100%; max-height: 85vh; }
 #feed-how::backdrop, #feed-help::backdrop { background: rgba(0, 0, 0, .45); }

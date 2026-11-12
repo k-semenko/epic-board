@@ -19,12 +19,14 @@ Upsert key is `source` + `externalId`. Repeats bump `count`; content changes on 
 ```sh
 epic.mjs feed add items.json
 epic.mjs feed list --unmarked --json
-epic.mjs feed mark <id…> important|unimportant|noise [--comment …]
+epic.mjs feed mark <id…> important|unimportant|noise|seen [--comment …]
 epic.mjs feed summary --json
 epic.mjs feed profile --source my-source --json
 epic.mjs feed profile show --source my-source
 epic.mjs feed prune
 ```
+
+`seen` means the human looked and cleared the item. It is not a judgment, and a profile must not treat it as noise.
 
 Agents must not mark items for the human. Read `feed profile show` before selecting what to push.
 

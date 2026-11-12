@@ -17,6 +17,7 @@ const defaults = {
   'epic.pinned': [],
   'feed.retention.unmarked': '14d',
   'feed.retention.noise': '7d',
+  'feed.retention.seen': '7d',
   'feed.retention.unimportant': '30d',
   'feed.retention.important': '180d',
   'feed.retention.keepLinked': true,
