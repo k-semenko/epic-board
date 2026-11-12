@@ -74,7 +74,7 @@ const HELP = `epic.mjs <command> ... (data: see "doctor"; "-" as a flag value cl
   config reset <key>                           restore the registry default
   feed add <file|-> [--json]                   upsert feed items (object or array)
   feed list [--unmarked] [--source X] [--since 1d] [--severity S] [--mark M|none] [--json]
-  feed mark <id…> important|unimportant|noise [--comment C]
+  feed mark <id…> important|unimportant|noise|seen [--comment C]
   feed unmark <id…> | feed delete <id…>
   feed summary [--json] | feed prune [--dry-run]
   feed profile --source X [--json] | feed profile set --source X --text-file F
@@ -315,7 +315,7 @@ const COMMANDS = {
     if (action === 'mark') {
       const value = rest.at(-1);
       const ids = rest.slice(0, -1);
-      if (!ids.length) throw new BoardError(400, 'usage', 'feed mark <id…> important|unimportant|noise');
+      if (!ids.length) throw new BoardError(400, 'usage', 'feed mark <id…> important|unimportant|noise|seen');
       const items = feed.markFeedItems(ids, value, { comment: o.comment });
       return o.json ? items : { text: `ok: marked ${items.length}` };
     }

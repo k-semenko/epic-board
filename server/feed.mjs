@@ -10,7 +10,7 @@ import { durationMs } from './settings-registry.mjs';
 
 export const FEED_KINDS = Object.freeze(['mention', 'alert', 'question', 'report', 'info']);
 export const FEED_SEVERITIES = Object.freeze(['fire', 'important', 'normal', 'noise']);
-export const FEED_MARKS = Object.freeze(['important', 'unimportant', 'noise']);
+export const FEED_MARKS = Object.freeze(['important', 'unimportant', 'noise', 'seen']);
 export const EXTERNAL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const URL_RE = /^https?:\/\/[^\s]+$/i;
 const CHANGE_FIELDS = ['title', 'body', 'severity', 'kind'];
@@ -245,6 +245,7 @@ function isUnmarked(item) {
 function retentionKey(item) {
   if (!item.mark || item.changedSinceMark) return 'feed.retention.unmarked';
   if (item.mark.value === 'noise') return 'feed.retention.noise';
+  if (item.mark.value === 'seen') return 'feed.retention.seen';
   if (item.mark.value === 'unimportant') return 'feed.retention.unimportant';
   return 'feed.retention.important';
 }

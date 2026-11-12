@@ -97,6 +97,8 @@ const en = {
   'settings.hint.feed.retention.unmarked': 'How long to keep feed items that are still unseen.',
   'settings.key.feed.retention.noise': 'Keep noise',
   'settings.hint.feed.retention.noise': 'How long to keep items marked as noise.',
+  'settings.key.feed.retention.seen': 'Keep seen',
+  'settings.hint.feed.retention.seen': 'How long to keep items cleared as seen, without a judgment.',
   'settings.key.feed.retention.unimportant': 'Keep unimportant',
   'settings.hint.feed.retention.unimportant': 'How long to keep items marked unimportant.',
   'settings.key.feed.retention.important': 'Keep important',
@@ -135,11 +137,11 @@ const en = {
   'dash.mr': 'Merge requests', 'dash.mrMeta': '{n} red pipelines',
   'dash.feed': 'Feed', 'dash.connectors': 'Connectors', 'dash.connectorsSilent': '{n} silent', 'dash.connectorsOk': 'all active',
   'feed.title': 'Feed', 'feed.unmarked': 'Unseen', 'feed.history': 'History',
-  'feed.mark.important': 'Important', 'feed.mark.unimportant': 'Unimportant', 'feed.mark.noise': 'Noise',
+  'feed.mark.important': 'Important', 'feed.mark.unimportant': 'Unimportant', 'feed.mark.noise': 'Noise', 'feed.mark.seen': 'Seen',
   'feed.unmark': 'Restore', 'feed.delete': 'Delete', 'feed.confirmDelete': 'Delete this feed item?',
   'feed.changed': 'Changed', 'feed.changedHint': 'Content changed after it was marked', 'feed.why': 'Why?', 'feed.toast': 'Marked', 'feed.undo': 'Undo',
   'feed.empty': 'All clear', 'feed.emptyNoise': 'Noise today: {n}', 'feed.emptyToday': 'Marked today:', 'feed.emptyLast': 'The last item arrived {ago} ago.', 'feed.openHistory': 'Open history', 'feed.emptyNone': 'The feed is empty', 'feed.emptyNoneText': 'Nothing has arrived yet. A connector — an agent, a script or a scheduled task — writes items through the CLI.', 'feed.emptyFiltered': 'Nothing matches the filters', 'feed.clearFilters': 'Clear filters', 'feed.emptyHistory': 'Nothing marked yet', 'feed.emptyHistoryText': 'Marked items land here; you can restore them or change the mark.', 'feed.fire': 'Fire',
-  'feed.allNoise': 'Mark group as noise', 'feed.newCount': 'New: {n}', 'feed.showNew': 'Show',
+  'feed.readAll': 'Read all', 'feed.groupSeen': 'All seen', 'feed.newCount': 'New: {n}', 'feed.showNew': 'Show',
   'feed.filter.source': 'Source', 'feed.filter.severity': 'Severity', 'feed.filter.mark': 'Mark', 'feed.filter.all': 'All',
   'feed.sev.fire': 'Fire', 'feed.sev.important': 'Important', 'feed.sev.normal': 'Normal', 'feed.sev.noise': 'Noise',
   'feed.noProfile': 'No profile yet', 'feed.profileExpand': 'Expand', 'feed.profileCollapse': 'Collapse', 'feed.helpTitle': 'Keyboard',
@@ -156,7 +158,7 @@ A marked item leaves *Unseen* at once and goes to *History*; the toast lets you 
 
 **When you disagree with the source.** If a fire goes to noise or noise to important, a *why?* field opens. Enter saves the reason, Esc skips it. Once a week these reasons become the source's profile, and the source sends less noise.
 
-**Groups.** Fires sit on top. Everything else is grouped by source; *Mark group as noise* never touches fires.
+**Groups.** Fires sit on top. Everything else is grouped by source. *Read all* and *All seen* clear what is on screen from Unseen. That is not a judgment: the source profile does not learn from it. The three buttons on a card still say whether it was worth sending.
 
 **History.** Restore an item to *Unseen*, change its mark or delete it.
 
@@ -359,6 +361,8 @@ const ru = {
   'settings.hint.feed.retention.unmarked': 'Сколько держать пункты ленты без отметки.',
   'settings.key.feed.retention.noise': 'Хранить мусор',
   'settings.hint.feed.retention.noise': 'Сколько держать пункты, отмеченные как мусор.',
+  'settings.key.feed.retention.seen': 'Хранить просмотренное',
+  'settings.hint.feed.retention.seen': 'Сколько держать пункты, снятые как просмотренные, без оценки.',
   'settings.key.feed.retention.unimportant': 'Хранить неважное',
   'settings.hint.feed.retention.unimportant': 'Сколько держать пункты «не важно».',
   'settings.key.feed.retention.important': 'Хранить важное',
@@ -397,11 +401,11 @@ const ru = {
   'dash.mr': 'MR', 'dash.mrMeta': '{n} красных пайплайнов',
   'dash.feed': 'Лента', 'dash.connectors': 'Коннекторы', 'dash.connectorsSilent': '{n} молчат', 'dash.connectorsOk': 'все активны',
   'feed.title': 'Лента', 'feed.unmarked': 'Непросмотренное', 'feed.history': 'История',
-  'feed.mark.important': 'Важно', 'feed.mark.unimportant': 'Не важно', 'feed.mark.noise': 'Мусор',
+  'feed.mark.important': 'Важно', 'feed.mark.unimportant': 'Не важно', 'feed.mark.noise': 'Мусор', 'feed.mark.seen': 'Просмотрено',
   'feed.unmark': 'Вернуть', 'feed.delete': 'Удалить', 'feed.confirmDelete': 'Удалить этот пункт ленты?',
   'feed.changed': 'Изменено', 'feed.changedHint': 'Содержание изменилось после отметки', 'feed.why': 'Почему?', 'feed.toast': 'Отмечено', 'feed.undo': 'Отменить',
   'feed.empty': 'Всё разобрано', 'feed.emptyNoise': 'Сегодня в мусор: {n}', 'feed.emptyToday': 'Сегодня отмечено:', 'feed.emptyLast': 'Последний пункт пришёл {ago} назад.', 'feed.openHistory': 'Открыть историю', 'feed.emptyNone': 'Лента пуста', 'feed.emptyNoneText': 'Пока ничего не пришло. Пункты пишет коннектор — агент, скрипт или задача по расписанию — через CLI.', 'feed.emptyFiltered': 'Под фильтры ничего не попало', 'feed.clearFilters': 'Сбросить фильтры', 'feed.emptyHistory': 'Отмеченных пока нет', 'feed.emptyHistoryText': 'Сюда попадают отмеченные пункты: их можно вернуть или поменять отметку.', 'feed.fire': 'Пожары',
-  'feed.allNoise': 'Всё в группе — мусор', 'feed.newCount': 'Новых: {n}', 'feed.showNew': 'Показать',
+  'feed.readAll': 'Прочитать все', 'feed.groupSeen': 'Все просмотрено', 'feed.newCount': 'Новых: {n}', 'feed.showNew': 'Показать',
   'feed.filter.source': 'Источник', 'feed.filter.severity': 'Важность', 'feed.filter.mark': 'Отметка', 'feed.filter.all': 'Все',
   'feed.sev.fire': 'Пожар', 'feed.sev.important': 'Важно', 'feed.sev.normal': 'Обычно', 'feed.sev.noise': 'Мусор',
   'feed.noProfile': 'Профиля ещё нет', 'feed.profileExpand': 'Развернуть', 'feed.profileCollapse': 'Свернуть', 'feed.helpTitle': 'Клавиатура',
@@ -418,7 +422,7 @@ const ru = {
 
 **Если не согласен с источником.** Когда пожар уходит в мусор или мусор в важное, появляется поле «почему?». Enter сохраняет причину, Esc пропускает. Раз в неделю эти ответы превращаются в профиль источника, и он шумит меньше.
 
-**Группы.** Пожары сверху. Остальное сгруппировано по источнику; «Всё в группе — мусор» пожары не трогает.
+**Группы.** Пожары сверху. Остальное сгруппировано по источнику. «Прочитать все» и «Все просмотрено» снимают с непросмотренных то, что сейчас на экране. Это не оценка: профиль источника этому не учится. Три кнопки на карточке по-прежнему говорят, стоило ли это присылать.
 
 **История.** Можно вернуть пункт в «Непросмотренное», поменять отметку или удалить.
 
